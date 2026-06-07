@@ -3,6 +3,9 @@
   "identifier": "default",
   "description": "Capability for Pulse app windows",
   "windows": ["main", "pulse-*"],
+  "remote": {
+    "urls": ["http://localhost:1420", "http://localhost:1420/**"]
+  },
   "permissions": [
     "core:default",
     "core:window:allow-set-theme",
@@ -11,6 +14,7 @@
     "core:window:allow-set-title",
     "core:event:allow-listen",
     "core:event:allow-emit",
+    "core:webview:allow-create-webview-window",
     "opener:default"
   ]
 }

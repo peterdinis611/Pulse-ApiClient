@@ -161,7 +161,16 @@ fn db_login_account(
 }
 
 #[tauri::command]
-fn create_app_window(
+fn register_pending_window_init(
+    label: String,
+    main_view: Option<String>,
+    initial_request: Option<serde_json::Value>,
+) -> Result<(), String> {
+    windows::register_pending_window_init(&label, main_view, initial_request)
+}
+
+#[tauri::command]
+async fn create_app_window(
     app: AppHandle,
     title: Option<String>,
     main_view: Option<String>,
@@ -251,6 +260,7 @@ pub fn run() {
             db_clear_session,
             db_register_account,
             db_login_account,
+            register_pending_window_init,
             create_app_window,
             list_app_windows,
             focus_app_window,

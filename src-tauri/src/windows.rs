@@ -26,22 +26,22 @@ fn pending_inits() -> &'static Mutex<HashMap<String, PendingWindowInit>> {
     STORE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn webview_url(app: &AppHandle) -> Result<WebviewUrl, String> {
-    if cfg!(debug_assertions) {
-        if let Some(main) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-            if let Ok(url) = main.url() {
-                return Ok(WebviewUrl::External(url));
-            }
-        }
-
-        return Ok(WebviewUrl::External(
-            "http://localhost:1420"
-                .parse()
-                .map_err(|error| format!("Invalid dev URL: {error}"))?,
-        ));
-    }
-
-    Ok(WebviewUrl::App("index.html".into()))
+pub fn register_pending_window_init(
+    label: &str,
+    main_view: Option<String>,
+    initial_request: Option<Value>,
+) -> Result<(), String> {
+    pending_inits()
+        .lock()
+        .map_err(|error| error.to_string())?
+        .insert(
+            label.to_string(),
+            PendingWindowInit {
+                main_view,
+                initial_request,
+            },
+        );
+    Ok(())
 }
 
 pub fn create_app_window(
@@ -53,23 +53,29 @@ pub fn create_app_window(
     let label = format!("pulse-{}", uuid_simple());
     let window_title = title.unwrap_or_else(|| "Pulse API Client".to_string());
 
-    if main_view.is_some() || initial_request.is_some() {
-        pending_inits()
-            .lock()
-            .map_err(|error| error.to_string())?
-            .insert(
-                label.clone(),
-                PendingWindowInit {
-                    main_view,
-                    initial_request,
-                },
-            );
+    register_pending_window_init(&label, main_view, initial_request)?;
+
+    let main_template = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|window| window.label == MAIN_WINDOW_LABEL)
+        .cloned()
+        .ok_or_else(|| "Main window config not found".to_string())?;
+
+    let mut window_config = main_template;
+    window_config.label = label.clone();
+    window_config.title = window_title.clone();
+
+    if cfg!(debug_assertions) {
+        if let Some(dev_url) = app.config().build.dev_url.clone() {
+            window_config.url = WebviewUrl::External(dev_url);
+        }
     }
 
-    WebviewWindowBuilder::new(app, &label, webview_url(app)?)
-        .title(window_title.clone())
-        .inner_size(1280.0, 840.0)
-        .min_inner_size(960.0, 640.0)
+    WebviewWindowBuilder::from_config(app, &window_config)
+        .map_err(|error| format!("Failed to build window: {error}"))?
         .build()
         .map_err(|error| format!("Failed to create window: {error}"))?;
 

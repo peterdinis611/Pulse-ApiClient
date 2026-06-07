@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Clock3, MoreHorizontal, Search } from "lucide-react";
 import { useApp } from "@/machines";
 import {
@@ -34,14 +34,19 @@ export function OverviewView() {
   } = useApp();
 
   const debouncedQuery = useDebouncedValue(overviewFilter.query);
+  const loadHistoryEntryRef = useRef(loadHistoryEntry);
+  const loadSavedRequestRef = useRef(loadSavedRequest);
+
+  loadHistoryEntryRef.current = loadHistoryEntry;
+  loadSavedRequestRef.current = loadSavedRequest;
 
   const allItems = useMemo(
     () =>
       buildOverviewItems(history, collections, {
-        onHistory: loadHistoryEntry,
-        onSaved: loadSavedRequest,
+        onHistory: (entry) => loadHistoryEntryRef.current(entry),
+        onSaved: (item) => loadSavedRequestRef.current(item),
       }),
-    [collections, history, loadHistoryEntry, loadSavedRequest],
+    [collections, history],
   );
 
   const activeFilter = useMemo(
@@ -57,22 +62,27 @@ export function OverviewView() {
     [allItems, activeFilter],
   );
 
-  const [filteredItems, setFilteredItems] = useState(filteredItemsSync);
+  const [asyncFilteredItems, setAsyncFilteredItems] = useState<typeof filteredItemsSync | null>(
+    null,
+  );
 
   useEffect(() => {
-    setFilteredItems(filteredItemsSync);
-
-    if (!debouncedQuery.trim()) return;
+    if (!debouncedQuery.trim()) {
+      setAsyncFilteredItems(null);
+      return;
+    }
 
     let cancelled = false;
     void filterOverviewItemsAsync(allItems, activeFilter).then((next) => {
-      if (!cancelled) setFilteredItems(next);
+      if (!cancelled) setAsyncFilteredItems(next);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [allItems, activeFilter, debouncedQuery, filteredItemsSync]);
+  }, [allItems, activeFilter, debouncedQuery]);
+
+  const filteredItems = asyncFilteredItems ?? filteredItemsSync;
 
   const recentItems = useMemo(() => filteredItems.slice(0, 20), [filteredItems]);
 

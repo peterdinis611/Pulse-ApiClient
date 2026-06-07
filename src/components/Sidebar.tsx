@@ -39,7 +39,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import type { SavedRequest } from "@/types";
+import type { HistoryEntry, SavedRequest } from "@/types";
 
 export function Sidebar() {
   const {
@@ -82,14 +82,17 @@ export function Sidebar() {
     return filterHistoryEntries(history, debouncedSidebarSearch);
   }, [history, debouncedSidebarSearch]);
 
-  const [filteredCollections, setFilteredCollections] = useState(filteredCollectionsSync);
-  const [filteredHistory, setFilteredHistory] = useState(filteredHistorySync);
+  const [asyncFilteredCollections, setAsyncFilteredCollections] = useState<SavedRequest[] | null>(
+    null,
+  );
+  const [asyncFilteredHistory, setAsyncFilteredHistory] = useState<HistoryEntry[] | null>(null);
 
   useEffect(() => {
-    setFilteredCollections(filteredCollectionsSync);
-    setFilteredHistory(filteredHistorySync.slice(0, 50));
-
-    if (!debouncedSidebarSearch.trim()) return;
+    if (!debouncedSidebarSearch.trim()) {
+      setAsyncFilteredCollections(null);
+      setAsyncFilteredHistory(null);
+      return;
+    }
 
     let cancelled = false;
     void Promise.all([
@@ -97,20 +100,17 @@ export function Sidebar() {
       filterHistoryEntriesAsync(history, debouncedSidebarSearch),
     ]).then(([nextCollections, nextHistory]) => {
       if (cancelled) return;
-      setFilteredCollections(nextCollections);
-      setFilteredHistory(nextHistory.slice(0, 50));
+      setAsyncFilteredCollections(nextCollections);
+      setAsyncFilteredHistory(nextHistory.slice(0, 50));
     });
 
     return () => {
       cancelled = true;
     };
-  }, [
-    collections,
-    history,
-    debouncedSidebarSearch,
-    filteredCollectionsSync,
-    filteredHistorySync,
-  ]);
+  }, [collections, history, debouncedSidebarSearch]);
+
+  const filteredCollections = asyncFilteredCollections ?? filteredCollectionsSync;
+  const filteredHistory = (asyncFilteredHistory ?? filteredHistorySync).slice(0, 50);
 
   const handleRunCollection = async (collectionId: string, collectionName: string) => {
     const items = requestsForCollection(collections, collectionId);

@@ -7,7 +7,13 @@ import "./index.css";
 async function main() {
   await bootstrapTheme();
 
-  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+  const root = document.getElementById("root");
+  if (!root) {
+    console.error("Pulse: #root element not found. The window did not load the app shell.");
+    return;
+  }
+
+  ReactDOM.createRoot(root).render(
     <React.StrictMode>
       <App />
     </React.StrictMode>,

@@ -1,8 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { LoaderCircle } from "lucide-react";
 import { loadUserSession } from "@/lib/auth";
 import { loadPersistedState } from "@/lib/storage";
+import { canUseTauriIpc, waitForTauriIpc } from "@/lib/tauri-runtime";
 import { listenWorkspaceUpdated } from "@/lib/workspace-sync";
 import { getCurrentWindowLabel, takePendingWindowInit } from "@/lib/window-manager";
 import { AppMachineContext } from "@/machines/AppProvider";
@@ -16,10 +18,14 @@ export function AppBootstrap({ children }: { children: ReactNode }) {
 
     void (async () => {
       try {
+        await waitForTauriIpc(1500);
         const [persisted, user, windowContext] = await Promise.all([
           loadPersistedState(),
           loadUserSession(),
           (async () => {
+            if (!canUseTauriIpc()) {
+              return { windowId: "main", pendingInit: null };
+            }
             try {
               const label = await getCurrentWindowLabel();
               const pendingInit = await takePendingWindowInit(label);
@@ -48,6 +54,8 @@ export function AppBootstrap({ children }: { children: ReactNode }) {
   }, [actorRef]);
 
   useEffect(() => {
+    if (!isTauri() || !canUseTauriIpc()) return;
+
     let cancelled = false;
     let unlisten: (() => void) | undefined;
 
@@ -68,6 +76,8 @@ export function AppBootstrap({ children }: { children: ReactNode }) {
   }, [actorRef]);
 
   useEffect(() => {
+    if (!isTauri() || !canUseTauriIpc()) return;
+
     const currentWindow = getCurrentWindow();
     const unlistenPromise = currentWindow.onCloseRequested(() => {
       actorRef.send({ type: "PERSIST_WINDOW_SESSION" });

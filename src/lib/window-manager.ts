@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { canUseTauriIpc } from "@/lib/tauri-runtime";
 import type { ApiRequest, MainView } from "@/types";
 
 export type AppWindowInfo = {
@@ -13,8 +15,56 @@ export type PendingWindowInit = {
   initialRequest?: ApiRequest | null;
 };
 
+function createWindowLabel(): string {
+  return `pulse-${Date.now().toString(16)}`;
+}
+
+function resolveWindowUrl(): string {
+  if (import.meta.env.DEV) {
+    return `${window.location.origin}/`;
+  }
+
+  return "index.html";
+}
+
 export async function getCurrentWindowLabel(): Promise<string> {
+  if (!canUseTauriIpc()) return "main";
   return getCurrentWindow().label;
+}
+
+async function registerPendingWindowInit(
+  label: string,
+  options?: {
+    mainView?: MainView;
+    initialRequest?: ApiRequest;
+  },
+): Promise<void> {
+  if (!options?.mainView && !options?.initialRequest) return;
+
+  await invoke("register_pending_window_init", {
+    label,
+    mainView: options.mainView ?? null,
+    initialRequest: options.initialRequest ?? null,
+  });
+}
+
+async function openWebviewWindow(label: string, title: string): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const webview = new WebviewWindow(label, {
+      url: resolveWindowUrl(),
+      title,
+      width: 1280,
+      height: 840,
+      minWidth: 960,
+      minHeight: 640,
+      center: true,
+    });
+
+    webview.once("tauri://created", () => resolve());
+    webview.once("tauri://error", (error) => {
+      reject(error instanceof Error ? error : new Error(String(error)));
+    });
+  });
 }
 
 export async function createAppWindow(options?: {
@@ -22,11 +72,17 @@ export async function createAppWindow(options?: {
   mainView?: MainView;
   initialRequest?: ApiRequest;
 }): Promise<AppWindowInfo> {
-  return invoke<AppWindowInfo>("create_app_window", {
-    title: options?.title ?? null,
-    mainView: options?.mainView ?? null,
-    initialRequest: options?.initialRequest ?? null,
-  });
+  if (!canUseTauriIpc()) {
+    throw new Error("New windows are only available in the desktop app.");
+  }
+
+  const label = createWindowLabel();
+  const title = options?.title ?? "Pulse API Client";
+
+  await registerPendingWindowInit(label, options);
+  await openWebviewWindow(label, title);
+
+  return { label, title, isMain: false };
 }
 
 export async function listAppWindows(): Promise<AppWindowInfo[]> {

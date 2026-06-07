@@ -1,6 +1,7 @@
 import { AppProvider, useApp } from "@/machines";
 import { AuthPage } from "./components/AuthPage";
 import { ClientShell } from "./components/ClientShell";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ThemeSync } from "./components/ThemeSync";
 import { Toaster } from "./components/ui/sonner";
 
@@ -16,11 +17,13 @@ function AppContent() {
 
 function App() {
   return (
-    <AppProvider>
-      <ThemeSync />
-      <Toaster position="top-right" />
-      <AppContent />
-    </AppProvider>
+    <ErrorBoundary>
+      <AppProvider>
+        <ThemeSync />
+        <Toaster position="top-right" />
+        <AppContent />
+      </AppProvider>
+    </ErrorBoundary>
   );
 }
 

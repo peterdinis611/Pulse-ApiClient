@@ -1,5 +1,6 @@
 import { readStorageItem } from "./app-config";
 import { dbLoadWorkspace, dbSaveWorkspace } from "./db-client";
+import { canUseTauriIpc } from "./tauri-runtime";
 import type {
   CollectionGroup,
   Environment,
@@ -140,18 +141,26 @@ function loadLegacyPersistedState(): PersistedState {
 }
 
 export async function loadPersistedState(): Promise<PersistedState> {
-  try {
-    const raw = await dbLoadWorkspace();
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<PersistedState>;
-      return migratePersistedState(parsed);
+  if (canUseTauriIpc()) {
+    try {
+      const raw = await dbLoadWorkspace();
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<PersistedState>;
+        return migratePersistedState(parsed);
+      }
+    } catch {
+      // fall through to legacy import
     }
-  } catch {
-    // fall through to legacy import
   }
 
   const legacy = loadLegacyPersistedState();
-  await savePersistedState(legacy);
+  if (canUseTauriIpc()) {
+    try {
+      await savePersistedState(legacy, { broadcast: false });
+    } catch {
+      // keep legacy state in memory if migration fails
+    }
+  }
   return legacy;
 }
 
@@ -159,6 +168,8 @@ export async function savePersistedState(
   state: PersistedState,
   options?: { sourceWindowId?: string; broadcast?: boolean },
 ): Promise<void> {
+  if (!canUseTauriIpc()) return;
+
   const nextState = {
     ...state,
     windowSessions: trimWindowSessions(state.windowSessions),
