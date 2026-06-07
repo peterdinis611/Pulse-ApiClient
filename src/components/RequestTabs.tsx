@@ -1,5 +1,6 @@
 import { useApp } from "@/machines";
 import { KeyValueEditor } from "@/components/KeyValueEditor";
+import { TestsTabPanel } from "@/components/TestsTabPanel";
 import { BODY_KINDS } from "@/types";
 import type { BodyKind, MultipartField } from "@/types";
 import { Trash2 } from "lucide-react";
@@ -8,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollAreaWithTop } from "@/components/ui/scroll-area-with-top";
 import {
   Select,
   SelectContent,
@@ -117,11 +118,14 @@ export function RequestTabs() {
             <TabsTrigger value="auth" className="text-xs">
               Auth
             </TabsTrigger>
+            <TabsTrigger value="tests" className="text-xs">
+              Tests
+            </TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
 
-      <ScrollArea className="min-h-0 flex-1">
+      <ScrollAreaWithTop className="min-h-0 flex-1" resetKey={requestTab}>
         <div className="p-4">
           {requestTab === "params" && (
             <KeyValueEditor
@@ -446,8 +450,10 @@ export function RequestTabs() {
               )}
             </div>
           )}
+
+          {requestTab === "tests" && <TestsTabPanel />}
         </div>
-      </ScrollArea>
+      </ScrollAreaWithTop>
     </section>
   );
 }

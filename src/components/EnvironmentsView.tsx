@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollAreaWithTop } from "@/components/ui/scroll-area-with-top";
 import {
   Select,
   SelectContent,
@@ -27,7 +27,7 @@ export function EnvironmentsView() {
   } = useApp();
 
   return (
-    <ScrollArea className="h-full">
+    <ScrollAreaWithTop className="h-full" resetKey="environments">
       <div className="mx-auto max-w-4xl space-y-6 p-8">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Environments</h1>
@@ -142,6 +142,6 @@ export function EnvironmentsView() {
           ))}
         </div>
       </div>
-    </ScrollArea>
+    </ScrollAreaWithTop>
   );
 }

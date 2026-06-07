@@ -192,3 +192,88 @@ fn now_ms() -> u64 {
         .unwrap_or(Duration::ZERO)
         .as_millis() as u64
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::http::{AuthConfig, HttpRequestPayload, KeyValue, ResponseHeader};
+
+    fn sample_payload(method: &str) -> HttpRequestPayload {
+        HttpRequestPayload {
+            method: method.to_string(),
+            url: "https://example.com/data".to_string(),
+            headers: vec![],
+            query: vec![],
+            body_kind: "none".to_string(),
+            body: String::new(),
+            form: vec![],
+            multipart: vec![],
+            auth: AuthConfig {
+                auth_type: "none".to_string(),
+                bearer_token: None,
+                basic_username: None,
+                basic_password: None,
+                api_key_key: None,
+                api_key_value: None,
+                api_key_in: None,
+            },
+            use_cache: None,
+            request_id: None,
+            timeout_ms: None,
+        }
+    }
+
+    fn sample_response(status: u16) -> HttpResponsePayload {
+        HttpResponsePayload {
+            status,
+            status_text: "OK".to_string(),
+            headers: vec![ResponseHeader {
+                key: "Cache-Control".to_string(),
+                value: "no-store".to_string(),
+            }],
+            body: String::new(),
+            elapsed_ms: 10,
+            size_bytes: 0,
+            content_type: None,
+            from_cache: false,
+            cache_age_ms: None,
+            request_id: None,
+        }
+    }
+
+    #[test]
+    fn get_requests_use_cache_by_default() {
+        assert!(should_use_cache(&sample_payload("GET")));
+    }
+
+    #[test]
+    fn post_requests_skip_cache_by_default() {
+        assert!(!should_use_cache(&sample_payload("POST")));
+    }
+
+    #[test]
+    fn does_not_store_failed_responses() {
+        assert!(!should_store_in_cache(
+            &sample_payload("GET"),
+            &sample_response(500)
+        ));
+    }
+
+    #[test]
+    fn cache_key_is_stable_for_same_payload() {
+        let left = cache_key(&sample_payload("GET"));
+        let right = cache_key(&sample_payload("GET"));
+        assert_eq!(left, right);
+    }
+
+    #[test]
+    fn request_cache_control_opt_out() {
+        let mut payload = sample_payload("GET");
+        payload.headers.push(KeyValue {
+            key: "Cache-Control".to_string(),
+            value: "no-cache".to_string(),
+            enabled: true,
+        });
+        assert!(!should_use_cache(&payload));
+    }
+}

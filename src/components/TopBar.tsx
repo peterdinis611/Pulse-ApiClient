@@ -1,6 +1,6 @@
 import { ChevronDown, Plus, Search, Settings, Zap } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { UserAuthAvatar } from "@/components/UserAuthAvatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -73,9 +73,7 @@ export function TopBar() {
         >
           <Settings className="size-4" />
         </Button>
-        <Avatar className="ml-1 size-8">
-          <AvatarFallback className="bg-primary text-xs text-primary-foreground">PD</AvatarFallback>
-        </Avatar>
+        <UserAuthAvatar />
       </div>
     </header>
   );

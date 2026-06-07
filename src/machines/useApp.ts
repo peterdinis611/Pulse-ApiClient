@@ -7,7 +7,9 @@ import type {
   RequestTab,
   SavedRequest,
 } from "@/types";
-import { createRequest } from "@/lib/helpers";
+import type { OverviewFilter } from "@/lib/filters";
+import type { UserSession } from "@/lib/auth";
+import type { TestRunResult } from "@/types";
 import { exportCollectionJson } from "@/lib/storage";
 import type { ThemeMode } from "@/lib/theme";
 import { AppMachineContext } from "@/machines/AppProvider";
@@ -30,13 +32,17 @@ export function useApp() {
     request: activeTab?.request ?? createRequest(),
     response: activeTab?.response ?? null,
     error: activeTab?.error ?? null,
-    loading: snapshot.matches({ ready: "sending" }),
+    testResults: activeTab?.testResults ?? null,
+    loading: activeTab?.loading ?? false,
+    pendingRequestCount: context.tabs.filter((tab) => tab.loading).length,
     requestTab: context.requestTab,
     mainView: context.mainView,
     sidebarSearch: context.sidebarSearch,
     consoleOpen: context.consoleOpen,
     responsePanelOpen: context.responsePanelOpen,
     theme: context.theme,
+    user: context.user,
+    overviewFilter: context.overviewFilter,
     collectionGroups: context.persisted.collectionGroups,
     activeCollectionId: context.persisted.activeCollectionId,
     collections: context.persisted.collections,
@@ -50,13 +56,21 @@ export function useApp() {
     setSidebarSearch: (value: string) => send({ type: "SET_SIDEBAR_SEARCH", value }),
     setConsoleOpen: (open: boolean) => send({ type: "SET_CONSOLE_OPEN", open }),
     setResponsePanelOpen: (open: boolean) => send({ type: "SET_RESPONSE_PANEL_OPEN", open }),
+    setOverviewFilter: (patch: Partial<OverviewFilter>) =>
+      send({ type: "SET_OVERVIEW_FILTER", patch }),
+    resetOverviewFilter: () => send({ type: "RESET_OVERVIEW_FILTER" }),
     setTheme: (theme: ThemeMode) => send({ type: "SET_THEME", theme }),
+    signIn: (user: UserSession) => send({ type: "SIGN_IN", user }),
+    signOut: () => send({ type: "SIGN_OUT" }),
+    setTestResults: (results: TestRunResult | null) =>
+      send({ type: "SET_TEST_RESULTS", results }),
     updateRequest: (patch: Partial<ApiRequest>) => send({ type: "UPDATE_REQUEST", patch }),
     openRequestTab: (request: ApiRequest) => send({ type: "OPEN_REQUEST_TAB", request }),
     newRequestTab: () => send({ type: "NEW_REQUEST_TAB" }),
     closeTab: (tabId: string) => send({ type: "CLOSE_TAB", tabId }),
     setActiveTab: (tabId: string) => send({ type: "SET_ACTIVE_TAB", tabId }),
     sendCurrentRequest: () => send({ type: "SEND" }),
+    cancelCurrentRequest: () => send({ type: "CANCEL_SEND" }),
     saveCurrentToCollection: () => send({ type: "SAVE_TO_COLLECTION" }),
     loadSavedRequest: (saved: SavedRequest) => send({ type: "LOAD_SAVED_REQUEST", saved }),
     deleteSavedRequest: (id: string) => send({ type: "DELETE_SAVED_REQUEST", id }),

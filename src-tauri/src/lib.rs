@@ -1,13 +1,17 @@
-mod cache;
-mod engine;
-mod http;
-mod settings;
-mod state;
+pub mod cache;
+pub mod db;
+pub mod engine;
+pub mod http;
+pub mod settings;
+pub mod state;
+pub mod test_runner;
 
+use db::{DbState, DbUserSession};
 use engine::HttpEngineStats;
 use http::{BatchItemResult, HttpRequestPayload, HttpResponsePayload};
 use settings::AppSettings;
 use state::HttpState;
+use test_runner::TestRunResult;
 use tauri::{AppHandle, Manager, State};
 
 #[tauri::command]
@@ -89,6 +93,58 @@ fn set_http_settings(
     Ok(settings)
 }
 
+#[tauri::command]
+fn run_http_tests(
+    script: String,
+    response: HttpResponsePayload,
+) -> Result<TestRunResult, String> {
+    Ok(test_runner::run_http_tests(&script, &response))
+}
+
+#[tauri::command]
+fn db_load_workspace(db: State<'_, DbState>) -> Result<Option<String>, String> {
+    db.load_workspace()
+}
+
+#[tauri::command]
+fn db_save_workspace(db: State<'_, DbState>, payload: String) -> Result<(), String> {
+    db.save_workspace(&payload)
+}
+
+#[tauri::command]
+fn db_load_session(db: State<'_, DbState>) -> Result<Option<DbUserSession>, String> {
+    db.load_session()
+}
+
+#[tauri::command]
+fn db_save_session(db: State<'_, DbState>, session: DbUserSession) -> Result<(), String> {
+    db.save_session(&session)
+}
+
+#[tauri::command]
+fn db_clear_session(db: State<'_, DbState>) -> Result<(), String> {
+    db.clear_session()
+}
+
+#[tauri::command]
+fn db_register_account(
+    db: State<'_, DbState>,
+    name: String,
+    email: String,
+    password: String,
+) -> Result<DbUserSession, String> {
+    db.register_account(&name, &email, &password)
+}
+
+#[tauri::command]
+fn db_login_account(
+    db: State<'_, DbState>,
+    email: String,
+    password: String,
+) -> Result<DbUserSession, String> {
+    db.login_account(&email, &password)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app_settings = AppSettings::default();
@@ -102,6 +158,9 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(http_state)
         .setup(|app| {
+            let db_state = DbState::new(app.handle())?;
+            app.manage(db_state);
+
             if let Ok(settings) = settings::load_settings(app.handle()) {
                 let state = app.state::<HttpState>();
                 state.apply_engine_settings(
@@ -124,6 +183,14 @@ pub fn run() {
             set_theme,
             get_app_settings,
             set_http_settings,
+            run_http_tests,
+            db_load_workspace,
+            db_save_workspace,
+            db_load_session,
+            db_save_session,
+            db_clear_session,
+            db_register_account,
+            db_login_account,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

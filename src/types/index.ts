@@ -21,6 +21,7 @@ export type RequestTabState = {
   error: string | null;
   loading: boolean;
   inFlightRequestId: string | null;
+  testResults: TestRunResult | null;
 };
 
 export type KeyValue = {
@@ -65,6 +66,7 @@ export type ApiRequest = {
   form: KeyValue[];
   multipart: MultipartField[];
   auth: AuthConfig;
+  tests: string;
 };
 
 export type HttpResponse = {
@@ -92,6 +94,10 @@ export type HttpEngineStats = {
 export type HttpSettings = {
   httpMaxConcurrent: number;
   httpTimeoutMs: number;
+};
+
+export type AppSettings = HttpSettings & {
+  theme: string;
 };
 
 export type CollectionGroup = {
@@ -122,7 +128,20 @@ export type HistoryEntry = {
   response?: Pick<HttpResponse, "status" | "elapsedMs" | "sizeBytes">;
 };
 
-export type RequestTab = "params" | "headers" | "body" | "auth";
+export type RequestTab = "params" | "headers" | "body" | "auth" | "tests";
+
+export type TestCaseResult = {
+  name: string;
+  passed: boolean;
+  message?: string | null;
+};
+
+export type TestRunResult = {
+  passed: number;
+  failed: number;
+  total: number;
+  results: TestCaseResult[];
+};
 
 export const HTTP_METHODS: HttpMethod[] = [
   "GET",

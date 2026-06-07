@@ -1,4 +1,5 @@
-import { readStorageItem, writeStorageItem } from "./app-config";
+import { readStorageItem } from "./app-config";
+import { dbLoadWorkspace, dbSaveWorkspace } from "./db-client";
 import type { CollectionGroup, Environment, HistoryEntry, SavedRequest } from "../types";
 import { createEnvironment, createRequest, createSavedRequest } from "./helpers";
 import { defaultCollectionGroup } from "./collections";
@@ -49,6 +50,11 @@ function migratePersistedState(parsed: Partial<PersistedState>): PersistedState 
   const collections = (parsed.collections ?? []).map((item) => ({
     ...item,
     collectionId: item.collectionId ?? activeCollectionId ?? defaults.activeCollectionId!,
+    request: {
+      ...createRequest(),
+      ...item.request,
+      tests: item.request?.tests ?? createRequest().tests,
+    },
   }));
 
   return {
@@ -58,11 +64,11 @@ function migratePersistedState(parsed: Partial<PersistedState>): PersistedState 
     environments: parsed.environments?.length ? parsed.environments : defaults.environments,
     activeEnvironmentId: parsed.activeEnvironmentId ?? defaults.activeEnvironmentId,
     history: parsed.history ?? defaults.history,
-    lastRequest: parsed.lastRequest ?? defaults.lastRequest,
+    lastRequest: { ...createRequest(), ...parsed.lastRequest },
   };
 }
 
-export function loadPersistedState(): PersistedState {
+function loadLegacyPersistedState(): PersistedState {
   try {
     const raw = readStorageItem(STATE_SUFFIX);
     if (!raw) return defaultPersistedState();
@@ -73,8 +79,24 @@ export function loadPersistedState(): PersistedState {
   }
 }
 
-export function savePersistedState(state: PersistedState): void {
-  writeStorageItem(STATE_SUFFIX, JSON.stringify(state));
+export async function loadPersistedState(): Promise<PersistedState> {
+  try {
+    const raw = await dbLoadWorkspace();
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<PersistedState>;
+      return migratePersistedState(parsed);
+    }
+  } catch {
+    // fall through to legacy import
+  }
+
+  const legacy = loadLegacyPersistedState();
+  await savePersistedState(legacy);
+  return legacy;
+}
+
+export async function savePersistedState(state: PersistedState): Promise<void> {
+  await dbSaveWorkspace(JSON.stringify(state));
 }
 
 export function exportCollectionJson(state: Pick<PersistedState, "collectionGroups" | "collections">): string {

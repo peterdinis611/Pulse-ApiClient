@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { Plus, Save, Send } from "lucide-react";
+import { LoaderCircle, Plus, Save, Send, Square } from "lucide-react";
 import { useApp } from "@/machines";
 import { getCollectionName } from "@/lib/collections";
 import { validateGraphqlRequest } from "@/lib/graphql";
@@ -21,6 +21,7 @@ export function RequestBar() {
   const {
     request,
     loading,
+    cancelCurrentRequest,
     updateRequest,
     sendCurrentRequest,
     saveCurrentToCollection,
@@ -31,12 +32,12 @@ export function RequestBar() {
   } = useApp();
 
   const canSend = useMemo(() => {
-    if (loading || !request.url.trim()) return false;
+    if (!request.url.trim()) return false;
     if (request.bodyKind === "graphql") {
       return validateGraphqlRequest(request) === null;
     }
     return true;
-  }, [loading, request]);
+  }, [request]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -122,12 +123,23 @@ export function RequestBar() {
         <Button
           type="button"
           className="h-11 rounded-none px-6"
-          disabled={!canSend}
+          disabled={loading || !canSend}
           onClick={() => void sendCurrentRequest()}
         >
-          <Send />
+          {loading ? <LoaderCircle className="animate-spin" /> : <Send />}
           {loading ? "Sending…" : "Send"}
         </Button>
+        {loading && (
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 rounded-none px-4"
+            onClick={cancelCurrentRequest}
+          >
+            <Square />
+            Cancel
+          </Button>
+        )}
       </div>
     </div>
   );

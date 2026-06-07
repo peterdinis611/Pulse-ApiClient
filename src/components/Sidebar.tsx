@@ -8,6 +8,8 @@ import {
   Globe2,
   History,
   LayoutGrid,
+  LoaderCircle,
+  Play,
   Plus,
   Search,
   Settings,
@@ -16,13 +18,17 @@ import {
 } from "lucide-react";
 import { useApp } from "@/machines";
 import { groupRequestsByFolder, requestsForCollection } from "@/lib/collections";
+import { runCollection, type CollectionRunResult } from "@/lib/collection-runner";
+import { filterHistoryEntries, filterSavedRequests } from "@/lib/filters";
+import { toast } from "@/lib/toast";
 import type { FolderTreeNode } from "@/lib/collections";
+import { CollectionRunResultsPanel } from "@/components/CollectionRunResultsPanel";
 import { MethodBadge } from "@/components/MethodBadge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollAreaWithTop } from "@/components/ui/scroll-area-with-top";
 import {
   Select,
   SelectContent,
@@ -53,35 +59,70 @@ export function Sidebar() {
     exportCollections,
     importCollections,
     addEnvironment,
+    activeEnvironment,
   } = useApp();
 
   const importRef = useRef<HTMLInputElement>(null);
   const [collectionsOpen, setCollectionsOpen] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(true);
   const [openCollections, setOpenCollections] = useState<Record<string, boolean>>({});
+  const [runningCollectionId, setRunningCollectionId] = useState<string | null>(null);
+  const [collectionRun, setCollectionRun] = useState<CollectionRunResult | null>(null);
+  const [runProgress, setRunProgress] = useState<string | null>(null);
+  const [showRunResults, setShowRunResults] = useState(false);
 
   const filteredCollections = useMemo(() => {
-    const query = sidebarSearch.trim().toLowerCase();
-    if (!query) return collections;
-    return collections.filter(
-      (item) =>
-        item.name.toLowerCase().includes(query) ||
-        item.request.url.toLowerCase().includes(query) ||
-        item.folder?.toLowerCase().includes(query),
-    );
+    return filterSavedRequests(collections, sidebarSearch);
   }, [collections, sidebarSearch]);
 
   const filteredHistory = useMemo(() => {
-    const query = sidebarSearch.trim().toLowerCase();
-    if (!query) return history.slice(0, 12);
-    return history
-      .filter(
-        (entry) =>
-          entry.request.name.toLowerCase().includes(query) ||
-          entry.request.url.toLowerCase().includes(query),
-      )
-      .slice(0, 12);
+    return filterHistoryEntries(history, sidebarSearch).slice(0, 50);
   }, [history, sidebarSearch]);
+
+  const handleRunCollection = async (collectionId: string, collectionName: string) => {
+    const items = requestsForCollection(collections, collectionId);
+    if (items.length === 0 || runningCollectionId) return;
+
+    setRunningCollectionId(collectionId);
+    setCollectionRun(null);
+    setRunProgress(`Running 0/${items.length}`);
+
+    try {
+      const result = await runCollection(
+        collectionId,
+        collectionName,
+        items,
+        activeEnvironment,
+        (_step, index, total) => {
+          setRunProgress(`Running ${index + 1}/${total}`);
+        },
+      );
+      setCollectionRun(result);
+      setShowRunResults(true);
+      if (result.totalTests > 0) {
+        if (result.failed > 0) {
+          toast.error(
+            "Collection run finished",
+            `${result.passed}/${result.totalTests} tests passed`,
+          );
+        } else {
+          toast.success(
+            "Collection run finished",
+            `All ${result.totalTests} tests passed`,
+          );
+        }
+      } else {
+        toast.success("Collection run finished", `${result.steps.length} requests completed`);
+      }
+      setRunProgress(
+        result.totalTests > 0
+          ? `Done · ${result.passed}/${result.totalTests} tests passed`
+          : `Done · ${result.steps.length} requests`,
+      );
+    } finally {
+      setRunningCollectionId(null);
+    }
+  };
 
   return (
     <aside className="flex min-h-0 w-[280px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
@@ -121,7 +162,7 @@ export function Sidebar() {
         </div>
       </div>
 
-      <ScrollArea className="min-h-0 flex-1">
+      <ScrollAreaWithTop className="min-h-0 flex-1" resetKey={sidebarSearch}>
         <div className="space-y-1 p-2">
           <SidebarNavItem
             active={mainView === "overview"}
@@ -216,20 +257,37 @@ export function Sidebar() {
                       setOpenCollections((current) => ({ ...current, [group.id]: value }))
                     }
                   >
-                    <CollapsibleTrigger asChild>
-                      <button
+                    <div className="flex items-center gap-1 pr-1">
+                      <CollapsibleTrigger asChild>
+                        <button
+                          type="button"
+                          className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-2 text-left hover:bg-sidebar-accent"
+                        >
+                          {open ? (
+                            <ChevronDown className="size-3.5 shrink-0" />
+                          ) : (
+                            <ChevronRight className="size-3.5 shrink-0" />
+                          )}
+                          <span className="min-w-0 flex-1 truncate text-sm font-medium">{group.name}</span>
+                          <span className="text-xs text-muted-foreground">{items.length}</span>
+                        </button>
+                      </CollapsibleTrigger>
+                      <Button
                         type="button"
-                        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left hover:bg-sidebar-accent"
+                        variant="ghost"
+                        size="icon"
+                        className="size-7 shrink-0"
+                        title="Run collection"
+                        disabled={items.length === 0 || runningCollectionId !== null}
+                        onClick={() => void handleRunCollection(group.id, group.name)}
                       >
-                        {open ? (
-                          <ChevronDown className="size-3.5 shrink-0" />
+                        {runningCollectionId === group.id ? (
+                          <LoaderCircle className="size-3.5 animate-spin" />
                         ) : (
-                          <ChevronRight className="size-3.5 shrink-0" />
+                          <Play className="size-3.5" />
                         )}
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium">{group.name}</span>
-                        <span className="text-xs text-muted-foreground">{items.length}</span>
-                      </button>
-                    </CollapsibleTrigger>
+                      </Button>
+                    </div>
                     <CollapsibleContent className="space-y-0.5 pl-2">
                       {grouped.folders.map((folder) => (
                         <FolderBranch
@@ -297,7 +355,34 @@ export function Sidebar() {
             </CollapsibleContent>
           </Collapsible>
         </div>
-      </ScrollArea>
+      </ScrollAreaWithTop>
+
+      {(runProgress || collectionRun) && (
+        <div className="border-t border-sidebar-border px-3 py-2 text-xs text-muted-foreground">
+          {runProgress && <p>{runProgress}</p>}
+          {collectionRun && collectionRun.totalTests > 0 && (
+            <p className={collectionRun.failed > 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}>
+              Collection tests: {collectionRun.passed}/{collectionRun.totalTests} passed
+            </p>
+          )}
+          {collectionRun && (
+            <button
+              type="button"
+              className="mt-1 font-medium text-foreground underline-offset-4 hover:underline"
+              onClick={() => setShowRunResults(true)}
+            >
+              View runner results
+            </button>
+          )}
+        </div>
+      )}
+
+      {showRunResults && collectionRun && (
+        <CollectionRunResultsPanel
+          result={collectionRun}
+          onClose={() => setShowRunResults(false)}
+        />
+      )}
 
       <div className="border-t border-sidebar-border p-2">
         <Button variant="outline" size="sm" className="w-full" onClick={addEnvironment}>

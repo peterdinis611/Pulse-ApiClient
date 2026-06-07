@@ -9,6 +9,7 @@ import type {
   SavedRequest,
 } from "../types";
 import { defaultGraphqlQuery, defaultGraphqlVariables } from "./graphql";
+import { defaultRequestTests } from "./default-tests";
 
 export function createId(prefix = "id"): string {
   return `${prefix}_${crypto.randomUUID()}`;
@@ -62,6 +63,7 @@ export function createRequest(partial?: Partial<ApiRequest>): ApiRequest {
       },
     ],
     auth,
+    tests: partial?.tests ?? defaultRequestTests,
   };
 }
 

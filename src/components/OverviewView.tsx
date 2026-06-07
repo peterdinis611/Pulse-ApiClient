@@ -1,45 +1,46 @@
 import { useMemo } from "react";
 import { Clock3, MoreHorizontal, Search } from "lucide-react";
 import { useApp } from "@/machines";
+import {
+  buildOverviewItems,
+  filterOverviewItems,
+} from "@/lib/filters";
 import { MethodBadge } from "@/components/MethodBadge";
+import { OverviewFilterMenu } from "@/components/OverviewFilterMenu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollAreaWithTop } from "@/components/ui/scroll-area-with-top";
 import { Separator } from "@/components/ui/separator";
 
 export function OverviewView() {
-  const { history, loadHistoryEntry, collections, collectionGroups, loadSavedRequest, newRequestTab, tabs } =
-    useApp();
+  const {
+    history,
+    loadHistoryEntry,
+    collections,
+    collectionGroups,
+    loadSavedRequest,
+    newRequestTab,
+    tabs,
+    user,
+    overviewFilter,
+    setOverviewFilter,
+  } = useApp();
 
   const recentItems = useMemo(() => {
-    const fromHistory = history.slice(0, 8).map((entry) => ({
-      id: entry.id,
-      title: entry.request.name || entry.request.url,
-      subtitle: entry.request.url,
-      method: entry.request.method,
-      meta: entry.response
-        ? `${entry.response.status} · ${entry.response.elapsedMs} ms`
-        : "Not sent",
-      onOpen: () => loadHistoryEntry(entry),
-    }));
-
-    if (fromHistory.length > 0) return fromHistory;
-
-    return collections.slice(0, 8).map((item) => ({
-      id: item.id,
-      title: item.name,
-      subtitle: item.request.url,
-      method: item.request.method,
-      meta: item.folder ?? "Collection",
-      onOpen: () => loadSavedRequest(item),
-    }));
-  }, [collections, history, loadHistoryEntry, loadSavedRequest]);
+    const items = buildOverviewItems(history, collections, {
+      onHistory: loadHistoryEntry,
+      onSaved: loadSavedRequest,
+    });
+    return filterOverviewItems(items, overviewFilter).slice(0, 20);
+  }, [collections, history, loadHistoryEntry, loadSavedRequest, overviewFilter]);
 
   return (
-    <ScrollArea className="h-full">
+    <ScrollAreaWithTop className="h-full" resetKey="overview">
       <div className="mx-auto max-w-5xl space-y-6 p-8">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Welcome back, {user?.name.split(" ")[0]}
+          </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Recent requests and saved endpoints across your workspace.
           </p>
@@ -48,9 +49,14 @@ export function OverviewView() {
         <div className="flex items-center gap-3">
           <div className="relative max-w-sm flex-1">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input className="pl-9" placeholder="Search requests" />
+            <Input
+              className="pl-9"
+              placeholder="Search requests"
+              value={overviewFilter.query}
+              onChange={(event) => setOverviewFilter({ query: event.target.value })}
+            />
           </div>
-          <Button variant="outline">Filter</Button>
+          <OverviewFilterMenu />
           <Button variant="secondary" onClick={newRequestTab}>
             New request
           </Button>
@@ -66,17 +72,13 @@ export function OverviewView() {
 
           {recentItems.length === 0 ? (
             <div className="px-4 py-12 text-center text-sm text-muted-foreground">
-              No recent activity yet. Open a request from the sidebar or create a new tab.
+              No items match your search or filters.
             </div>
           ) : (
             recentItems.map((item, index) => (
               <div key={item.id}>
                 <div className="grid w-full grid-cols-[1fr_120px_160px_40px] items-center gap-4 px-4 py-4 hover:bg-muted/30">
-                  <button
-                    type="button"
-                    className="min-w-0 text-left"
-                    onClick={item.onOpen}
-                  >
+                  <button type="button" className="min-w-0 text-left" onClick={item.onOpen}>
                     <p className="truncate text-sm font-medium">{item.title}</p>
                     <p className="truncate text-xs text-muted-foreground">{item.subtitle}</p>
                   </button>
@@ -116,6 +118,6 @@ export function OverviewView() {
           </div>
         </div>
       </div>
-    </ScrollArea>
+    </ScrollAreaWithTop>
   );
 }

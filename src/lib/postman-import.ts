@@ -11,6 +11,10 @@ type PostmanItem = {
   name?: string;
   item?: PostmanItem[];
   request?: PostmanRequest;
+  event?: Array<{
+    listen?: string;
+    script?: { exec?: string | string[] };
+  }>;
 };
 
 type PostmanRequest = {
@@ -224,6 +228,13 @@ function parseBody(
   };
 }
 
+function parsePostmanTests(item: PostmanItem): string | undefined {
+  const testEvent = item.event?.find((entry) => entry.listen === "test");
+  const exec = testEvent?.script?.exec;
+  if (!exec) return undefined;
+  return Array.isArray(exec) ? exec.join("\n") : exec;
+}
+
 function parsePostmanRequest(item: PostmanItem): ApiRequest | null {
   if (!item.request) return null;
 
@@ -237,6 +248,7 @@ function parsePostmanRequest(item: PostmanItem): ApiRequest | null {
     headers: parseKeyValues(item.request.header),
     query,
     auth: parseAuth(item.request.auth),
+    tests: parsePostmanTests(item),
     ...body,
   });
 }

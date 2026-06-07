@@ -1,20 +1,21 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Copy } from "lucide-react";
 import { useApp } from "@/machines";
 import { formatBytes, prettyJson } from "@/lib/helpers";
+import { toast } from "@/lib/toast";
 import { formatGraphqlResponse, parseGraphqlResponse } from "@/lib/graphql";
 import { statusBadgeClass } from "@/lib/method-colors";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/EmptyState";
+import { TestResultsList } from "@/components/TestResultsList";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollAreaWithTop } from "@/components/ui/scroll-area-with-top";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export function ResponsePanel() {
-  const { response, error, loading } = useApp();
-  const [view, setView] = useState<"body" | "headers">("body");
-  const [copied, setCopied] = useState(false);
+  const { response, error, loading, testResults } = useApp();
+  const [view, setView] = useState<"body" | "headers" | "tests">("body");
 
   const body = useMemo(() => {
     if (!response) return "";
@@ -27,11 +28,21 @@ export function ResponsePanel() {
 
   const graphqlErrors = useMemo(() => parseGraphqlResponse(response?.body ?? "")?.errors ?? [], [response]);
 
+  const scrollResetKey = useMemo(
+    () => `${response?.requestId ?? "none"}-${response?.elapsedMs ?? 0}-${loading ? "loading" : "idle"}`,
+    [loading, response?.elapsedMs, response?.requestId],
+  );
+
+  useEffect(() => {
+    if (testResults && testResults.failed > 0) {
+      setView("tests");
+    }
+  }, [testResults]);
+
   const copyBody = async () => {
     if (!body) return;
     await navigator.clipboard.writeText(body);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
+    toast.success("Copied to clipboard");
   };
 
   return (
@@ -67,6 +78,18 @@ export function ResponsePanel() {
                 GraphQL {graphqlErrors.length} error{graphqlErrors.length === 1 ? "" : "s"}
               </Badge>
             )}
+            {testResults && testResults.total > 0 && (
+              <Badge
+                className={cn(
+                  "font-mono",
+                  testResults.failed > 0
+                    ? "border-destructive/30 bg-destructive/10 text-destructive"
+                    : "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+                )}
+              >
+                Tests {testResults.passed}/{testResults.total}
+              </Badge>
+            )}
           </>
         )}
 
@@ -75,7 +98,7 @@ export function ResponsePanel() {
             {view === "body" && (
               <Button type="button" variant="ghost" size="sm" onClick={() => void copyBody()}>
                 <Copy />
-                {copied ? "Copied" : "Copy"}
+                Copy
               </Button>
             )}
             <Tabs value={view} onValueChange={(value) => setView(value as typeof view)}>
@@ -86,13 +109,19 @@ export function ResponsePanel() {
                 <TabsTrigger value="headers" className="text-xs">
                   Headers
                 </TabsTrigger>
+                <TabsTrigger value="tests" className="text-xs">
+                  Test Results
+                  {testResults && testResults.failed > 0 && (
+                    <span className="ml-1 text-destructive">!</span>
+                  )}
+                </TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
         )}
       </div>
 
-      <ScrollArea className="min-h-0 flex-1">
+      <ScrollAreaWithTop className="min-h-0 flex-1" resetKey={scrollResetKey}>
         <div className="p-4">
           {loading && (
             <div className="flex min-h-[180px] flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
@@ -118,7 +147,7 @@ export function ResponsePanel() {
           )}
 
           {!loading && response && view === "body" && (
-            <pre className="overflow-auto rounded-md border border-border bg-muted/30 p-4 font-mono text-sm leading-relaxed text-foreground">
+            <pre className="whitespace-pre-wrap break-words rounded-md border border-border bg-muted/30 p-4 font-mono text-sm leading-relaxed text-foreground">
               {body || "(empty body)"}
             </pre>
           )}
@@ -136,8 +165,21 @@ export function ResponsePanel() {
               ))}
             </div>
           )}
+
+          {!loading && response && view === "tests" && (
+            <>
+              {testResults ? (
+                <TestResultsList results={testResults} />
+              ) : (
+                <EmptyState
+                  title="No test results"
+                  description="Add tests in the Tests tab, then send the request again."
+                />
+              )}
+            </>
+          )}
         </div>
-      </ScrollArea>
+      </ScrollAreaWithTop>
     </section>
   );
 }

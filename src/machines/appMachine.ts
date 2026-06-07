@@ -21,16 +21,24 @@ import {
   createRequest,
   createSavedRequest,
 } from "@/lib/helpers";
-import { cancelHttpRequest, sendRequest } from "@/lib/http-client";
+import { cancelHttpRequest, runHttpTests, sendRequest } from "@/lib/http-client";
+import type { TestRunResult } from "@/types";
+import type { OverviewFilter } from "@/lib/filters";
+import { defaultOverviewFilter } from "@/lib/filters";
+import {
+  clearUserSession,
+  saveUserSession,
+  type UserSession,
+} from "@/lib/auth";
 import {
   defaultPersistedState,
   importCollectionJson,
   importPostmanIntoState,
-  loadPersistedState,
   savePersistedState,
   type PersistedState,
 } from "@/lib/storage";
 import { loadThemeMode, saveThemeMode, type ThemeMode } from "@/lib/theme";
+import { toast } from "@/lib/toast";
 
 export function createTabState(request = createRequest()): RequestTabState {
   return {
@@ -40,6 +48,7 @@ export function createTabState(request = createRequest()): RequestTabState {
     error: null,
     loading: false,
     inFlightRequestId: null,
+    testResults: null,
   };
 }
 
@@ -53,6 +62,8 @@ export type AppMachineContext = {
   consoleOpen: boolean;
   responsePanelOpen: boolean;
   theme: ThemeMode;
+  user: UserSession | null;
+  overviewFilter: OverviewFilter;
 };
 
 type SendInput = {
@@ -75,18 +86,40 @@ function startTabRequest(
   input: SendInput,
 ) {
   void sendRequest(input.request, input.environment, { requestId: input.requestId })
-    .then((response) => {
+    .then(async (response) => {
       const historyEntry = createHistoryEntry(input.request, {
         status: response.status,
         elapsedMs: response.elapsedMs,
         sizeBytes: response.sizeBytes,
       });
+
+      let testResults: TestRunResult | null = null;
+      if (input.request.tests.trim()) {
+        try {
+          testResults = await runHttpTests(input.request.tests, response);
+        } catch {
+          testResults = {
+            passed: 0,
+            failed: 1,
+            total: 1,
+            results: [
+              {
+                name: "Test runner",
+                passed: false,
+                message: "Failed to run tests",
+              },
+            ],
+          };
+        }
+      }
+
       self.send({
         type: "SEND_COMPLETE",
         tabId: input.tabId,
         requestId: input.requestId,
         response,
         historyEntry,
+        testResults,
       });
     })
     .catch((error) => {
@@ -118,6 +151,7 @@ export type AppMachineEvent =
       requestId: string;
       response: HttpResponse;
       historyEntry: HistoryEntry;
+      testResults: TestRunResult | null;
     }
   | { type: "SEND_FAILED"; tabId: string; requestId: string; error: string }
   | { type: "CANCEL_SEND"; tabId?: string }
@@ -148,10 +182,16 @@ export type AppMachineEvent =
   | { type: "REMOVE_ENVIRONMENT_VARIABLE"; envId: string; variableId: string }
   | { type: "LOAD_HISTORY_ENTRY"; entry: HistoryEntry }
   | { type: "CLEAR_HISTORY" }
-  | { type: "SET_THEME"; theme: ThemeMode };
+  | { type: "SET_THEME"; theme: ThemeMode }
+  | { type: "HYDRATE_APP"; persisted: PersistedState; user: UserSession | null }
+  | { type: "SET_OVERVIEW_FILTER"; patch: Partial<OverviewFilter> }
+  | { type: "RESET_OVERVIEW_FILTER" }
+  | { type: "SIGN_IN"; user: UserSession }
+  | { type: "SIGN_OUT" }
+  | { type: "SET_TEST_RESULTS"; results: TestRunResult | null };
 
 function createInitialContext(): AppMachineContext {
-  const persisted = loadPersistedState();
+  const persisted = defaultPersistedState();
   const initialTab = createTabState(persisted.lastRequest);
   return {
     persisted,
@@ -163,6 +203,8 @@ function createInitialContext(): AppMachineContext {
     consoleOpen: false,
     responsePanelOpen: true,
     theme: loadThemeMode(),
+    user: null,
+    overviewFilter: defaultOverviewFilter(),
   };
 }
 
@@ -183,10 +225,14 @@ function getActiveEnvironment(context: AppMachineContext): Environment | null {
 function persistLastRequest(context: AppMachineContext) {
   const activeTab = getActiveTab(context);
   if (!activeTab) return;
-  savePersistedState({
+  void savePersistedState({
     ...context.persisted,
     lastRequest: activeTab.request,
   });
+}
+
+function persistWorkspace(context: AppMachineContext, persisted: PersistedState) {
+  void savePersistedState(persisted);
 }
 
 function mapActiveTab(
@@ -231,7 +277,13 @@ export const appMachine = setup({
           actions: assign({ mainView: ({ event }) => event.view }),
         },
         SET_SIDEBAR_SEARCH: {
-          actions: assign({ sidebarSearch: ({ event }) => event.value }),
+          actions: assign({
+            sidebarSearch: ({ event }) => event.value,
+            overviewFilter: ({ context, event }) => ({
+              ...context.overviewFilter,
+              query: event.value,
+            }),
+          }),
         },
         SET_CONSOLE_OPEN: {
           actions: assign({ consoleOpen: ({ event }) => event.open }),
@@ -333,29 +385,37 @@ export const appMachine = setup({
           ],
         },
         SAVE_TO_COLLECTION: {
-          actions: assign(({ context }) => {
-            const activeTab = getActiveTab(context);
-            if (!activeTab) return {};
+          actions: [
+            assign(({ context }) => {
+              const activeTab = getActiveTab(context);
+              if (!activeTab) return {};
 
-            const collectionId =
-              context.persisted.activeCollectionId ?? context.persisted.collectionGroups[0]?.id;
-            if (!collectionId) return {};
+              const collectionId =
+                context.persisted.activeCollectionId ?? context.persisted.collectionGroups[0]?.id;
+              if (!collectionId) return {};
 
-            const saved = createSavedRequest(
-              {
-                ...activeTab.request,
-                name: activeTab.request.name || "Untitled Request",
-              },
-              { collectionId },
-            );
+              const saved = createSavedRequest(
+                {
+                  ...activeTab.request,
+                  name: activeTab.request.name || "Untitled Request",
+                },
+                { collectionId },
+              );
 
-            const persisted = {
-              ...context.persisted,
-              collections: [saved, ...context.persisted.collections],
-            };
-            savePersistedState({ ...persisted, lastRequest: activeTab.request });
-            return { persisted };
-          }),
+              const persisted = {
+                ...context.persisted,
+                collections: [saved, ...context.persisted.collections],
+              };
+              void savePersistedState({ ...persisted, lastRequest: activeTab.request });
+              return { persisted };
+            }),
+            ({ context }) => {
+              const activeTab = getActiveTab(context);
+              if (!activeTab) return;
+              const name = activeTab.request.name || "Untitled Request";
+              toast.success("Saved to collection", name);
+            },
+          ],
         },
         LOAD_SAVED_REQUEST: {
           actions: raise(({ event }) => ({
@@ -370,7 +430,7 @@ export const appMachine = setup({
               collections: context.persisted.collections.filter((item) => item.id !== event.id),
             };
             const activeTab = getActiveTab(context);
-            savePersistedState({
+            void savePersistedState({
               ...persisted,
               lastRequest: activeTab?.request ?? persisted.lastRequest,
             });
@@ -391,7 +451,7 @@ export const appMachine = setup({
               collections: [copy, ...context.persisted.collections],
             };
             const activeTab = getActiveTab(context);
-            savePersistedState({
+            void savePersistedState({
               ...persisted,
               lastRequest: activeTab?.request ?? persisted.lastRequest,
             });
@@ -406,7 +466,7 @@ export const appMachine = setup({
               ...imported,
             };
             const activeTab = getActiveTab(context);
-            savePersistedState({
+            void savePersistedState({
               ...persisted,
               lastRequest: activeTab?.request ?? persisted.lastRequest,
             });
@@ -417,7 +477,7 @@ export const appMachine = setup({
           actions: assign(({ context, event }) => {
             const persisted = importPostmanIntoState(event.raw, context.persisted);
             const activeTab = getActiveTab(context);
-            savePersistedState({
+            void savePersistedState({
               ...persisted,
               lastRequest: activeTab?.request ?? persisted.lastRequest,
             });
@@ -433,7 +493,7 @@ export const appMachine = setup({
               activeCollectionId: group.id,
             };
             const activeTab = getActiveTab(context);
-            savePersistedState({
+            void savePersistedState({
               ...persisted,
               lastRequest: activeTab?.request ?? persisted.lastRequest,
             });
@@ -461,7 +521,7 @@ export const appMachine = setup({
               ),
             };
             const activeTab = getActiveTab(context);
-            savePersistedState({
+            void savePersistedState({
               ...persisted,
               lastRequest: activeTab?.request ?? persisted.lastRequest,
             });
@@ -477,7 +537,7 @@ export const appMachine = setup({
               ),
             };
             const activeTab = getActiveTab(context);
-            savePersistedState({
+            void savePersistedState({
               ...persisted,
               lastRequest: activeTab?.request ?? persisted.lastRequest,
             });
@@ -491,7 +551,7 @@ export const appMachine = setup({
               activeCollectionId: event.id,
             };
             const activeTab = getActiveTab(context);
-            savePersistedState({
+            void savePersistedState({
               ...persisted,
               lastRequest: activeTab?.request ?? persisted.lastRequest,
             });
@@ -509,7 +569,7 @@ export const appMachine = setup({
               ),
             };
             const activeTab = getActiveTab(context);
-            savePersistedState({
+            void savePersistedState({
               ...persisted,
               lastRequest: activeTab?.request ?? persisted.lastRequest,
             });
@@ -534,7 +594,7 @@ export const appMachine = setup({
               ),
             };
             const activeTab = getActiveTab(context);
-            savePersistedState({
+            void savePersistedState({
               ...persisted,
               lastRequest: activeTab?.request ?? persisted.lastRequest,
             });
@@ -556,7 +616,7 @@ export const appMachine = setup({
               ),
             };
             const activeTab = getActiveTab(context);
-            savePersistedState({
+            void savePersistedState({
               ...persisted,
               lastRequest: activeTab?.request ?? persisted.lastRequest,
             });
@@ -570,7 +630,7 @@ export const appMachine = setup({
               activeEnvironmentId: event.id,
             };
             const activeTab = getActiveTab(context);
-            savePersistedState({
+            void savePersistedState({
               ...persisted,
               lastRequest: activeTab?.request ?? persisted.lastRequest,
             });
@@ -590,7 +650,7 @@ export const appMachine = setup({
               activeEnvironmentId: env.id,
             };
             const activeTab = getActiveTab(context);
-            savePersistedState({
+            void savePersistedState({
               ...persisted,
               lastRequest: activeTab?.request ?? persisted.lastRequest,
             });
@@ -606,7 +666,7 @@ export const appMachine = setup({
               ),
             };
             const activeTab = getActiveTab(context);
-            savePersistedState({
+            void savePersistedState({
               ...persisted,
               lastRequest: activeTab?.request ?? persisted.lastRequest,
             });
@@ -629,7 +689,7 @@ export const appMachine = setup({
                   : context.persisted.activeEnvironmentId,
             };
             const activeTab = getActiveTab(context);
-            savePersistedState({
+            void savePersistedState({
               ...persisted,
               lastRequest: activeTab?.request ?? persisted.lastRequest,
             });
@@ -654,7 +714,7 @@ export const appMachine = setup({
               ),
             };
             const activeTab = getActiveTab(context);
-            savePersistedState({
+            void savePersistedState({
               ...persisted,
               lastRequest: activeTab?.request ?? persisted.lastRequest,
             });
@@ -672,7 +732,7 @@ export const appMachine = setup({
               ),
             };
             const activeTab = getActiveTab(context);
-            savePersistedState({
+            void savePersistedState({
               ...persisted,
               lastRequest: activeTab?.request ?? persisted.lastRequest,
             });
@@ -695,7 +755,7 @@ export const appMachine = setup({
               ),
             };
             const activeTab = getActiveTab(context);
-            savePersistedState({
+            void savePersistedState({
               ...persisted,
               lastRequest: activeTab?.request ?? persisted.lastRequest,
             });
@@ -712,7 +772,7 @@ export const appMachine = setup({
           actions: assign(({ context }) => {
             const persisted = { ...context.persisted, history: [] };
             const activeTab = getActiveTab(context);
-            savePersistedState({
+            void savePersistedState({
               ...persisted,
               lastRequest: activeTab?.request ?? persisted.lastRequest,
             });
@@ -725,60 +785,153 @@ export const appMachine = setup({
             return { theme: event.theme };
           }),
         },
-      },
-      states: {
-        idle: {
-          on: {
-            SEND: {
-              target: "sending",
-              actions: assign({
-                tabs: ({ context }) =>
-                  mapActiveTab(context, (tab) => ({ ...tab, error: null })),
-              }),
-            },
-          },
+        HYDRATE_APP: {
+          actions: assign(({ event }) => {
+            const initialTab = createTabState(event.persisted.lastRequest);
+            return {
+              persisted: event.persisted,
+              tabs: [initialTab],
+              activeTabId: initialTab.id,
+              user: event.user,
+            };
+          }),
         },
-        sending: {
-          invoke: {
-            src: "sendHttpRequest",
-            input: ({ context }) => {
-              const activeTab = getActiveTab(context);
-              return {
-                request: activeTab?.request ?? createRequest(),
-                environment: getActiveEnvironment(context),
+        SET_OVERVIEW_FILTER: {
+          actions: assign({
+            overviewFilter: ({ context, event }) => ({
+              ...context.overviewFilter,
+              ...event.patch,
+            }),
+          }),
+        },
+        RESET_OVERVIEW_FILTER: {
+          actions: assign({ overviewFilter: defaultOverviewFilter }),
+        },
+        SIGN_IN: {
+          actions: [
+            assign(({ event }) => ({ user: event.user })),
+            ({ event }) => {
+              void saveUserSession(event.user);
+              toast.success(`Welcome, ${event.user.name}`);
+            },
+          ],
+        },
+        SIGN_OUT: {
+          actions: [
+            assign({ user: null }),
+            () => {
+              void clearUserSession();
+              toast.info("Signed out");
+            },
+          ],
+        },
+        SET_TEST_RESULTS: {
+          actions: assign(({ context, event }) => ({
+            tabs: mapActiveTab(context, (tab) => ({
+              ...tab,
+              testResults: event.results,
+            })),
+          })),
+        },
+        SEND: {
+          actions: "startActiveTabRequest",
+        },
+        SEND_STARTED: {
+          actions: assign(({ context, event }) => ({
+            tabs: mapTabById(context, event.tabId, (tab) => ({
+              ...tab,
+              loading: true,
+              error: null,
+              testResults: null,
+              inFlightRequestId: event.requestId,
+            })),
+          })),
+        },
+        SEND_COMPLETE: {
+          actions: [
+            assign(({ context, event }) => {
+              const tab = context.tabs.find((item) => item.id === event.tabId);
+              if (!tab || tab.inFlightRequestId !== event.requestId) {
+                return {};
+              }
+
+              const persisted = {
+                ...context.persisted,
+                history: [event.historyEntry, ...context.persisted.history].slice(0, 50),
               };
+              void savePersistedState({
+                ...persisted,
+                lastRequest: tab.request,
+              });
+
+              return {
+                tabs: mapTabById(context, event.tabId, (current) => ({
+                  ...current,
+                  loading: false,
+                  inFlightRequestId: null,
+                  response: event.response,
+                  error: null,
+                  testResults: event.testResults,
+                })),
+                persisted,
+              };
+            }),
+            ({ event }) => {
+              const { response, testResults } = event;
+              const cacheLabel = response.fromCache ? " · cached" : "";
+              toast.success(
+                `${response.status} ${response.statusText}`,
+                `${response.elapsedMs} ms${cacheLabel}`,
+              );
+
+              if (testResults && testResults.total > 0) {
+                if (testResults.failed > 0) {
+                  toast.error(
+                    "Tests failed",
+                    `${testResults.failed} of ${testResults.total} assertion(s) failed`,
+                  );
+                } else {
+                  toast.success("All tests passed", `${testResults.passed}/${testResults.total}`);
+                }
+              }
             },
-            onDone: {
-              target: "idle",
-              actions: [
-                assign({
-                  tabs: ({ context, event }) =>
-                    mapActiveTab(context, (tab) => ({
-                      ...tab,
-                      response: event.output.response,
-                      error: null,
-                    })),
-                  persisted: ({ context, event }) => ({
-                    ...context.persisted,
-                    history: [event.output.historyEntry, ...context.persisted.history].slice(0, 50),
-                  }),
-                }),
-                "persistLastRequest",
-              ],
+          ],
+        },
+        SEND_FAILED: {
+          actions: [
+            assign(({ context, event }) => {
+              const tab = context.tabs.find((item) => item.id === event.tabId);
+              if (!tab || tab.inFlightRequestId !== event.requestId) {
+                return {};
+              }
+
+              return {
+                tabs: mapTabById(context, event.tabId, (current) => ({
+                  ...current,
+                  loading: false,
+                  inFlightRequestId: null,
+                  response: null,
+                  error: event.error,
+                  testResults: null,
+                })),
+              };
+            }),
+            ({ event }) => {
+              toast.error("Request failed", event.error);
             },
-            onError: {
-              target: "idle",
-              actions: assign({
-                tabs: ({ context, event }) =>
-                  mapActiveTab(context, (tab) => ({
-                    ...tab,
-                    response: null,
-                    error:
-                      event.error instanceof Error ? event.error.message : String(event.error),
-                  })),
-              }),
+          ],
+        },
+        CANCEL_SEND: {
+          actions: [
+            ({ context, event }) => {
+              const tabId = event.tabId ?? context.activeTabId;
+              const tab = context.tabs.find((item) => item.id === tabId);
+              if (tab?.inFlightRequestId) {
+                void cancelHttpRequest(tab.inFlightRequestId);
+                toast.info("Request cancelled");
+              }
             },
-          },
+          ],
         },
       },
     },

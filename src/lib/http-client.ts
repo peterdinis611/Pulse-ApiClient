@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { ApiRequest, HttpEngineStats, HttpResponse } from "../types";
+import type { ApiRequest, AppSettings, HttpEngineStats, HttpResponse, TestRunResult } from "../types";
 import { substituteVariables } from "./env";
 import type { Environment } from "../types";
 import { buildGraphqlBody } from "./graphql";
@@ -130,11 +130,19 @@ export async function getHttpEngineStats(): Promise<HttpEngineStats> {
   return invoke<HttpEngineStats>("get_http_engine_stats");
 }
 
+export async function runHttpTests(script: string, response: HttpResponse): Promise<TestRunResult> {
+  return invoke<TestRunResult>("run_http_tests", { script, response });
+}
+
+export async function getAppSettings(): Promise<AppSettings> {
+  return invoke<AppSettings>("get_app_settings");
+}
+
 export async function setHttpSettings(
   httpMaxConcurrent: number,
   httpTimeoutMs: number,
-): Promise<void> {
-  await invoke("set_http_settings", { httpMaxConcurrent, httpTimeoutMs });
+): Promise<AppSettings> {
+  return invoke<AppSettings>("set_http_settings", { httpMaxConcurrent, httpTimeoutMs });
 }
 
 export async function clearHttpCache(): Promise<number> {

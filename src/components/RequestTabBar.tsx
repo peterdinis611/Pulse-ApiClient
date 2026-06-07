@@ -1,4 +1,4 @@
-import { Plus, X } from "lucide-react";
+import { LoaderCircle, Plus, X } from "lucide-react";
 import { useApp } from "@/machines";
 import { MethodBadge } from "@/components/MethodBadge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ export function RequestTabBar() {
 
       {tabs.map((tab) => {
         const active = mainView === "request" && tab.id === activeTabId;
+        const pending = tab.loading;
         return (
           <div
             key={tab.id}
@@ -41,6 +42,7 @@ export function RequestTabBar() {
               onClick={() => setActiveTab(tab.id)}
             >
               <MethodBadge method={tab.request.method} />
+              {pending && <LoaderCircle className="size-3.5 animate-spin" />}
               <span className="truncate">{tab.request.name}</span>
             </button>
             <Button
