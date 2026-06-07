@@ -109,5 +109,7 @@ export function useApp() {
       send({ type: "REMOVE_ENVIRONMENT_VARIABLE", envId, variableId }),
     loadHistoryEntry: (entry: HistoryEntry) => send({ type: "LOAD_HISTORY_ENTRY", entry }),
     clearHistory: () => send({ type: "CLEAR_HISTORY" }),
+    resetWorkspace: () => send({ type: "RESET_WORKSPACE" }),
+    windowId: context.windowId,
   };
 }

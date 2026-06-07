@@ -32,3 +32,11 @@ export async function dbRegisterAccount(
 export async function dbLoginAccount(email: string, password: string): Promise<UserSession> {
   return invoke<UserSession>("db_login_account", { email, password });
 }
+
+export async function dbGetDatabasePath(): Promise<string> {
+  return invoke<string>("db_get_database_path");
+}
+
+export async function dbResetDatabase(): Promise<void> {
+  await invoke("db_reset_database");
+}

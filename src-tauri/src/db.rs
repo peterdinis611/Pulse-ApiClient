@@ -330,6 +330,43 @@ impl DbState {
             .map_err(|e| e.to_string())?;
         Ok(())
     }
+
+    pub fn database_path(app: &AppHandle) -> Result<String, String> {
+        db_path(app).map(|path| path.display().to_string())
+    }
+
+    pub fn reset_database(&self, app: &AppHandle) -> Result<(), String> {
+        let path = db_path(app)?;
+        self.swap_connection(Connection::open_in_memory().map_err(|e| e.to_string())?)?;
+        remove_db_files(&path)?;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        self.swap_connection(Connection::open(&path).map_err(|e| e.to_string())?)?;
+        self.migrate()?;
+        Ok(())
+    }
+
+    fn swap_connection(&self, conn: Connection) -> Result<(), String> {
+        let mut guard = self.conn.lock().map_err(|e| e.to_string())?;
+        *guard = conn;
+        Ok(())
+    }
+}
+
+fn remove_db_files(path: &PathBuf) -> Result<(), String> {
+    let base = path.to_string_lossy();
+    for suffix in ["", "-wal", "-shm"] {
+        let file_path = if suffix.is_empty() {
+            path.clone()
+        } else {
+            PathBuf::from(format!("{base}{suffix}"))
+        };
+        if file_path.exists() {
+            std::fs::remove_file(&file_path).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
 }
 
 fn db_path(app: &AppHandle) -> Result<PathBuf, String> {

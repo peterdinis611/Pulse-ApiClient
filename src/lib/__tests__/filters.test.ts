@@ -8,6 +8,7 @@ import {
   filterSavedRequests,
   isOverviewFilterDefault,
   overviewFilterLabels,
+  type OverviewFilter,
   removeOverviewMethod,
   removeOverviewSource,
   removeOverviewStatus,
@@ -92,7 +93,12 @@ describe("filters", () => {
 
   it("toggles and removes filter chips", () => {
     const base = defaultOverviewFilter();
-    const withGet = { ...base, methods: ["GET"] as const, sources: ["history"] as const, statuses: ["2xx"] as const };
+    const withGet: OverviewFilter = {
+      ...base,
+      methods: ["GET"],
+      sources: ["history"],
+      statuses: ["2xx"],
+    };
 
     expect(toggleOverviewMethod(base, "GET").methods).toEqual(["GET"]);
     expect(toggleOverviewMethod(withGet, "GET").methods).toEqual([]);

@@ -5,7 +5,7 @@ import { LoaderCircle } from "lucide-react";
 import { loadUserSession } from "@/lib/auth";
 import { loadPersistedState } from "@/lib/storage";
 import { canUseTauriIpc, waitForTauriIpc } from "@/lib/tauri-runtime";
-import { listenWorkspaceUpdated } from "@/lib/workspace-sync";
+import { listenWorkspaceReset, listenWorkspaceUpdated } from "@/lib/workspace-sync";
 import { getCurrentWindowLabel, takePendingWindowInit } from "@/lib/window-manager";
 import { AppMachineContext } from "@/machines/AppProvider";
 
@@ -66,6 +66,26 @@ export function AppBootstrap({ children }: { children: ReactNode }) {
         const persisted = await loadPersistedState();
         if (cancelled) return;
         actorRef.send({ type: "SYNC_WORKSPACE", persisted });
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [actorRef]);
+
+  useEffect(() => {
+    if (!isTauri() || !canUseTauriIpc()) return;
+
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    void (async () => {
+      unlisten = await listenWorkspaceReset(async (payload) => {
+        const windowId = await getCurrentWindowLabel();
+        if (payload.sourceWindowId === windowId || cancelled) return;
+        actorRef.send({ type: "RESET_WORKSPACE" });
       });
     })();
 

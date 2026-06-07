@@ -188,6 +188,7 @@ export type AppMachineEvent =
   | { type: "SET_THEME"; theme: ThemeMode }
   | { type: "HYDRATE_APP"; persisted: PersistedState; user: UserSession | null; windowId: string; pendingInit?: PendingWindowInit | null }
   | { type: "SYNC_WORKSPACE"; persisted: PersistedState }
+  | { type: "RESET_WORKSPACE" }
   | { type: "PERSIST_WINDOW_SESSION" }
   | { type: "SET_OVERVIEW_FILTER"; patch: Partial<OverviewFilter> }
   | { type: "RESET_OVERVIEW_FILTER" }
@@ -803,6 +804,29 @@ export const appMachine = setup({
               },
             },
           })),
+        },
+        RESET_WORKSPACE: {
+          actions: [
+            assign(() => {
+              const persisted = defaultPersistedState();
+              const initialTab = createTabState(persisted.lastRequest);
+              return {
+                persisted,
+                tabs: [initialTab],
+                activeTabId: initialTab.id,
+                mainView: "overview" as MainView,
+                requestTab: "params" as RequestTab,
+                consoleOpen: false,
+                responsePanelOpen: true,
+                sidebarSearch: "",
+                overviewFilter: defaultOverviewFilter(),
+                user: null,
+              };
+            }),
+            () => {
+              void clearUserSession();
+            },
+          ],
         },
         PERSIST_WINDOW_SESSION: {
           actions: ({ context }) => {

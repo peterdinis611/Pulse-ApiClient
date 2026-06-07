@@ -146,6 +146,22 @@ fn db_clear_session(db: State<'_, Arc<DbState>>) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn db_get_database_path(app: AppHandle) -> Result<String, String> {
+    DbState::database_path(&app)
+}
+
+#[tauri::command]
+fn db_reset_database(
+    app: AppHandle,
+    db: State<'_, Arc<DbState>>,
+    http: State<'_, HttpState>,
+) -> Result<(), String> {
+    db.reset_database(&app)?;
+    http::clear_cache(http.inner());
+    Ok(())
+}
+
+#[tauri::command]
 fn db_register_account(
     db: State<'_, Arc<DbState>>,
     name: String,
@@ -262,6 +278,8 @@ pub fn run() {
             db_load_session,
             db_save_session,
             db_clear_session,
+            db_get_database_path,
+            db_reset_database,
             db_register_account,
             db_login_account,
             register_pending_window_init,

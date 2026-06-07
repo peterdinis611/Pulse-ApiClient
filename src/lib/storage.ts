@@ -1,4 +1,4 @@
-import { readStorageItem } from "./app-config";
+import { readStorageItem, storageKey } from "./app-config";
 import { dbLoadWorkspace, dbSaveWorkspace } from "./db-client";
 import { canUseTauriIpc } from "./tauri-runtime";
 import type {
@@ -39,6 +39,11 @@ export type PersistedState = {
   lastRequest: ReturnType<typeof createRequest>;
   windowSessions: Record<string, WindowSessionState>;
 };
+
+export function clearLegacyPersistedState(): void {
+  localStorage.removeItem(storageKey(STATE_SUFFIX));
+  localStorage.removeItem(`relay-api-client/${STATE_SUFFIX}`);
+}
 
 export function defaultPersistedState(): PersistedState {
   const env = createEnvironment("Local");
