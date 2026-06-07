@@ -1,5 +1,6 @@
 import { defaultGraphqlQuery, defaultGraphqlVariables } from "./graphql";
 import { createId, createKeyValue, createRequest, createSavedRequest, defaultAuth } from "./helpers";
+import { normalizeTestsToPulse } from "./test-snippets";
 import type { ApiRequest, AuthConfig, CollectionGroup, HttpMethod, KeyValue, SavedRequest } from "@/types";
 
 type PostmanCollection = {
@@ -232,7 +233,8 @@ function parsePostmanTests(item: PostmanItem): string | undefined {
   const testEvent = item.event?.find((entry) => entry.listen === "test");
   const exec = testEvent?.script?.exec;
   if (!exec) return undefined;
-  return Array.isArray(exec) ? exec.join("\n") : exec;
+  const raw = Array.isArray(exec) ? exec.join("\n") : exec;
+  return normalizeTestsToPulse(raw);
 }
 
 function parsePostmanRequest(item: PostmanItem): ApiRequest | null {

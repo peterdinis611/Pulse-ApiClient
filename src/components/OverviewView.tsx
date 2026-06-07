@@ -4,9 +4,13 @@ import { useApp } from "@/machines";
 import {
   buildOverviewItems,
   filterOverviewItems,
+  isOverviewFilterDefault,
 } from "@/lib/filters";
 import { MethodBadge } from "@/components/MethodBadge";
-import { OverviewFilterMenu } from "@/components/OverviewFilterMenu";
+import {
+  ActiveOverviewFilters,
+  OverviewFilterMenu,
+} from "@/components/OverviewFilterMenu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollAreaWithTop } from "@/components/ui/scroll-area-with-top";
@@ -24,15 +28,24 @@ export function OverviewView() {
     user,
     overviewFilter,
     setOverviewFilter,
+    resetOverviewFilter,
   } = useApp();
 
-  const recentItems = useMemo(() => {
-    const items = buildOverviewItems(history, collections, {
-      onHistory: loadHistoryEntry,
-      onSaved: loadSavedRequest,
-    });
-    return filterOverviewItems(items, overviewFilter).slice(0, 20);
-  }, [collections, history, loadHistoryEntry, loadSavedRequest, overviewFilter]);
+  const allItems = useMemo(
+    () =>
+      buildOverviewItems(history, collections, {
+        onHistory: loadHistoryEntry,
+        onSaved: loadSavedRequest,
+      }),
+    [collections, history, loadHistoryEntry, loadSavedRequest],
+  );
+
+  const filteredItems = useMemo(
+    () => filterOverviewItems(allItems, overviewFilter),
+    [allItems, overviewFilter],
+  );
+
+  const recentItems = useMemo(() => filteredItems.slice(0, 20), [filteredItems]);
 
   return (
     <ScrollAreaWithTop className="h-full" resetKey="overview">
@@ -46,20 +59,34 @@ export function OverviewView() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="relative max-w-sm flex-1">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              className="pl-9"
-              placeholder="Search requests"
-              value={overviewFilter.query}
-              onChange={(event) => setOverviewFilter({ query: event.target.value })}
-            />
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="relative max-w-sm flex-1">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="pl-9"
+                placeholder="Search requests"
+                value={overviewFilter.query}
+                onChange={(event) => setOverviewFilter({ query: event.target.value })}
+              />
+            </div>
+            <OverviewFilterMenu totalCount={allItems.length} filteredCount={filteredItems.length} />
+            <Button variant="secondary" onClick={newRequestTab}>
+              New request
+            </Button>
           </div>
-          <OverviewFilterMenu />
-          <Button variant="secondary" onClick={newRequestTab}>
-            New request
-          </Button>
+
+          <ActiveOverviewFilters
+            filter={overviewFilter}
+            onChange={setOverviewFilter}
+            onReset={resetOverviewFilter}
+          />
+
+          {!isOverviewFilterDefault(overviewFilter) && (
+            <p className="text-xs text-muted-foreground">
+              Showing {filteredItems.length} of {allItems.length} items
+            </p>
+          )}
         </div>
 
         <div className="overflow-hidden rounded-lg border border-border bg-card">
@@ -71,8 +98,13 @@ export function OverviewView() {
           </div>
 
           {recentItems.length === 0 ? (
-            <div className="px-4 py-12 text-center text-sm text-muted-foreground">
-              No items match your search or filters.
+            <div className="space-y-2 px-4 py-12 text-center text-sm text-muted-foreground">
+              <p>No items match your search or filters.</p>
+              {!isOverviewFilterDefault(overviewFilter) && (
+                <Button type="button" variant="link" className="h-auto p-0" onClick={resetOverviewFilter}>
+                  Clear filters
+                </Button>
+              )}
             </div>
           ) : (
             recentItems.map((item, index) => (

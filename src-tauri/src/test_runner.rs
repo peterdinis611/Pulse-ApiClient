@@ -104,7 +104,31 @@ pub fn run_http_tests(script: &str, response: &HttpResponsePayload) -> TestRunRe
         return run_json_assertions(trimmed, response);
     }
 
-    run_postman_script(trimmed, response)
+    run_script_tests(trimmed, response)
+}
+
+fn normalize_test_script(script: &str) -> String {
+    script.replace("pulse.", "pm.")
+}
+
+fn run_script_tests(script: &str, response: &HttpResponsePayload) -> TestRunResult {
+    let script = normalize_test_script(script);
+    let json_body = serde_json::from_str::<serde_json::Value>(&response.body).ok();
+
+    let results: Vec<TestCaseResult> = script
+        .split("pm.test(")
+        .skip(1)
+        .map(|block| evaluate_test_block(block, response, json_body.as_ref()))
+        .collect();
+
+    if results.is_empty() {
+        return single_failure(
+            "No tests found",
+            "Use pulse.test(...) blocks or a JSON assertions array.",
+        );
+    }
+
+    summarize(results)
 }
 
 fn run_json_assertions(raw: &str, response: &HttpResponsePayload) -> TestRunResult {
@@ -119,25 +143,6 @@ fn run_json_assertions(raw: &str, response: &HttpResponsePayload) -> TestRunResu
         .into_iter()
         .map(|assertion| evaluate_json_assertion(assertion, response))
         .collect();
-
-    summarize(results)
-}
-
-fn run_postman_script(script: &str, response: &HttpResponsePayload) -> TestRunResult {
-    let json_body = serde_json::from_str::<serde_json::Value>(&response.body).ok();
-
-    let results: Vec<TestCaseResult> = script
-        .split("pm.test(")
-        .skip(1)
-        .map(|block| evaluate_test_block(block, response, json_body.as_ref()))
-        .collect();
-
-    if results.is_empty() {
-        return single_failure(
-            "No tests found",
-            "Use pm.test(...) blocks or a JSON assertions array.",
-        );
-    }
 
     summarize(results)
 }
@@ -505,7 +510,20 @@ mod tests {
     }
 
     #[test]
-    fn runs_postman_status_test() {
+    fn runs_pulse_status_test() {
+        let script = r#"
+pulse.test("Status code is 200", function () {
+    pulse.response.to.have.status(200);
+});
+"#;
+        let response = sample_response(200, "{}", 120);
+        let result = run_http_tests(script, &response);
+        assert_eq!(result.total, 1);
+        assert_eq!(result.passed, 1);
+    }
+
+    #[test]
+    fn runs_legacy_pm_status_test() {
         let script = r#"
 pm.test("Status code is 200", function () {
     pm.response.to.have.status(200);

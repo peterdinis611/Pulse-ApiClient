@@ -12,7 +12,7 @@ export function TestResultsList({
   if (results.total === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        No tests defined. Add Postman-style tests or JSON assertions in the Tests tab.
+        No tests defined. Add Pulse tests or JSON assertions in the Tests tab.
       </p>
     );
   }

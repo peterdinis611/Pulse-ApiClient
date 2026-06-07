@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { FlaskConical, Play, Plus } from "lucide-react";
 import { useApp } from "@/machines";
 import { runHttpTests } from "@/lib/http-client";
-import { postmanTestsTemplate, testSnippets } from "@/lib/test-snippets";
+import { pulseTestsTemplate, testSnippets } from "@/lib/test-snippets";
 import { toast } from "@/lib/toast";
 import { TestResultsList } from "@/components/TestResultsList";
 import { Button } from "@/components/ui/button";
@@ -53,7 +53,7 @@ export function TestsTabPanel() {
     if (request.tests.trim() && !window.confirm("Replace current tests with template?")) {
       return;
     }
-    updateRequest({ tests: postmanTestsTemplate });
+    updateRequest({ tests: pulseTestsTemplate });
     toast.success("Test template applied");
   };
 
@@ -72,8 +72,8 @@ export function TestsTabPanel() {
           <div>
             <p className="text-sm font-medium">Test script</p>
             <p className="text-xs text-muted-foreground">
-              Postman-style <code className="rounded bg-muted px-1">pm.test</code> blocks. Runs after
-              Send and in collection runner.
+              Pulse <code className="rounded bg-muted px-1">pulse.test</code> blocks. Runs after Send
+              and in collection runner.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -97,7 +97,7 @@ export function TestsTabPanel() {
           onChange={(event) => updateRequest({ tests: event.target.value })}
           spellCheck={false}
           className="min-h-[360px] flex-1 font-mono text-sm"
-          placeholder={postmanTestsTemplate}
+          placeholder={pulseTestsTemplate}
         />
       </div>
 

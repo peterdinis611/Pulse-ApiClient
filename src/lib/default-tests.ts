@@ -1,10 +1,14 @@
-export { postmanTestsTemplate as requestTestsPlaceholder, testSnippets } from "./test-snippets";
+export {
+  pulseTestsTemplate as requestTestsPlaceholder,
+  pulseTestsTemplate,
+  testSnippets,
+} from "./test-snippets";
 
-export const defaultRequestTests = `pm.test("Status code is 200", function () {
-    pm.response.to.have.status(200);
+export const defaultRequestTests = `pulse.test("Status code is 200", function () {
+    pulse.response.to.have.status(200);
 });
 
-pm.test("Response time is acceptable", function () {
-    pm.expect(pm.response.responseTime).to.be.below(3000);
+pulse.test("Response time is acceptable", function () {
+    pulse.expect(pulse.response.responseTime).to.be.below(3000);
 });
 `;
