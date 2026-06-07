@@ -71,10 +71,10 @@ fn runs_json_assertions() {
 #[test]
 fn runs_multiple_assertions_in_one_test() {
     let script = r#"
-pm.test("Combined checks", function () {
-    pm.response.to.have.status(200);
-    pm.response.to.be.ok;
-    pm.expect(pm.response.responseTime).to.be.below(500);
+pulse.test("Combined checks", function () {
+    pulse.response.to.have.status(200);
+    pulse.response.to.be.ok;
+    pulse.expect(pulse.response.responseTime).to.be.below(500);
 });
 "#;
     let response = sample_response(200, "{}", 100);
@@ -85,8 +85,8 @@ pm.test("Combined checks", function () {
 #[test]
 fn runs_body_include_assertion() {
     let script = r#"
-pm.test("Body contains hello", function () {
-    pm.expect(pm.response.text()).to.include("hello");
+pulse.test("Body contains hello", function () {
+    pulse.expect(pulse.response.text()).to.include("hello");
 });
 "#;
     let result = run_http_tests(script, &sample_response(200, "hello world", 50));
@@ -96,9 +96,9 @@ pm.test("Body contains hello", function () {
 #[test]
 fn runs_json_data_path_assertion() {
     let script = r#"
-pm.test("Has id", function () {
-    var jsonData = pm.response.json();
-    pm.expect(jsonData.id).to.eql(42);
+pulse.test("Has id", function () {
+    var jsonData = pulse.response.json();
+    pulse.expect(jsonData.id).to.eql(42);
 });
 "#;
     let result = run_http_tests(script, &sample_response(200, r#"{"id":42}"#, 50));

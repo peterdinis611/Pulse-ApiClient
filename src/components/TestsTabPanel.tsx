@@ -72,8 +72,8 @@ export function TestsTabPanel() {
           <div>
             <p className="text-sm font-medium">Test script</p>
             <p className="text-xs text-muted-foreground">
-              Pulse <code className="rounded bg-muted px-1">pulse.test</code> blocks. Runs after Send
-              and in collection runner.
+              Pulse <code className="rounded bg-muted px-1">pulse.test</code> blocks. Click Run tests
+              after sending, or use collection runner.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

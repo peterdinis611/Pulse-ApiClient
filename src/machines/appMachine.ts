@@ -21,7 +21,7 @@ import {
   createRequest,
   createSavedRequest,
 } from "@/lib/helpers";
-import { cancelHttpRequest, runHttpTests, sendRequest } from "@/lib/http-client";
+import { cancelHttpRequest, sendRequest } from "@/lib/http-client";
 import type { TestRunResult } from "@/types";
 import type { OverviewFilter } from "@/lib/filters";
 import { defaultOverviewFilter } from "@/lib/filters";
@@ -96,33 +96,13 @@ function startTabRequest(
         sizeBytes: response.sizeBytes,
       });
 
-      let testResults: TestRunResult | null = null;
-      if (input.request.tests.trim()) {
-        try {
-          testResults = await runHttpTests(input.request.tests, response);
-        } catch {
-          testResults = {
-            passed: 0,
-            failed: 1,
-            total: 1,
-            results: [
-              {
-                name: "Test runner",
-                passed: false,
-                message: "Failed to run tests",
-              },
-            ],
-          };
-        }
-      }
-
       self.send({
         type: "SEND_COMPLETE",
         tabId: input.tabId,
         requestId: input.requestId,
         response,
         historyEntry,
-        testResults,
+        testResults: null,
       });
     })
     .catch((error) => {
@@ -911,23 +891,12 @@ export const appMachine = setup({
               };
             }),
             ({ event }) => {
-              const { response, testResults } = event;
+              const { response } = event;
               const cacheLabel = response.fromCache ? " · cached" : "";
               toast.success(
                 `${response.status} ${response.statusText}`,
                 `${response.elapsedMs} ms${cacheLabel}`,
               );
-
-              if (testResults && testResults.total > 0) {
-                if (testResults.failed > 0) {
-                  toast.error(
-                    "Tests failed",
-                    `${testResults.failed} of ${testResults.total} assertion(s) failed`,
-                  );
-                } else {
-                  toast.success("All tests passed", `${testResults.passed}/${testResults.total}`);
-                }
-              }
             },
           ],
         },

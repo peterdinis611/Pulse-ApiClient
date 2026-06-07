@@ -54,37 +54,38 @@ enum JsonAssertion {
 }
 
 static RE_TEST_NAME: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r#"pm\.test\("([^"]+)""#).unwrap());
+    LazyLock::new(|| Regex::new(r#"pulse\.test\("([^"]+)""#).unwrap());
 static RE_STATUS: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r#"pm\.response\.to\.have\.status\((\d+)\)"#).unwrap());
+    LazyLock::new(|| Regex::new(r#"pulse\.response\.to\.have\.status\((\d+)\)"#).unwrap());
 static RE_CODE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"pm\.expect\(pm\.response\.code\)\.to\.(?:eql|equal)\((\d+)\)"#).unwrap()
+    Regex::new(r#"pulse\.expect\(pulse\.response\.code\)\.to\.(?:eql|equal)\((\d+)\)"#).unwrap()
 });
-static RE_OK: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"pm\.response\.to\.be\.ok").unwrap());
+static RE_OK: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"pulse\.response\.to\.be\.ok").unwrap());
 static RE_HEADER: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"pm\.response\.to\.have\.header\("([^"]+)"(?:,\s*"([^"]*)")?\)"#).unwrap()
+    Regex::new(r#"pulse\.response\.to\.have\.header\("([^"]+)"(?:,\s*"([^"]*)")?\)"#).unwrap()
 });
 static RE_JSON_PATH: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"pm\.expect\(jsonData\.([^)]+)\)\.to\.(?:eql|equal)\(([^)]+)\)"#).unwrap()
+    Regex::new(r#"pulse\.expect\(jsonData\.([^)]+)\)\.to\.(?:eql|equal)\(([^)]+)\)"#).unwrap()
 });
 static RE_JSON_BRACKET: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r#"pm\.expect\(jsonData\[['"]([^'"]+)['"]\]\)\.to\.(?:eql|equal)\(([^)]+)\)"#,
+        r#"pulse\.expect\(jsonData\[['"]([^'"]+)['"]\]\)\.to\.(?:eql|equal)\(([^)]+)\)"#,
     )
     .unwrap()
 });
 static RE_RESPONSE_TIME: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"pm\.expect\(pm\.response\.responseTime\)\.to\.be\.below\((\d+)\)").unwrap()
+    Regex::new(r"pulse\.expect\(pulse\.response\.responseTime\)\.to\.be\.below\((\d+)\)").unwrap()
 });
 static RE_BODY_INCLUDE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r#"pm\.expect\(pm\.response\.text\(\)\)\.to\.(?:include|contain)\("([^"]*)"\)"#,
+        r#"pulse\.expect\(pulse\.response\.text\(\)\)\.to\.(?:include|contain)\("([^"]*)"\)"#,
     )
     .unwrap()
 });
 static RE_JSON_FIELD: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r#"pm\.expect\(pm\.response\.json\(\)\.([^)]+)\)\.to\.(?:eql|equal)\(([^)]+)\)"#,
+        r#"pulse\.expect\(pulse\.response\.json\(\)\.([^)]+)\)\.to\.(?:eql|equal)\(([^)]+)\)"#,
     )
     .unwrap()
 });
@@ -108,7 +109,7 @@ pub fn run_http_tests(script: &str, response: &HttpResponsePayload) -> TestRunRe
 }
 
 fn normalize_test_script(script: &str) -> String {
-    script.replace("pulse.", "pm.")
+    script.replace("pm.", "pulse.")
 }
 
 fn run_script_tests(script: &str, response: &HttpResponsePayload) -> TestRunResult {
@@ -116,7 +117,7 @@ fn run_script_tests(script: &str, response: &HttpResponsePayload) -> TestRunResu
     let json_body = serde_json::from_str::<serde_json::Value>(&response.body).ok();
 
     let results: Vec<TestCaseResult> = script
-        .split("pm.test(")
+        .split("pulse.test(")
         .skip(1)
         .map(|block| evaluate_test_block(block, response, json_body.as_ref()))
         .collect();
@@ -153,7 +154,7 @@ fn evaluate_test_block(
     json_body: Option<&serde_json::Value>,
 ) -> TestCaseResult {
     let name = RE_TEST_NAME
-        .captures(&format!("pm.test({block}"))
+        .captures(&format!("pulse.test({block}"))
         .and_then(|caps| caps.get(1))
         .map(|m| m.as_str().to_string())
         .unwrap_or_else(|| "Unnamed test".to_string());

@@ -67,7 +67,7 @@ export const testSnippets: TestSnippet[] = [
 ];
 
 export const pulseTestsTemplate = `// Pulse Tests tab
-// Tests run automatically after each request and in collection runner.
+// Run tests manually from the Tests tab, or via collection runner.
 
 pulse.test("Status code is 200", function () {
     pulse.response.to.have.status(200);

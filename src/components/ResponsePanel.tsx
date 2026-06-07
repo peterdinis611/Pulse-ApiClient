@@ -173,7 +173,7 @@ export function ResponsePanel() {
               ) : (
                 <EmptyState
                   title="No test results"
-                  description="Add tests in the Tests tab, then send the request again."
+                  description="Add tests in the Tests tab, send the request, then click Run tests."
                 />
               )}
             </>
