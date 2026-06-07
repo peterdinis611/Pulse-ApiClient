@@ -5,14 +5,18 @@ pub mod http;
 pub mod settings;
 pub mod state;
 pub mod test_runner;
+pub mod windows;
 
+use cache::CacheConfig;
 use db::{DbState, DbUserSession};
 use engine::HttpEngineStats;
 use http::{BatchItemResult, HttpRequestPayload, HttpResponsePayload};
 use settings::AppSettings;
 use state::HttpState;
+use std::sync::Arc;
 use test_runner::TestRunResult;
 use tauri::{AppHandle, Manager, State};
+use windows::{AppWindowInfo, PendingWindowInit};
 
 #[tauri::command]
 async fn send_http_request(
@@ -47,12 +51,12 @@ fn get_http_engine_stats(state: State<'_, HttpState>) -> Result<HttpEngineStats,
 
 #[tauri::command]
 fn clear_http_cache(state: State<'_, HttpState>) -> Result<u64, String> {
-    Ok(http::clear_cache(state.inner().cache()))
+    Ok(http::clear_cache(state.inner()))
 }
 
 #[tauri::command]
 fn get_http_cache_size(state: State<'_, HttpState>) -> Result<u64, String> {
-    Ok(http::cache_size(state.inner().cache()))
+    Ok(http::cache_size(state.inner()))
 }
 
 #[tauri::command]
@@ -81,15 +85,24 @@ fn set_http_settings(
     state: State<'_, HttpState>,
     http_max_concurrent: u32,
     http_timeout_ms: u64,
+    http_cache_enabled: bool,
+    http_cache_ttl_sec: u64,
+    http_cache_disk_enabled: bool,
 ) -> Result<AppSettings, String> {
     let mut settings = settings::load_settings(&app)?;
     settings.http_max_concurrent = http_max_concurrent.clamp(1, 256);
     settings.http_timeout_ms = http_timeout_ms.clamp(1_000, 600_000);
+    settings.http_cache_enabled = http_cache_enabled;
+    settings.http_cache_ttl_sec = http_cache_ttl_sec.clamp(30, 86_400);
+    settings.http_cache_disk_enabled = http_cache_disk_enabled;
     settings::save_settings(&app, &settings)?;
     state.inner().apply_engine_settings(
         settings.http_max_concurrent as usize,
         settings.http_timeout_ms,
     );
+    state
+        .inner()
+        .apply_cache_settings(CacheConfig::from_settings(&settings));
     Ok(settings)
 }
 
@@ -102,33 +115,33 @@ fn run_http_tests(
 }
 
 #[tauri::command]
-fn db_load_workspace(db: State<'_, DbState>) -> Result<Option<String>, String> {
+fn db_load_workspace(db: State<'_, Arc<DbState>>) -> Result<Option<String>, String> {
     db.load_workspace()
 }
 
 #[tauri::command]
-fn db_save_workspace(db: State<'_, DbState>, payload: String) -> Result<(), String> {
+fn db_save_workspace(db: State<'_, Arc<DbState>>, payload: String) -> Result<(), String> {
     db.save_workspace(&payload)
 }
 
 #[tauri::command]
-fn db_load_session(db: State<'_, DbState>) -> Result<Option<DbUserSession>, String> {
+fn db_load_session(db: State<'_, Arc<DbState>>) -> Result<Option<DbUserSession>, String> {
     db.load_session()
 }
 
 #[tauri::command]
-fn db_save_session(db: State<'_, DbState>, session: DbUserSession) -> Result<(), String> {
+fn db_save_session(db: State<'_, Arc<DbState>>, session: DbUserSession) -> Result<(), String> {
     db.save_session(&session)
 }
 
 #[tauri::command]
-fn db_clear_session(db: State<'_, DbState>) -> Result<(), String> {
+fn db_clear_session(db: State<'_, Arc<DbState>>) -> Result<(), String> {
     db.clear_session()
 }
 
 #[tauri::command]
 fn db_register_account(
-    db: State<'_, DbState>,
+    db: State<'_, Arc<DbState>>,
     name: String,
     email: String,
     password: String,
@@ -138,37 +151,73 @@ fn db_register_account(
 
 #[tauri::command]
 fn db_login_account(
-    db: State<'_, DbState>,
+    db: State<'_, Arc<DbState>>,
     email: String,
     password: String,
 ) -> Result<DbUserSession, String> {
     db.login_account(&email, &password)
 }
 
+#[tauri::command]
+fn create_app_window(
+    app: AppHandle,
+    title: Option<String>,
+    main_view: Option<String>,
+    initial_request: Option<serde_json::Value>,
+) -> Result<AppWindowInfo, String> {
+    windows::create_app_window(&app, title, main_view, initial_request)
+}
+
+#[tauri::command]
+fn list_app_windows(app: AppHandle) -> Result<Vec<AppWindowInfo>, String> {
+    Ok(windows::list_app_windows(&app))
+}
+
+#[tauri::command]
+fn focus_app_window(app: AppHandle, label: String) -> Result<(), String> {
+    windows::focus_app_window(&app, &label)
+}
+
+#[tauri::command]
+fn close_app_window(app: AppHandle, label: String) -> Result<(), String> {
+    windows::close_app_window(&app, &label)
+}
+
+#[tauri::command]
+fn get_current_window_info(app: AppHandle, label: String) -> Result<AppWindowInfo, String> {
+    windows::current_window_info(&app, &label)
+}
+
+#[tauri::command]
+fn take_pending_window_init(label: String) -> Option<PendingWindowInit> {
+    windows::take_pending_window_init(&label)
+}
+
+#[tauri::command]
+fn set_window_title(app: AppHandle, label: String, title: String) -> Result<(), String> {
+    windows::set_window_title(&app, &label, &title)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let app_settings = AppSettings::default();
-    let http_state = HttpState::new(
-        app_settings.http_max_concurrent as usize,
-        app_settings.http_timeout_ms,
-    )
-    .expect("failed to initialize HTTP state");
-
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .manage(http_state)
         .setup(|app| {
-            let db_state = DbState::new(app.handle())?;
-            app.manage(db_state);
+            let db_state = Arc::new(DbState::new(app.handle())?);
+            let settings = settings::load_settings(app.handle()).unwrap_or_default();
+            let http_state = HttpState::new(
+                settings.http_max_concurrent as usize,
+                settings.http_timeout_ms,
+                CacheConfig::from_settings(&settings),
+            )
+            .map_err(|error| error.to_string())?;
 
-            if let Ok(settings) = settings::load_settings(app.handle()) {
-                let state = app.state::<HttpState>();
-                state.apply_engine_settings(
-                    settings.http_max_concurrent as usize,
-                    settings.http_timeout_ms,
-                );
-                settings::apply_native_theme(app.handle(), &settings.theme)?;
-            }
+            http_state.attach_disk_cache(db_state.clone());
+            http_state.cache().prune_expired();
+
+            app.manage(db_state);
+            app.manage(http_state);
+            settings::apply_native_theme(app.handle(), &settings.theme)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -191,6 +240,13 @@ pub fn run() {
             db_clear_session,
             db_register_account,
             db_login_account,
+            create_app_window,
+            list_app_windows,
+            focus_app_window,
+            close_app_window,
+            get_current_window_info,
+            take_pending_window_init,
+            set_window_title,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

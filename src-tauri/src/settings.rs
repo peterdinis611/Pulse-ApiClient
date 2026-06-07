@@ -14,6 +14,24 @@ pub struct AppSettings {
     pub http_max_concurrent: u32,
     #[serde(default = "default_http_timeout_ms")]
     pub http_timeout_ms: u64,
+    #[serde(default = "default_http_cache_enabled")]
+    pub http_cache_enabled: bool,
+    #[serde(default = "default_http_cache_ttl_sec")]
+    pub http_cache_ttl_sec: u64,
+    #[serde(default = "default_http_cache_disk_enabled")]
+    pub http_cache_disk_enabled: bool,
+}
+
+fn default_http_cache_enabled() -> bool {
+    true
+}
+
+fn default_http_cache_ttl_sec() -> u64 {
+    900
+}
+
+fn default_http_cache_disk_enabled() -> bool {
+    true
 }
 
 fn default_http_max_concurrent() -> u32 {
@@ -34,6 +52,9 @@ impl Default for AppSettings {
             theme: default_theme(),
             http_max_concurrent: default_http_max_concurrent(),
             http_timeout_ms: default_http_timeout_ms(),
+            http_cache_enabled: default_http_cache_enabled(),
+            http_cache_ttl_sec: default_http_cache_ttl_sec(),
+            http_cache_disk_enabled: default_http_cache_disk_enabled(),
         }
     }
 }
@@ -68,10 +89,6 @@ pub fn normalize_theme(theme: &str) -> String {
 }
 
 pub fn apply_native_theme(app: &AppHandle, theme: &str) -> Result<(), String> {
-    let window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "main window not found".to_string())?;
-
     let theme = normalize_theme(theme);
     let native_theme = match theme.as_str() {
         "dark" => Some(Theme::Dark),
@@ -79,5 +96,9 @@ pub fn apply_native_theme(app: &AppHandle, theme: &str) -> Result<(), String> {
         _ => None,
     };
 
-    window.set_theme(native_theme).map_err(|e| e.to_string())
+    for (_, window) in app.webview_windows() {
+        window.set_theme(native_theme).map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
 }

@@ -13,6 +13,9 @@ pub struct HttpEngineStats {
     pub active_requests: u64,
     pub max_concurrent: u64,
     pub cache_entries: u64,
+    pub cache_memory_entries: u64,
+    pub cache_disk_entries: u64,
+    pub cache_hits: u64,
     pub total_completed: u64,
     pub total_failed: u64,
     pub default_timeout_ms: u64,
@@ -123,11 +126,19 @@ impl RequestEngine {
         count
     }
 
-    pub fn stats(&self, cache_entries: u64) -> HttpEngineStats {
+    pub fn stats(
+        &self,
+        cache_memory_entries: u64,
+        cache_disk_entries: u64,
+        cache_hits: u64,
+    ) -> HttpEngineStats {
         HttpEngineStats {
             active_requests: self.active_count.load(Ordering::Relaxed) as u64,
             max_concurrent: self.max_concurrent.load(Ordering::Relaxed) as u64,
-            cache_entries,
+            cache_entries: cache_memory_entries.saturating_add(cache_disk_entries),
+            cache_memory_entries,
+            cache_disk_entries,
+            cache_hits,
             total_completed: self.total_completed.load(Ordering::Relaxed),
             total_failed: self.total_failed.load(Ordering::Relaxed),
             default_timeout_ms: self.default_timeout_ms.load(Ordering::Relaxed),

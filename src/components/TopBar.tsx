@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { APP_NAME } from "@/lib/app-config";
 import { useApp } from "@/machines";
+import { WindowMenu } from "@/components/WindowMenu";
 
 export function TopBar() {
   const { newRequestTab, setMainView } = useApp();
@@ -42,6 +43,7 @@ export function TopBar() {
       </div>
 
       <div className="flex items-center gap-1">
+        <WindowMenu />
         <Button
           type="button"
           variant="ghost"

@@ -7,6 +7,7 @@ import { toast } from "@/lib/toast";
 import { requestsForCollection } from "@/lib/collections";
 import type { ThemeMode } from "@/lib/theme";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollAreaWithTop } from "@/components/ui/scroll-area-with-top";
@@ -51,6 +52,9 @@ export function SettingsView() {
   const [newFolderName, setNewFolderName] = useState("");
   const [httpMaxConcurrent, setHttpMaxConcurrent] = useState("32");
   const [httpTimeoutSec, setHttpTimeoutSec] = useState("30");
+  const [httpCacheEnabled, setHttpCacheEnabled] = useState(true);
+  const [httpCacheTtlMin, setHttpCacheTtlMin] = useState("15");
+  const [httpCacheDiskEnabled, setHttpCacheDiskEnabled] = useState(true);
   const [engineStats, setEngineStats] = useState<Awaited<ReturnType<typeof getHttpEngineStats>> | null>(
     null,
   );
@@ -64,6 +68,9 @@ export function SettingsView() {
         if (cancelled) return;
         setHttpMaxConcurrent(String(settings.httpMaxConcurrent));
         setHttpTimeoutSec(String(Math.round(settings.httpTimeoutMs / 1000)));
+        setHttpCacheEnabled(settings.httpCacheEnabled);
+        setHttpCacheTtlMin(String(Math.round(settings.httpCacheTtlSec / 60)));
+        setHttpCacheDiskEnabled(settings.httpCacheDiskEnabled);
         setEngineStats(stats);
       } catch {
         toast.error("Could not load HTTP engine settings");
@@ -104,6 +111,7 @@ export function SettingsView() {
   const handleSaveHttpSettings = async () => {
     const maxConcurrent = Number.parseInt(httpMaxConcurrent, 10);
     const timeoutSec = Number.parseInt(httpTimeoutSec, 10);
+    const cacheTtlMin = Number.parseInt(httpCacheTtlMin, 10);
     if (!Number.isFinite(maxConcurrent) || maxConcurrent < 1 || maxConcurrent > 256) {
       toast.error("Invalid value", "Concurrent requests must be between 1 and 256.");
       return;
@@ -112,11 +120,24 @@ export function SettingsView() {
       toast.error("Invalid value", "Timeout must be between 1 and 600 seconds.");
       return;
     }
+    if (!Number.isFinite(cacheTtlMin) || cacheTtlMin < 1 || cacheTtlMin > 1440) {
+      toast.error("Invalid value", "Cache TTL must be between 1 and 1440 minutes.");
+      return;
+    }
 
     try {
-      const saved = await setHttpSettings(maxConcurrent, timeoutSec * 1000);
+      const saved = await setHttpSettings(
+        maxConcurrent,
+        timeoutSec * 1000,
+        httpCacheEnabled,
+        cacheTtlMin * 60,
+        httpCacheDiskEnabled,
+      );
       setHttpMaxConcurrent(String(saved.httpMaxConcurrent));
       setHttpTimeoutSec(String(Math.round(saved.httpTimeoutMs / 1000)));
+      setHttpCacheEnabled(saved.httpCacheEnabled);
+      setHttpCacheTtlMin(String(Math.round(saved.httpCacheTtlSec / 60)));
+      setHttpCacheDiskEnabled(saved.httpCacheDiskEnabled);
       setEngineStats(await getHttpEngineStats());
       toast.success("HTTP settings saved");
     } catch {
@@ -407,10 +428,52 @@ export function SettingsView() {
             </div>
           </div>
 
+          <div className="space-y-4 rounded-md border border-border/70 p-4">
+            <div>
+              <h3 className="text-sm font-medium">Response cache</h3>
+              <p className="text-sm text-muted-foreground">
+                GET/HEAD responses are cached in memory and on disk for faster repeat requests.
+              </p>
+            </div>
+
+            <label className="flex items-center gap-3 text-sm">
+              <Checkbox
+                checked={httpCacheEnabled}
+                onCheckedChange={(checked) => setHttpCacheEnabled(checked === true)}
+              />
+              Enable response cache
+            </label>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="http-cache-ttl">Default cache TTL (minutes)</Label>
+                <Input
+                  id="http-cache-ttl"
+                  type="number"
+                  min={1}
+                  max={1440}
+                  value={httpCacheTtlMin}
+                  disabled={!httpCacheEnabled}
+                  onChange={(event) => setHttpCacheTtlMin(event.target.value)}
+                />
+              </div>
+            </div>
+
+            <label className="flex items-center gap-3 text-sm">
+              <Checkbox
+                checked={httpCacheDiskEnabled}
+                disabled={!httpCacheEnabled}
+                onCheckedChange={(checked) => setHttpCacheDiskEnabled(checked === true)}
+              />
+              Persist cache to disk (survives app restart)
+            </label>
+          </div>
+
           {engineStats && (
             <p className="text-sm text-muted-foreground">
               Active {engineStats.activeRequests} · Completed {engineStats.totalCompleted} · Failed{" "}
-              {engineStats.totalFailed} · Cache {engineStats.cacheEntries} entries
+              {engineStats.totalFailed} · Cache {engineStats.cacheMemoryEntries} mem +{" "}
+              {engineStats.cacheDiskEntries} disk · {engineStats.cacheHits} hits
             </p>
           )}
 

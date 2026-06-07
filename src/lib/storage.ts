@@ -1,11 +1,32 @@
 import { readStorageItem } from "./app-config";
 import { dbLoadWorkspace, dbSaveWorkspace } from "./db-client";
-import type { CollectionGroup, Environment, HistoryEntry, SavedRequest } from "../types";
+import type {
+  CollectionGroup,
+  Environment,
+  HistoryEntry,
+  MainView,
+  RequestTab,
+  RequestTabState,
+  SavedRequest,
+} from "../types";
 import { createEnvironment, createRequest, createSavedRequest } from "./helpers";
 import { defaultCollectionGroup } from "./collections";
 import { importPostmanCollection, isPostmanCollection } from "./postman-import";
+import { emitWorkspaceUpdated } from "./workspace-sync";
 
 const STATE_SUFFIX = "v1";
+const MAX_WINDOW_SESSIONS = 12;
+
+export type WindowSessionState = {
+  tabs: RequestTabState[];
+  activeTabId: string;
+  mainView: MainView;
+  requestTab: RequestTab;
+  consoleOpen: boolean;
+  responsePanelOpen: boolean;
+  sidebarSearch: string;
+  updatedAt: number;
+};
 
 export type PersistedState = {
   collectionGroups: CollectionGroup[];
@@ -15,6 +36,7 @@ export type PersistedState = {
   activeEnvironmentId: string | null;
   history: HistoryEntry[];
   lastRequest: ReturnType<typeof createRequest>;
+  windowSessions: Record<string, WindowSessionState>;
 };
 
 export function defaultPersistedState(): PersistedState {
@@ -28,7 +50,44 @@ export function defaultPersistedState(): PersistedState {
     activeEnvironmentId: env.id,
     history: [],
     lastRequest: createRequest(),
+    windowSessions: {},
   };
+}
+
+function sanitizeTab(tab: RequestTabState): RequestTabState {
+  return {
+    ...tab,
+    loading: false,
+    inFlightRequestId: null,
+  };
+}
+
+export function buildWindowSession(input: {
+  tabs: RequestTabState[];
+  activeTabId: string;
+  mainView: MainView;
+  requestTab: RequestTab;
+  consoleOpen: boolean;
+  responsePanelOpen: boolean;
+  sidebarSearch: string;
+}): WindowSessionState {
+  return {
+    tabs: input.tabs.map(sanitizeTab),
+    activeTabId: input.activeTabId,
+    mainView: input.mainView,
+    requestTab: input.requestTab,
+    consoleOpen: input.consoleOpen,
+    responsePanelOpen: input.responsePanelOpen,
+    sidebarSearch: input.sidebarSearch,
+    updatedAt: Date.now(),
+  };
+}
+
+function trimWindowSessions(
+  sessions: Record<string, WindowSessionState>,
+): Record<string, WindowSessionState> {
+  const entries = Object.entries(sessions).sort((left, right) => right[1].updatedAt - left[1].updatedAt);
+  return Object.fromEntries(entries.slice(0, MAX_WINDOW_SESSIONS));
 }
 
 function migratePersistedState(parsed: Partial<PersistedState>): PersistedState {
@@ -65,6 +124,7 @@ function migratePersistedState(parsed: Partial<PersistedState>): PersistedState 
     activeEnvironmentId: parsed.activeEnvironmentId ?? defaults.activeEnvironmentId,
     history: parsed.history ?? defaults.history,
     lastRequest: { ...createRequest(), ...parsed.lastRequest },
+    windowSessions: parsed.windowSessions ?? defaults.windowSessions,
   };
 }
 
@@ -95,8 +155,18 @@ export async function loadPersistedState(): Promise<PersistedState> {
   return legacy;
 }
 
-export async function savePersistedState(state: PersistedState): Promise<void> {
-  await dbSaveWorkspace(JSON.stringify(state));
+export async function savePersistedState(
+  state: PersistedState,
+  options?: { sourceWindowId?: string; broadcast?: boolean },
+): Promise<void> {
+  const nextState = {
+    ...state,
+    windowSessions: trimWindowSessions(state.windowSessions),
+  };
+  await dbSaveWorkspace(JSON.stringify(nextState));
+  if (options?.broadcast !== false && options?.sourceWindowId) {
+    await emitWorkspaceUpdated(options.sourceWindowId);
+  }
 }
 
 export function exportCollectionJson(state: Pick<PersistedState, "collectionGroups" | "collections">): string {

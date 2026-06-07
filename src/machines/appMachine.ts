@@ -31,12 +31,14 @@ import {
   type UserSession,
 } from "@/lib/auth";
 import {
+  buildWindowSession,
   defaultPersistedState,
   importCollectionJson,
   importPostmanIntoState,
   savePersistedState,
   type PersistedState,
 } from "@/lib/storage";
+import type { PendingWindowInit } from "@/lib/window-manager";
 import { loadThemeMode, saveThemeMode, type ThemeMode } from "@/lib/theme";
 import { toast } from "@/lib/toast";
 
@@ -53,6 +55,7 @@ export function createTabState(request = createRequest()): RequestTabState {
 }
 
 export type AppMachineContext = {
+  windowId: string;
   persisted: PersistedState;
   tabs: RequestTabState[];
   activeTabId: string;
@@ -183,7 +186,9 @@ export type AppMachineEvent =
   | { type: "LOAD_HISTORY_ENTRY"; entry: HistoryEntry }
   | { type: "CLEAR_HISTORY" }
   | { type: "SET_THEME"; theme: ThemeMode }
-  | { type: "HYDRATE_APP"; persisted: PersistedState; user: UserSession | null }
+  | { type: "HYDRATE_APP"; persisted: PersistedState; user: UserSession | null; windowId: string; pendingInit?: PendingWindowInit | null }
+  | { type: "SYNC_WORKSPACE"; persisted: PersistedState }
+  | { type: "PERSIST_WINDOW_SESSION" }
   | { type: "SET_OVERVIEW_FILTER"; patch: Partial<OverviewFilter> }
   | { type: "RESET_OVERVIEW_FILTER" }
   | { type: "SIGN_IN"; user: UserSession }
@@ -194,6 +199,7 @@ function createInitialContext(): AppMachineContext {
   const persisted = defaultPersistedState();
   const initialTab = createTabState(persisted.lastRequest);
   return {
+    windowId: "main",
     persisted,
     tabs: [initialTab],
     activeTabId: initialTab.id,
@@ -222,17 +228,44 @@ function getActiveEnvironment(context: AppMachineContext): Environment | null {
   );
 }
 
-function persistLastRequest(context: AppMachineContext) {
+function buildPersistedFromContext(
+  context: AppMachineContext,
+  patch?: Partial<PersistedState>,
+): PersistedState {
   const activeTab = getActiveTab(context);
-  if (!activeTab) return;
-  void savePersistedState({
+  const session = buildWindowSession({
+    tabs: context.tabs,
+    activeTabId: context.activeTabId,
+    mainView: context.mainView,
+    requestTab: context.requestTab,
+    consoleOpen: context.consoleOpen,
+    responsePanelOpen: context.responsePanelOpen,
+    sidebarSearch: context.sidebarSearch,
+  });
+
+  return {
     ...context.persisted,
-    lastRequest: activeTab.request,
+    ...patch,
+    lastRequest: activeTab?.request ?? context.persisted.lastRequest,
+    windowSessions: {
+      ...context.persisted.windowSessions,
+      [context.windowId]: session,
+    },
+  };
+}
+
+function persistLastRequest(context: AppMachineContext, broadcast = false) {
+  void savePersistedState(buildPersistedFromContext(context), {
+    sourceWindowId: context.windowId,
+    broadcast,
   });
 }
 
-function persistWorkspace(context: AppMachineContext, persisted: PersistedState) {
-  void savePersistedState(persisted);
+function saveSharedWorkspace(context: AppMachineContext, patch: Partial<PersistedState>) {
+  void savePersistedState(buildPersistedFromContext(context, patch), {
+    sourceWindowId: context.windowId,
+    broadcast: true,
+  });
 }
 
 function mapActiveTab(
@@ -406,7 +439,7 @@ export const appMachine = setup({
                 ...context.persisted,
                 collections: [saved, ...context.persisted.collections],
               };
-              void savePersistedState({ ...persisted, lastRequest: activeTab.request });
+              saveSharedWorkspace(context, persisted);
               return { persisted };
             }),
             ({ context }) => {
@@ -429,11 +462,7 @@ export const appMachine = setup({
               ...context.persisted,
               collections: context.persisted.collections.filter((item) => item.id !== event.id),
             };
-            const activeTab = getActiveTab(context);
-            void savePersistedState({
-              ...persisted,
-              lastRequest: activeTab?.request ?? persisted.lastRequest,
-            });
+            saveSharedWorkspace(context, persisted);
             return { persisted };
           }),
         },
@@ -450,11 +479,7 @@ export const appMachine = setup({
               ...context.persisted,
               collections: [copy, ...context.persisted.collections],
             };
-            const activeTab = getActiveTab(context);
-            void savePersistedState({
-              ...persisted,
-              lastRequest: activeTab?.request ?? persisted.lastRequest,
-            });
+            saveSharedWorkspace(context, persisted);
             return { persisted };
           }),
         },
@@ -465,22 +490,14 @@ export const appMachine = setup({
               ...context.persisted,
               ...imported,
             };
-            const activeTab = getActiveTab(context);
-            void savePersistedState({
-              ...persisted,
-              lastRequest: activeTab?.request ?? persisted.lastRequest,
-            });
+            saveSharedWorkspace(context, persisted);
             return { persisted };
           }),
         },
         IMPORT_POSTMAN: {
           actions: assign(({ context, event }) => {
             const persisted = importPostmanIntoState(event.raw, context.persisted);
-            const activeTab = getActiveTab(context);
-            void savePersistedState({
-              ...persisted,
-              lastRequest: activeTab?.request ?? persisted.lastRequest,
-            });
+            saveSharedWorkspace(context, persisted);
             return { persisted };
           }),
         },
@@ -492,11 +509,7 @@ export const appMachine = setup({
               collectionGroups: [...context.persisted.collectionGroups, group],
               activeCollectionId: group.id,
             };
-            const activeTab = getActiveTab(context);
-            void savePersistedState({
-              ...persisted,
-              lastRequest: activeTab?.request ?? persisted.lastRequest,
-            });
+            saveSharedWorkspace(context, persisted);
             return { persisted };
           }),
         },
@@ -520,11 +533,7 @@ export const appMachine = setup({
                 (item) => item.collectionId !== event.id,
               ),
             };
-            const activeTab = getActiveTab(context);
-            void savePersistedState({
-              ...persisted,
-              lastRequest: activeTab?.request ?? persisted.lastRequest,
-            });
+            saveSharedWorkspace(context, persisted);
             return { persisted };
           }),
         },
@@ -536,11 +545,7 @@ export const appMachine = setup({
                 group.id === event.id ? { ...group, name: event.name } : group,
               ),
             };
-            const activeTab = getActiveTab(context);
-            void savePersistedState({
-              ...persisted,
-              lastRequest: activeTab?.request ?? persisted.lastRequest,
-            });
+            saveSharedWorkspace(context, persisted);
             return { persisted };
           }),
         },
@@ -550,11 +555,7 @@ export const appMachine = setup({
               ...context.persisted,
               activeCollectionId: event.id,
             };
-            const activeTab = getActiveTab(context);
-            void savePersistedState({
-              ...persisted,
-              lastRequest: activeTab?.request ?? persisted.lastRequest,
-            });
+            saveSharedWorkspace(context, persisted);
             return { persisted };
           }),
         },
@@ -568,11 +569,7 @@ export const appMachine = setup({
                   : group,
               ),
             };
-            const activeTab = getActiveTab(context);
-            void savePersistedState({
-              ...persisted,
-              lastRequest: activeTab?.request ?? persisted.lastRequest,
-            });
+            saveSharedWorkspace(context, persisted);
             return { persisted };
           }),
         },
@@ -593,11 +590,7 @@ export const appMachine = setup({
                   : item,
               ),
             };
-            const activeTab = getActiveTab(context);
-            void savePersistedState({
-              ...persisted,
-              lastRequest: activeTab?.request ?? persisted.lastRequest,
-            });
+            saveSharedWorkspace(context, persisted);
             return { persisted };
           }),
         },
@@ -615,11 +608,7 @@ export const appMachine = setup({
                   : item,
               ),
             };
-            const activeTab = getActiveTab(context);
-            void savePersistedState({
-              ...persisted,
-              lastRequest: activeTab?.request ?? persisted.lastRequest,
-            });
+            saveSharedWorkspace(context, persisted);
             return { persisted };
           }),
         },
@@ -629,11 +618,7 @@ export const appMachine = setup({
               ...context.persisted,
               activeEnvironmentId: event.id,
             };
-            const activeTab = getActiveTab(context);
-            void savePersistedState({
-              ...persisted,
-              lastRequest: activeTab?.request ?? persisted.lastRequest,
-            });
+            saveSharedWorkspace(context, persisted);
             return { persisted };
           }),
         },
@@ -649,11 +634,7 @@ export const appMachine = setup({
               environments: [...context.persisted.environments, env],
               activeEnvironmentId: env.id,
             };
-            const activeTab = getActiveTab(context);
-            void savePersistedState({
-              ...persisted,
-              lastRequest: activeTab?.request ?? persisted.lastRequest,
-            });
+            saveSharedWorkspace(context, persisted);
             return { persisted, mainView: "environments" as const };
           }),
         },
@@ -665,11 +646,7 @@ export const appMachine = setup({
                 env.id === event.id ? { ...env, ...event.patch } : env,
               ),
             };
-            const activeTab = getActiveTab(context);
-            void savePersistedState({
-              ...persisted,
-              lastRequest: activeTab?.request ?? persisted.lastRequest,
-            });
+            saveSharedWorkspace(context, persisted);
             return { persisted };
           }),
         },
@@ -688,11 +665,7 @@ export const appMachine = setup({
                   ? (nextEnvironments[0]?.id ?? null)
                   : context.persisted.activeEnvironmentId,
             };
-            const activeTab = getActiveTab(context);
-            void savePersistedState({
-              ...persisted,
-              lastRequest: activeTab?.request ?? persisted.lastRequest,
-            });
+            saveSharedWorkspace(context, persisted);
             return { persisted };
           }),
         },
@@ -713,11 +686,7 @@ export const appMachine = setup({
                     },
               ),
             };
-            const activeTab = getActiveTab(context);
-            void savePersistedState({
-              ...persisted,
-              lastRequest: activeTab?.request ?? persisted.lastRequest,
-            });
+            saveSharedWorkspace(context, persisted);
             return { persisted };
           }),
         },
@@ -731,11 +700,7 @@ export const appMachine = setup({
                   : { ...env, variables: [...env.variables, createKeyValue()] },
               ),
             };
-            const activeTab = getActiveTab(context);
-            void savePersistedState({
-              ...persisted,
-              lastRequest: activeTab?.request ?? persisted.lastRequest,
-            });
+            saveSharedWorkspace(context, persisted);
             return { persisted };
           }),
         },
@@ -754,11 +719,7 @@ export const appMachine = setup({
                     },
               ),
             };
-            const activeTab = getActiveTab(context);
-            void savePersistedState({
-              ...persisted,
-              lastRequest: activeTab?.request ?? persisted.lastRequest,
-            });
+            saveSharedWorkspace(context, persisted);
             return { persisted };
           }),
         },
@@ -771,11 +732,7 @@ export const appMachine = setup({
         CLEAR_HISTORY: {
           actions: assign(({ context }) => {
             const persisted = { ...context.persisted, history: [] };
-            const activeTab = getActiveTab(context);
-            void savePersistedState({
-              ...persisted,
-              lastRequest: activeTab?.request ?? persisted.lastRequest,
-            });
+            saveSharedWorkspace(context, persisted);
             return { persisted };
           }),
         },
@@ -787,14 +744,70 @@ export const appMachine = setup({
         },
         HYDRATE_APP: {
           actions: assign(({ event }) => {
-            const initialTab = createTabState(event.persisted.lastRequest);
+            const windowId = event.windowId;
+            const session = event.persisted.windowSessions[windowId];
+            const pending = event.pendingInit;
+
+            let tabs: RequestTabState[];
+            let activeTabId: string;
+            let mainView: MainView;
+
+            if (pending?.initialRequest) {
+              const tab = createTabState(structuredClone(pending.initialRequest));
+              tabs = [tab];
+              activeTabId = tab.id;
+              mainView = pending.mainView ?? "request";
+            } else if (session?.tabs.length) {
+              tabs = session.tabs;
+              activeTabId = session.activeTabId;
+              mainView = session.mainView;
+            } else {
+              const initialTab = createTabState(event.persisted.lastRequest);
+              tabs = [initialTab];
+              activeTabId = initialTab.id;
+              mainView = pending?.mainView ?? "overview";
+            }
+
             return {
+              windowId,
               persisted: event.persisted,
-              tabs: [initialTab],
-              activeTabId: initialTab.id,
+              tabs,
+              activeTabId,
+              mainView,
+              requestTab: session?.requestTab ?? "params",
+              consoleOpen: session?.consoleOpen ?? false,
+              responsePanelOpen: session?.responsePanelOpen ?? true,
+              sidebarSearch: session?.sidebarSearch ?? "",
+              overviewFilter: session?.sidebarSearch
+                ? { ...defaultOverviewFilter(), query: session.sidebarSearch }
+                : defaultOverviewFilter(),
               user: event.user,
             };
           }),
+        },
+        SYNC_WORKSPACE: {
+          actions: assign(({ context, event }) => ({
+            persisted: {
+              ...event.persisted,
+              windowSessions: {
+                ...event.persisted.windowSessions,
+                [context.windowId]: buildWindowSession({
+                  tabs: context.tabs,
+                  activeTabId: context.activeTabId,
+                  mainView: context.mainView,
+                  requestTab: context.requestTab,
+                  consoleOpen: context.consoleOpen,
+                  responsePanelOpen: context.responsePanelOpen,
+                  sidebarSearch: context.sidebarSearch,
+                }),
+              },
+            },
+          })),
+        },
+        PERSIST_WINDOW_SESSION: {
+          actions: ({ context }) => {
+            persistLastRequest(context, false);
+          },
         },
         SET_OVERVIEW_FILTER: {
           actions: assign({
@@ -859,10 +872,7 @@ export const appMachine = setup({
                 ...context.persisted,
                 history: [event.historyEntry, ...context.persisted.history].slice(0, 50),
               };
-              void savePersistedState({
-                ...persisted,
-                lastRequest: tab.request,
-              });
+              saveSharedWorkspace(context, persisted);
 
               return {
                 tabs: mapTabById(context, event.tabId, (current) => ({

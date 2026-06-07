@@ -1,4 +1,5 @@
-use crate::cache::ResponseCache;
+use crate::cache::{CacheConfig, ResponseCache};
+use crate::db::DbState;
 use crate::engine::{RequestEngine, DEFAULT_MAX_CONCURRENT, DEFAULT_TIMEOUT_MS};
 use reqwest::Client;
 use std::sync::Arc;
@@ -16,7 +17,7 @@ pub struct HttpState {
 }
 
 impl HttpState {
-    pub fn new(max_concurrent: usize, timeout_ms: u64) -> Result<Self, String> {
+    pub fn new(max_concurrent: usize, timeout_ms: u64, cache_config: CacheConfig) -> Result<Self, String> {
         let client = Client::builder()
             .redirect(reqwest::redirect::Policy::limited(10))
             .pool_max_idle_per_host(32)
@@ -29,14 +30,22 @@ impl HttpState {
         Ok(Self {
             inner: Arc::new(HttpStateInner {
                 client,
-                cache: ResponseCache::new(),
+                cache: ResponseCache::new(cache_config),
                 engine: RequestEngine::new(max_concurrent, timeout_ms),
             }),
         })
     }
 
+    pub fn attach_disk_cache(&self, db: Arc<DbState>) {
+        self.inner.cache.attach_disk(db);
+    }
+
     pub fn apply_engine_settings(&self, max_concurrent: usize, timeout_ms: u64) {
         self.inner.engine.set_limits(max_concurrent, timeout_ms);
+    }
+
+    pub fn apply_cache_settings(&self, config: CacheConfig) {
+        self.inner.cache.apply_config(config);
     }
 
     pub fn client(&self) -> &Client {
@@ -54,7 +63,7 @@ impl HttpState {
 
 impl Default for HttpState {
     fn default() -> Self {
-        Self::new(DEFAULT_MAX_CONCURRENT, DEFAULT_TIMEOUT_MS)
+        Self::new(DEFAULT_MAX_CONCURRENT, DEFAULT_TIMEOUT_MS, CacheConfig::default())
             .expect("HTTP client should initialize")
     }
 }

@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Pulse API Client",
         "width": 1280,
         "height": 840,

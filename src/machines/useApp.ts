@@ -8,6 +8,7 @@ import type {
   SavedRequest,
 } from "@/types";
 import type { OverviewFilter } from "@/lib/filters";
+import { createRequest } from "@/lib/helpers";
 import type { UserSession } from "@/lib/auth";
 import type { TestRunResult } from "@/types";
 import { exportCollectionJson } from "@/lib/storage";

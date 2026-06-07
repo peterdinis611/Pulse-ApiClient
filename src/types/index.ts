@@ -86,6 +86,9 @@ export type HttpEngineStats = {
   activeRequests: number;
   maxConcurrent: number;
   cacheEntries: number;
+  cacheMemoryEntries: number;
+  cacheDiskEntries: number;
+  cacheHits: number;
   totalCompleted: number;
   totalFailed: number;
   defaultTimeoutMs: number;
@@ -94,6 +97,9 @@ export type HttpEngineStats = {
 export type HttpSettings = {
   httpMaxConcurrent: number;
   httpTimeoutMs: number;
+  httpCacheEnabled: boolean;
+  httpCacheTtlSec: number;
+  httpCacheDiskEnabled: boolean;
 };
 
 export type AppSettings = HttpSettings & {

@@ -1,10 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { LoaderCircle } from "lucide-react";
 import { loadUserSession } from "@/lib/auth";
 import { loadPersistedState } from "@/lib/storage";
+import { listenWorkspaceUpdated } from "@/lib/workspace-sync";
+import { getCurrentWindowLabel, takePendingWindowInit } from "@/lib/window-manager";
 import { AppMachineContext } from "@/machines/AppProvider";
 
-export function AppBootstrap({ children }: { children: React.ReactNode }) {
+export function AppBootstrap({ children }: { children: ReactNode }) {
   const actorRef = AppMachineContext.useActorRef();
   const [ready, setReady] = useState(false);
 
@@ -13,9 +16,27 @@ export function AppBootstrap({ children }: { children: React.ReactNode }) {
 
     void (async () => {
       try {
-        const [persisted, user] = await Promise.all([loadPersistedState(), loadUserSession()]);
+        const [persisted, user, windowContext] = await Promise.all([
+          loadPersistedState(),
+          loadUserSession(),
+          (async () => {
+            try {
+              const label = await getCurrentWindowLabel();
+              const pendingInit = await takePendingWindowInit(label);
+              return { windowId: label, pendingInit };
+            } catch {
+              return { windowId: "main", pendingInit: null };
+            }
+          })(),
+        ]);
         if (cancelled) return;
-        actorRef.send({ type: "HYDRATE_APP", persisted, user });
+        actorRef.send({
+          type: "HYDRATE_APP",
+          persisted,
+          user,
+          windowId: windowContext.windowId,
+          pendingInit: windowContext.pendingInit,
+        });
       } finally {
         if (!cancelled) setReady(true);
       }
@@ -23,6 +44,37 @@ export function AppBootstrap({ children }: { children: React.ReactNode }) {
 
     return () => {
       cancelled = true;
+    };
+  }, [actorRef]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    void (async () => {
+      unlisten = await listenWorkspaceUpdated(async (payload) => {
+        const windowId = await getCurrentWindowLabel();
+        if (payload.sourceWindowId === windowId) return;
+        const persisted = await loadPersistedState();
+        if (cancelled) return;
+        actorRef.send({ type: "SYNC_WORKSPACE", persisted });
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [actorRef]);
+
+  useEffect(() => {
+    const currentWindow = getCurrentWindow();
+    const unlistenPromise = currentWindow.onCloseRequested(() => {
+      actorRef.send({ type: "PERSIST_WINDOW_SESSION" });
+    });
+
+    return () => {
+      void unlistenPromise.then((unlisten) => unlisten());
     };
   }, [actorRef]);
 

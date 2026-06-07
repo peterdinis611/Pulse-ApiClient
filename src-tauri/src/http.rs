@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::time::Instant;
 
-use crate::cache::{cache_key, should_store_in_cache, should_use_cache, ResponseCache};
+use crate::cache::{cache_key, should_store_in_cache, should_use_cache};
 use crate::state::HttpState;
 use std::time::Duration;
 
@@ -174,7 +174,9 @@ pub async fn execute_request(
     state: &HttpState,
     payload: HttpRequestPayload,
 ) -> Result<HttpResponsePayload, String> {
-    if should_use_cache(&payload) {
+    let cache_config = state.cache().config();
+
+    if should_use_cache(&payload, &cache_config) {
         let key = cache_key(&payload);
         if let Some(cached) = state.cache().get_response(&key) {
             return Ok(HttpResponsePayload {
@@ -234,7 +236,7 @@ pub async fn execute_request(
         }
     };
 
-    if should_store_in_cache(&payload, &response) {
+    if should_store_in_cache(&payload, &response, &state.cache().config()) {
         state
             .cache()
             .insert(cache_key(&payload), response.clone());
@@ -287,7 +289,19 @@ pub fn cancel_all_requests(state: &HttpState) -> u64 {
 }
 
 pub fn engine_stats(state: &HttpState) -> crate::engine::HttpEngineStats {
-    state.engine().stats(cache_size(state.cache()))
+    let cache = state.cache();
+    state
+        .engine()
+        .stats(cache.memory_len(), cache.disk_len(), cache.hits())
+}
+
+pub fn clear_cache(state: &HttpState) -> u64 {
+    state.cache().clear()
+}
+
+pub fn cache_size(state: &HttpState) -> u64 {
+    let cache = state.cache();
+    cache.memory_len().saturating_add(cache.disk_len())
 }
 
 async fn perform_request(
@@ -444,14 +458,4 @@ async fn perform_request(
         cache_age_ms: None,
         request_id: payload.request_id,
     })
-}
-
-pub fn clear_cache(cache: &ResponseCache) -> u64 {
-    let remaining = cache.len();
-    cache.clear();
-    remaining
-}
-
-pub fn cache_size(cache: &ResponseCache) -> u64 {
-    cache.len()
 }

@@ -141,8 +141,17 @@ export async function getAppSettings(): Promise<AppSettings> {
 export async function setHttpSettings(
   httpMaxConcurrent: number,
   httpTimeoutMs: number,
+  httpCacheEnabled: boolean,
+  httpCacheTtlSec: number,
+  httpCacheDiskEnabled: boolean,
 ): Promise<AppSettings> {
-  return invoke<AppSettings>("set_http_settings", { httpMaxConcurrent, httpTimeoutMs });
+  return invoke<AppSettings>("set_http_settings", {
+    httpMaxConcurrent,
+    httpTimeoutMs,
+    httpCacheEnabled,
+    httpCacheTtlSec,
+    httpCacheDiskEnabled,
+  });
 }
 
 export async function clearHttpCache(): Promise<number> {

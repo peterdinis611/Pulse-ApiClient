@@ -15,6 +15,12 @@ pub struct DbUserSession {
     pub signed_in_at: String,
 }
 
+pub struct DiskCacheEntry {
+    pub response_json: String,
+    pub cached_at_ms: u64,
+    pub expires_at_ms: u64,
+}
+
 pub struct DbState {
     conn: Mutex<Connection>,
 }
@@ -68,10 +74,128 @@ impl DbState {
               id INTEGER PRIMARY KEY CHECK (id = 1),
               imported_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS http_response_cache (
+              cache_key TEXT PRIMARY KEY NOT NULL,
+              response_json TEXT NOT NULL,
+              cached_at_ms INTEGER NOT NULL,
+              expires_at_ms INTEGER NOT NULL,
+              size_bytes INTEGER NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_http_response_cache_expires
+              ON http_response_cache(expires_at_ms);
             ",
         )
         .map_err(|e| e.to_string())?;
         Ok(())
+    }
+
+    pub fn cache_get(
+        &self,
+        key: &str,
+        now_ms: u64,
+    ) -> Result<Option<DiskCacheEntry>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT response_json, cached_at_ms, expires_at_ms
+                 FROM http_response_cache
+                 WHERE cache_key = ?1 AND expires_at_ms > ?2",
+            )
+            .map_err(|e| e.to_string())?;
+
+        let mut rows = stmt
+            .query(params![key, now_ms as i64])
+            .map_err(|e| e.to_string())?;
+
+        if let Some(row) = rows.next().map_err(|e| e.to_string())? {
+            return Ok(Some(DiskCacheEntry {
+                response_json: row.get(0).map_err(|e| e.to_string())?,
+                cached_at_ms: row.get::<_, i64>(1).map_err(|e| e.to_string())? as u64,
+                expires_at_ms: row.get::<_, i64>(2).map_err(|e| e.to_string())? as u64,
+            }));
+        }
+
+        Ok(None)
+    }
+
+    pub fn cache_put(
+        &self,
+        key: &str,
+        response_json: &str,
+        cached_at_ms: u64,
+        expires_at_ms: u64,
+        size_bytes: usize,
+        max_entries: u64,
+    ) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT INTO http_response_cache (cache_key, response_json, cached_at_ms, expires_at_ms, size_bytes)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(cache_key) DO UPDATE SET
+               response_json = excluded.response_json,
+               cached_at_ms = excluded.cached_at_ms,
+               expires_at_ms = excluded.expires_at_ms,
+               size_bytes = excluded.size_bytes",
+            params![
+                key,
+                response_json,
+                cached_at_ms as i64,
+                expires_at_ms as i64,
+                size_bytes as i64
+            ],
+        )
+        .map_err(|e| e.to_string())?;
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM http_response_cache", [], |row| row.get(0))
+            .map_err(|e| e.to_string())?;
+
+        if count as u64 > max_entries {
+            let overflow = count as u64 - max_entries;
+            conn.execute(
+                "DELETE FROM http_response_cache
+                 WHERE cache_key IN (
+                   SELECT cache_key FROM http_response_cache
+                   ORDER BY cached_at_ms ASC
+                   LIMIT ?1
+                 )",
+                params![overflow as i64],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+
+        Ok(())
+    }
+
+    pub fn cache_clear(&self) -> Result<u64, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM http_response_cache", [], |row| row.get(0))
+            .map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM http_response_cache", [])
+            .map_err(|e| e.to_string())?;
+        Ok(count as u64)
+    }
+
+    pub fn cache_count(&self) -> Result<u64, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM http_response_cache", [], |row| row.get(0))
+            .map_err(|e| e.to_string())?;
+        Ok(count as u64)
+    }
+
+    pub fn cache_prune_expired(&self, now_ms: u64) -> Result<u64, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let deleted = conn
+            .execute(
+                "DELETE FROM http_response_cache WHERE expires_at_ms <= ?1",
+                params![now_ms as i64],
+            )
+            .map_err(|e| e.to_string())?;
+        Ok(deleted as u64)
     }
 
     pub fn load_workspace(&self) -> Result<Option<String>, String> {
@@ -175,7 +299,7 @@ impl DbState {
                 session.name,
                 session.email,
                 session.initials,
-                session.signed_at
+                session.signed_in_at
             ],
         )
         .map_err(|e| e.to_string())?;
