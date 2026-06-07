@@ -10,6 +10,7 @@ import type {
 } from "../types";
 import { defaultGraphqlQuery, defaultGraphqlVariables } from "./graphql";
 import { defaultRequestTests } from "./default-tests";
+import { inferProtocolFromUrl } from "./protocol";
 
 export function createId(prefix = "id"): string {
   return `${prefix}_${crypto.randomUUID()}`;
@@ -43,6 +44,7 @@ export function createRequest(partial?: Partial<ApiRequest>): ApiRequest {
   return {
     id: partial?.id ?? createId("req"),
     name: partial?.name ?? "Untitled Request",
+    protocol: partial?.protocol ?? inferProtocolFromUrl(partial?.url ?? "https://httpbin.org/get"),
     method: partial?.method ?? "GET",
     url: partial?.url ?? "https://httpbin.org/get",
     headers: partial?.headers ?? [createKeyValue({ key: "Accept", value: "application/json" })],

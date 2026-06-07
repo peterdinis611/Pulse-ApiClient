@@ -6,6 +6,7 @@ import { loadUserSession } from "@/lib/auth";
 import { loadPersistedState } from "@/lib/storage";
 import { canUseTauriIpc, waitForTauriIpc } from "@/lib/tauri-runtime";
 import { listenWorkspaceReset, listenWorkspaceUpdated } from "@/lib/workspace-sync";
+import { listenWsClose, listenWsError, listenWsMessage } from "@/lib/ws-client";
 import { getCurrentWindowLabel, takePendingWindowInit } from "@/lib/window-manager";
 import { AppMachineContext } from "@/machines/AppProvider";
 
@@ -92,6 +93,39 @@ export function AppBootstrap({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
       unlisten?.();
+    };
+  }, [actorRef]);
+
+  useEffect(() => {
+    if (!isTauri() || !canUseTauriIpc()) return;
+
+    let cancelled = false;
+    const unlisteners: Array<() => void> = [];
+
+    void (async () => {
+      unlisteners.push(
+        await listenWsMessage((payload) => {
+          if (cancelled) return;
+          actorRef.send({ type: "WS_MESSAGE_RECEIVED", ...payload });
+        }),
+      );
+      unlisteners.push(
+        await listenWsClose((payload) => {
+          if (cancelled) return;
+          actorRef.send({ type: "WS_CLOSED", ...payload });
+        }),
+      );
+      unlisteners.push(
+        await listenWsError((payload) => {
+          if (cancelled) return;
+          actorRef.send({ type: "WS_ERROR", ...payload });
+        }),
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+      unlisteners.forEach((unlisten) => unlisten());
     };
   }, [actorRef]);
 

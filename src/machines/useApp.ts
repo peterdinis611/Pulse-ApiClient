@@ -8,6 +8,8 @@ import type {
   SavedRequest,
 } from "@/types";
 import type { OverviewFilter } from "@/lib/filters";
+import { defaultWebSocketSession } from "@/lib/protocol";
+import type { WebSocketSession } from "@/types";
 import { createRequest } from "@/lib/helpers";
 import type { UserSession } from "@/lib/auth";
 import type { TestRunResult } from "@/types";
@@ -52,6 +54,8 @@ export function useApp() {
     activeEnvironment,
     history: context.persisted.history,
 
+    ws: (activeTab?.ws ?? defaultWebSocketSession()) as WebSocketSession,
+
     setRequestTab: (tab: RequestTab) => send({ type: "SET_REQUEST_TAB", tab }),
     setMainView: (view: MainView) => send({ type: "SET_MAIN_VIEW", view }),
     setSidebarSearch: (value: string) => send({ type: "SET_SIDEBAR_SEARCH", value }),
@@ -71,6 +75,9 @@ export function useApp() {
     closeTab: (tabId: string) => send({ type: "CLOSE_TAB", tabId }),
     setActiveTab: (tabId: string) => send({ type: "SET_ACTIVE_TAB", tabId }),
     sendCurrentRequest: () => send({ type: "SEND" }),
+    connectWebSocket: () => send({ type: "WS_CONNECT" }),
+    disconnectWebSocket: () => send({ type: "WS_DISCONNECT" }),
+    sendWebSocketMessage: (data: string) => send({ type: "WS_SEND", data }),
     cancelCurrentRequest: () => send({ type: "CANCEL_SEND" }),
     saveCurrentToCollection: () => send({ type: "SAVE_TO_COLLECTION" }),
     loadSavedRequest: (saved: SavedRequest) => send({ type: "LOAD_SAVED_REQUEST", saved }),

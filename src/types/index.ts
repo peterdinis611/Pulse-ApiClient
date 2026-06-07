@@ -14,6 +14,29 @@ export type MultipartFieldType = "text" | "file";
 export type SidebarTab = "collections" | "history" | "environments";
 export type MainView = "overview" | "request" | "environments" | "settings";
 
+export type RequestProtocol = "http" | "websocket";
+
+export type WebSocketStatus = "idle" | "connecting" | "open" | "closing" | "closed" | "error";
+
+export type WebSocketMessage = {
+  id: string;
+  direction: "incoming" | "outgoing";
+  data: string;
+  binary: boolean;
+  timestamp: number;
+};
+
+export type WebSocketSession = {
+  connectionId: string | null;
+  status: WebSocketStatus;
+  messages: WebSocketMessage[];
+  handshakeStatus?: number;
+  handshakeHeaders?: Array<{ key: string; value: string }>;
+  closeCode?: number;
+  closeReason?: string;
+  error?: string | null;
+};
+
 export type RequestTabState = {
   id: string;
   request: ApiRequest;
@@ -22,6 +45,7 @@ export type RequestTabState = {
   loading: boolean;
   inFlightRequestId: string | null;
   testResults: TestRunResult | null;
+  ws: WebSocketSession;
 };
 
 export type KeyValue = {
@@ -54,6 +78,7 @@ export type AuthConfig = {
 export type ApiRequest = {
   id: string;
   name: string;
+  protocol: RequestProtocol;
   method: HttpMethod;
   url: string;
   headers: KeyValue[];

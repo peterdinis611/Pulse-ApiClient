@@ -8,6 +8,8 @@ import type {
   RequestTab,
   RequestTabState,
   SavedRequest,
+  TestRunResult,
+  WebSocketMessage,
 } from "@/types";
 import {
   addFolderToCollection,
@@ -22,7 +24,6 @@ import {
   createSavedRequest,
 } from "@/lib/helpers";
 import { cancelHttpRequest, sendRequest } from "@/lib/http-client";
-import type { TestRunResult } from "@/types";
 import type { OverviewFilter } from "@/lib/filters";
 import { defaultOverviewFilter } from "@/lib/filters";
 import {
@@ -40,7 +41,9 @@ import {
 } from "@/lib/storage";
 import type { PendingWindowInit } from "@/lib/window-manager";
 import { loadThemeMode, saveThemeMode, type ThemeMode } from "@/lib/theme";
+import { defaultWebSocketSession, inferProtocolFromUrl } from "@/lib/protocol";
 import { toast } from "@/lib/toast";
+import { wsClose, wsConnect, wsSend } from "@/lib/ws-client";
 
 export function createTabState(request = createRequest()): RequestTabState {
   return {
@@ -51,6 +54,7 @@ export function createTabState(request = createRequest()): RequestTabState {
     loading: false,
     inFlightRequestId: null,
     testResults: null,
+    ws: defaultWebSocketSession(),
   };
 }
 
@@ -75,6 +79,67 @@ type SendInput = {
   request: ApiRequest;
   environment: Environment | null;
 };
+
+function patchRequest(request: ApiRequest, patch: Partial<ApiRequest>): ApiRequest {
+  const next = { ...request, ...patch };
+  if (patch.url !== undefined) {
+    next.protocol = inferProtocolFromUrl(patch.url);
+  }
+  return next;
+}
+
+function appendWsMessage(
+  tab: RequestTabState,
+  message: WebSocketMessage,
+): RequestTabState {
+  return {
+    ...tab,
+    ws: {
+      ...tab.ws,
+      messages: [...tab.ws.messages, message],
+    },
+  };
+}
+
+function startTabWebSocketConnect(
+  self: { send: (event: AppMachineEvent) => void },
+  input: { tabId: string; request: ApiRequest; environment: Environment | null },
+) {
+  void wsConnect(input.tabId, input.request, input.environment)
+    .then((result) => {
+      self.send({
+        type: "WS_CONNECT_COMPLETE",
+        tabId: input.tabId,
+        connectionId: result.connectionId,
+        status: result.status,
+        headers: result.headers,
+      });
+    })
+    .catch((error) => {
+      self.send({
+        type: "WS_CONNECT_FAILED",
+        tabId: input.tabId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+}
+
+function disconnectTabWebSocket(tab: RequestTabState) {
+  if (tab.ws.connectionId) {
+    void wsClose(tab.ws.connectionId);
+  }
+}
+
+function normalizeTabState(tab: RequestTabState): RequestTabState {
+  return {
+    ...tab,
+    ws: tab.ws ?? defaultWebSocketSession(),
+    request: {
+      ...tab.request,
+      protocol: tab.request.protocol ?? inferProtocolFromUrl(tab.request.url),
+    },
+  };
+}
 
 function mapTabById(
   context: AppMachineContext,
@@ -138,6 +203,34 @@ export type AppMachineEvent =
     }
   | { type: "SEND_FAILED"; tabId: string; requestId: string; error: string }
   | { type: "CANCEL_SEND"; tabId?: string }
+  | { type: "WS_CONNECT" }
+  | { type: "WS_CONNECT_STARTED"; tabId: string }
+  | {
+      type: "WS_CONNECT_COMPLETE";
+      tabId: string;
+      connectionId: string;
+      status: number;
+      headers: HttpResponse["headers"];
+    }
+  | { type: "WS_CONNECT_FAILED"; tabId: string; error: string }
+  | { type: "WS_DISCONNECT"; tabId?: string }
+  | { type: "WS_SEND"; data: string }
+  | {
+      type: "WS_MESSAGE_RECEIVED";
+      connectionId: string;
+      tabId: string;
+      data: string;
+      binary: boolean;
+      timestamp: number;
+    }
+  | {
+      type: "WS_CLOSED";
+      connectionId: string;
+      tabId: string;
+      code?: number;
+      reason?: string;
+    }
+  | { type: "WS_ERROR"; connectionId: string; tabId: string; message: string }
   | { type: "SAVE_TO_COLLECTION" }
   | { type: "LOAD_SAVED_REQUEST"; saved: SavedRequest }
   | { type: "DELETE_SAVED_REQUEST"; id: string }
@@ -266,12 +359,25 @@ export const appMachine = setup({
     startActiveTabRequest: ({ context, self }) => {
       const tab = getActiveTab(context);
       if (!tab || tab.loading || !tab.request.url.trim()) return;
+      if (tab.request.protocol === "websocket") return;
 
       const requestId = createId("http");
       self.send({ type: "SEND_STARTED", tabId: tab.id, requestId });
       startTabRequest(self, {
         tabId: tab.id,
         requestId,
+        request: tab.request,
+        environment: getActiveEnvironment(context),
+      });
+    },
+    startActiveTabWebSocket: ({ context, self }) => {
+      const tab = getActiveTab(context);
+      if (!tab || tab.ws.status === "connecting" || tab.ws.status === "open") return;
+      if (!tab.request.url.trim()) return;
+
+      self.send({ type: "WS_CONNECT_STARTED", tabId: tab.id });
+      startTabWebSocketConnect(self, {
+        tabId: tab.id,
         request: tab.request,
         environment: getActiveEnvironment(context),
       });
@@ -311,7 +417,7 @@ export const appMachine = setup({
               tabs: ({ context, event }) =>
                 mapActiveTab(context, (tab) => ({
                   ...tab,
-                  request: { ...tab.request, ...event.patch },
+                  request: patchRequest(tab.request, event.patch),
                 })),
             }),
             "persistLastRequest",
@@ -360,7 +466,12 @@ export const appMachine = setup({
           }),
         },
         CLOSE_TAB: {
-          actions: assign(({ context, event }) => {
+          actions: [
+            ({ context, event }) => {
+              const closing = context.tabs.find((tab) => tab.id === event.tabId);
+              if (closing) disconnectTabWebSocket(closing);
+            },
+            assign(({ context, event }) => {
             if (context.tabs.length === 1) {
               const reset = createTabState();
               const nextContext = {
@@ -388,6 +499,7 @@ export const appMachine = setup({
             persistLastRequest(nextContext);
             return { tabs, activeTabId };
           }),
+          ],
         },
         SET_ACTIVE_TAB: {
           actions: [
@@ -739,7 +851,7 @@ export const appMachine = setup({
               activeTabId = tab.id;
               mainView = pending.mainView ?? "request";
             } else if (session?.tabs.length) {
-              tabs = session.tabs;
+              tabs = session.tabs.map(normalizeTabState);
               activeTabId = session.activeTabId;
               mainView = session.mainView;
             } else {
@@ -849,6 +961,158 @@ export const appMachine = setup({
               testResults: event.results,
             })),
           })),
+        },
+        WS_CONNECT: {
+          actions: "startActiveTabWebSocket",
+        },
+        WS_CONNECT_STARTED: {
+          actions: assign(({ context, event }) => ({
+            tabs: mapTabById(context, event.tabId, (tab) => ({
+              ...tab,
+              ws: {
+                ...defaultWebSocketSession(),
+                status: "connecting",
+              },
+            })),
+          })),
+        },
+        WS_CONNECT_COMPLETE: {
+          actions: [
+            assign(({ context, event }) => ({
+              tabs: mapTabById(context, event.tabId, (tab) => ({
+                ...tab,
+                ws: {
+                  ...tab.ws,
+                  connectionId: event.connectionId,
+                  status: "open",
+                  handshakeStatus: event.status,
+                  handshakeHeaders: event.headers,
+                  error: null,
+                },
+              })),
+            })),
+            ({ event }) => {
+              toast.success("WebSocket connected", `Handshake ${event.status}`);
+            },
+          ],
+        },
+        WS_CONNECT_FAILED: {
+          actions: [
+            assign(({ context, event }) => ({
+              tabs: mapTabById(context, event.tabId, (tab) => ({
+                ...tab,
+                ws: {
+                  ...defaultWebSocketSession(),
+                  status: "error",
+                  error: event.error,
+                },
+              })),
+            })),
+            ({ event }) => {
+              toast.error("WebSocket connection failed", event.error);
+            },
+          ],
+        },
+        WS_DISCONNECT: {
+          actions: [
+            ({ context, event }) => {
+              const tabId = event.tabId ?? context.activeTabId;
+              const tab = context.tabs.find((item) => item.id === tabId);
+              if (tab) disconnectTabWebSocket(tab);
+            },
+            assign(({ context, event }) => {
+              const tabId = event.tabId ?? context.activeTabId;
+              return {
+                tabs: mapTabById(context, tabId, (tab) => ({
+                  ...tab,
+                  ws: {
+                    ...tab.ws,
+                    connectionId: null,
+                    status: "closed",
+                  },
+                })),
+              };
+            }),
+            () => {
+              toast.info("WebSocket disconnected");
+            },
+          ],
+        },
+        WS_SEND: {
+          actions: assign(({ context, event }) => {
+            const tab = getActiveTab(context);
+            if (!tab?.ws.connectionId || tab.ws.status !== "open") return {};
+            void wsSend(tab.ws.connectionId, event.data);
+            return {
+              tabs: mapActiveTab(context, (current) =>
+                appendWsMessage(current, {
+                  id: createId("ws"),
+                  direction: "outgoing",
+                  data: event.data,
+                  binary: false,
+                  timestamp: Date.now(),
+                }),
+              ),
+            };
+          }),
+        },
+        WS_MESSAGE_RECEIVED: {
+          actions: assign(({ context, event }) => ({
+            tabs: context.tabs.map((tab) => {
+              if (tab.id !== event.tabId || tab.ws.connectionId !== event.connectionId) {
+                return tab;
+              }
+              return appendWsMessage(tab, {
+                id: createId("ws"),
+                direction: "incoming",
+                data: event.data,
+                binary: event.binary,
+                timestamp: event.timestamp,
+              });
+            }),
+          })),
+        },
+        WS_CLOSED: {
+          actions: assign(({ context, event }) => ({
+            tabs: context.tabs.map((tab) => {
+              if (tab.id !== event.tabId || tab.ws.connectionId !== event.connectionId) {
+                return tab;
+              }
+              return {
+                ...tab,
+                ws: {
+                  ...tab.ws,
+                  connectionId: null,
+                  status: "closed",
+                  closeCode: event.code,
+                  closeReason: event.reason,
+                },
+              };
+            }),
+          })),
+        },
+        WS_ERROR: {
+          actions: [
+            assign(({ context, event }) => ({
+              tabs: context.tabs.map((tab) => {
+                if (tab.id !== event.tabId || tab.ws.connectionId !== event.connectionId) {
+                  return tab;
+                }
+                return {
+                  ...tab,
+                  ws: {
+                    ...tab.ws,
+                    connectionId: null,
+                    status: "error",
+                    error: event.message,
+                  },
+                };
+              }),
+            })),
+            ({ event }) => {
+              toast.error("WebSocket error", event.message);
+            },
+          ],
         },
         SEND: {
           actions: "startActiveTabRequest",

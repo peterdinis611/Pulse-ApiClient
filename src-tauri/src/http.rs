@@ -170,6 +170,23 @@ fn build_url(payload: &HttpRequestPayload) -> Result<reqwest::Url, String> {
     Ok(url)
 }
 
+pub fn build_request_url(payload: &HttpRequestPayload) -> Result<reqwest::Url, String> {
+    build_url(payload)
+}
+
+pub fn build_request_headers(payload: &HttpRequestPayload) -> Result<HeaderMap, String> {
+    let mut headers = HeaderMap::new();
+    for (key, value) in enabled_pairs(&payload.headers) {
+        let name =
+            HeaderName::from_str(&key).map_err(|e| format!("Invalid header name `{key}`: {e}"))?;
+        let val = HeaderValue::from_str(&value)
+            .map_err(|e| format!("Invalid header value for `{key}`: {e}"))?;
+        headers.insert(name, val);
+    }
+    apply_auth(&mut headers, &payload.auth)?;
+    Ok(headers)
+}
+
 pub async fn execute_request(
     state: &HttpState,
     payload: HttpRequestPayload,
@@ -312,15 +329,7 @@ async fn perform_request(
         .map_err(|e| format!("Invalid HTTP method: {e}"))?;
     let url = build_url(&payload)?;
 
-    let mut headers = HeaderMap::new();
-    for (key, value) in enabled_pairs(&payload.headers) {
-        let name =
-            HeaderName::from_str(&key).map_err(|e| format!("Invalid header name `{key}`: {e}"))?;
-        let val = HeaderValue::from_str(&value)
-            .map_err(|e| format!("Invalid header value for `{key}`: {e}"))?;
-        headers.insert(name, val);
-    }
-    apply_auth(&mut headers, &payload.auth)?;
+    let headers = build_request_headers(&payload)?;
 
     let mut request = client.request(method, url).headers(headers);
 

@@ -10,7 +10,9 @@ pub mod search;
 pub mod settings;
 pub mod state;
 pub mod test_runner;
+pub mod websocket;
 pub mod windows;
+pub mod ws_state;
 
 use cache::CacheConfig;
 use db::{DbState, DbUserSession};
@@ -22,7 +24,9 @@ use state::HttpState;
 use std::sync::Arc;
 use test_runner::TestRunResult;
 use tauri::{AppHandle, Manager, State};
+use websocket::WsConnectResult;
 use windows::{AppWindowInfo, PendingWindowInit};
+use ws_state::WsState;
 
 #[tauri::command]
 async fn send_http_request(
@@ -238,6 +242,26 @@ fn fuzzy_search_documents(
     Ok(search::fuzzy_search_documents(&query, &documents, limit))
 }
 
+#[tauri::command]
+async fn ws_connect(
+    app: AppHandle,
+    ws: State<'_, WsState>,
+    tab_id: String,
+    payload: HttpRequestPayload,
+) -> Result<WsConnectResult, String> {
+    websocket::connect(app, &ws, tab_id, payload).await
+}
+
+#[tauri::command]
+async fn ws_send(ws: State<'_, WsState>, connection_id: String, data: String) -> Result<(), String> {
+    websocket::send_message(&ws, &connection_id, data).await
+}
+
+#[tauri::command]
+fn ws_close(ws: State<'_, WsState>, connection_id: String) -> Result<(), String> {
+    websocket::close_connection(&ws, &connection_id)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -257,6 +281,7 @@ pub fn run() {
 
             app.manage(db_state);
             app.manage(http_state);
+            app.manage(WsState::new());
             settings::apply_native_theme(app.handle(), &settings.theme)?;
             Ok(())
         })
@@ -291,6 +316,9 @@ pub fn run() {
             take_pending_window_init,
             set_window_title,
             fuzzy_search_documents,
+            ws_connect,
+            ws_send,
+            ws_close,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

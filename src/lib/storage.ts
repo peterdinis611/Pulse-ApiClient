@@ -6,6 +6,7 @@ import type {
   Environment,
   HistoryEntry,
   MainView,
+  RequestProtocol,
   RequestTab,
   RequestTabState,
   SavedRequest,
@@ -13,6 +14,7 @@ import type {
 import { createEnvironment, createRequest, createSavedRequest } from "./helpers";
 import { defaultCollectionGroup } from "./collections";
 import { importPostmanCollection, isPostmanCollection } from "./postman-import";
+import { inferProtocolFromUrl } from "./protocol";
 import { emitWorkspaceUpdated } from "./workspace-sync";
 
 const STATE_SUFFIX = "v1";
@@ -118,6 +120,9 @@ function migratePersistedState(parsed: Partial<PersistedState>): PersistedState 
     request: {
       ...createRequest(),
       ...item.request,
+      protocol:
+        (item.request?.protocol as RequestProtocol | undefined) ??
+        inferProtocolFromUrl(item.request?.url ?? ""),
       tests: item.request?.tests ?? createRequest().tests,
     },
   }));
@@ -129,7 +134,13 @@ function migratePersistedState(parsed: Partial<PersistedState>): PersistedState 
     environments: parsed.environments?.length ? parsed.environments : defaults.environments,
     activeEnvironmentId: parsed.activeEnvironmentId ?? defaults.activeEnvironmentId,
     history: parsed.history ?? defaults.history,
-    lastRequest: { ...createRequest(), ...parsed.lastRequest },
+    lastRequest: {
+      ...createRequest(),
+      ...parsed.lastRequest,
+      protocol:
+        (parsed.lastRequest?.protocol as RequestProtocol | undefined) ??
+        inferProtocolFromUrl(parsed.lastRequest?.url ?? ""),
+    },
     windowSessions: parsed.windowSessions ?? defaults.windowSessions,
   };
 }
