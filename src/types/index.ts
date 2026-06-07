@@ -19,6 +19,8 @@ export type RequestTabState = {
   request: ApiRequest;
   response: HttpResponse | null;
   error: string | null;
+  loading: boolean;
+  inFlightRequestId: string | null;
 };
 
 export type KeyValue = {
@@ -75,6 +77,21 @@ export type HttpResponse = {
   contentType?: string | null;
   fromCache?: boolean;
   cacheAgeMs?: number | null;
+  requestId?: string | null;
+};
+
+export type HttpEngineStats = {
+  activeRequests: number;
+  maxConcurrent: number;
+  cacheEntries: number;
+  totalCompleted: number;
+  totalFailed: number;
+  defaultTimeoutMs: number;
+};
+
+export type HttpSettings = {
+  httpMaxConcurrent: number;
+  httpTimeoutMs: number;
 };
 
 export type CollectionGroup = {

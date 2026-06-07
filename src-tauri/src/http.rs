@@ -8,6 +8,7 @@ use std::time::Instant;
 
 use crate::cache::{cache_key, should_store_in_cache, should_use_cache, ResponseCache};
 use crate::state::HttpState;
+use std::time::Duration;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -54,6 +55,17 @@ pub struct HttpRequestPayload {
     pub auth: AuthConfig,
     #[serde(default)]
     pub use_cache: Option<bool>,
+    #[serde(default)]
+    pub request_id: Option<String>,
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchItemResult {
+    pub response: Option<HttpResponsePayload>,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -75,6 +87,8 @@ pub struct HttpResponsePayload {
     pub content_type: Option<String>,
     pub from_cache: bool,
     pub cache_age_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
 }
 
 fn enabled_pairs(items: &[KeyValue]) -> Vec<(String, String)> {
@@ -162,18 +176,118 @@ pub async fn execute_request(
 ) -> Result<HttpResponsePayload, String> {
     if should_use_cache(&payload) {
         let key = cache_key(&payload);
-        if let Some(cached) = state.cache.get_response(&key) {
-            return Ok(cached);
+        if let Some(cached) = state.cache().get_response(&key) {
+            return Ok(HttpResponsePayload {
+                request_id: payload.request_id.clone(),
+                ..cached
+            });
         }
     }
 
-    let response = perform_request(&state.client, payload.clone()).await?;
+    let _permit = state.engine().acquire().await?;
+    state.engine().begin_request();
 
-    if should_store_in_cache(&payload, &response) {
-        state.cache.insert(cache_key(&payload), response.clone());
+    let timeout_ms = payload
+        .timeout_ms
+        .unwrap_or_else(|| state.engine().default_timeout_ms());
+    let request_id = payload.request_id.clone();
+
+    let client = state.client().clone();
+    let payload_for_task = payload.clone();
+
+    let join_handle = tokio::spawn(async move {
+        tokio::time::timeout(
+            Duration::from_millis(timeout_ms),
+            perform_request(&client, payload_for_task),
+        )
+        .await
+    });
+
+    if let Some(id) = request_id.as_ref() {
+        state.engine().register_abort(id.clone(), join_handle.abort_handle());
     }
 
-    Ok(response)
+    let result = join_handle.await;
+    if let Some(id) = request_id.as_ref() {
+        state.engine().unregister_abort(id);
+    }
+
+    let response = match result {
+        Ok(Ok(Ok(response))) => {
+            state.engine().finish_request(true);
+            response
+        }
+        Ok(Ok(Err(error))) => {
+            state.engine().finish_request(false);
+            return Err(error);
+        }
+        Ok(Err(_elapsed)) => {
+            state.engine().finish_request(false);
+            return Err(format!("Request timed out after {timeout_ms} ms"));
+        }
+        Err(error) => {
+            state.engine().finish_request(false);
+            if error.is_cancelled() {
+                return Err("Request was cancelled".to_string());
+            }
+            return Err(format!("Request task failed: {error}"));
+        }
+    };
+
+    if should_store_in_cache(&payload, &response) {
+        state
+            .cache()
+            .insert(cache_key(&payload), response.clone());
+    }
+
+    Ok(HttpResponsePayload {
+        request_id: payload.request_id,
+        ..response
+    })
+}
+
+pub async fn execute_requests_batch(
+    state: &HttpState,
+    payloads: Vec<HttpRequestPayload>,
+) -> Vec<BatchItemResult> {
+    let mut join_set = tokio::task::JoinSet::new();
+
+    for payload in payloads {
+        let state = state.clone();
+        join_set.spawn(async move { execute_request(&state, payload).await });
+    }
+
+    let mut results = Vec::new();
+    while let Some(result) = join_set.join_next().await {
+        match result {
+            Ok(Ok(response)) => results.push(BatchItemResult {
+                response: Some(response),
+                error: None,
+            }),
+            Ok(Err(error)) => results.push(BatchItemResult {
+                response: None,
+                error: Some(error),
+            }),
+            Err(error) => results.push(BatchItemResult {
+                response: None,
+                error: Some(format!("Batch task failed: {error}")),
+            }),
+        }
+    }
+
+    results
+}
+
+pub fn cancel_request(state: &HttpState, request_id: &str) -> bool {
+    state.engine().cancel(request_id)
+}
+
+pub fn cancel_all_requests(state: &HttpState) -> u64 {
+    state.engine().cancel_all()
+}
+
+pub fn engine_stats(state: &HttpState) -> crate::engine::HttpEngineStats {
+    state.engine().stats(cache_size(state.cache()))
 }
 
 async fn perform_request(
@@ -328,6 +442,7 @@ async fn perform_request(
         content_type,
         from_cache: false,
         cache_age_ms: None,
+        request_id: payload.request_id,
     })
 }
 

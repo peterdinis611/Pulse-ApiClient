@@ -1,4 +1,4 @@
-import { assign, fromPromise, raise, setup } from "xstate";
+import { assign, raise, setup } from "xstate";
 import type {
   ApiRequest,
   Environment,
@@ -21,7 +21,7 @@ import {
   createRequest,
   createSavedRequest,
 } from "@/lib/helpers";
-import { sendRequest } from "@/lib/http-client";
+import { cancelHttpRequest, sendRequest } from "@/lib/http-client";
 import {
   defaultPersistedState,
   importCollectionJson,
@@ -38,6 +38,8 @@ export function createTabState(request = createRequest()): RequestTabState {
     request,
     response: null,
     error: null,
+    loading: false,
+    inFlightRequestId: null,
   };
 }
 
@@ -54,14 +56,48 @@ export type AppMachineContext = {
 };
 
 type SendInput = {
+  tabId: string;
+  requestId: string;
   request: ApiRequest;
   environment: Environment | null;
 };
 
-type SendOutput = {
-  response: HttpResponse;
-  historyEntry: HistoryEntry;
-};
+function mapTabById(
+  context: AppMachineContext,
+  tabId: string,
+  updater: (tab: RequestTabState) => RequestTabState,
+): RequestTabState[] {
+  return context.tabs.map((tab) => (tab.id === tabId ? updater(tab) : tab));
+}
+
+function startTabRequest(
+  self: { send: (event: AppMachineEvent) => void },
+  input: SendInput,
+) {
+  void sendRequest(input.request, input.environment, { requestId: input.requestId })
+    .then((response) => {
+      const historyEntry = createHistoryEntry(input.request, {
+        status: response.status,
+        elapsedMs: response.elapsedMs,
+        sizeBytes: response.sizeBytes,
+      });
+      self.send({
+        type: "SEND_COMPLETE",
+        tabId: input.tabId,
+        requestId: input.requestId,
+        response,
+        historyEntry,
+      });
+    })
+    .catch((error) => {
+      self.send({
+        type: "SEND_FAILED",
+        tabId: input.tabId,
+        requestId: input.requestId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+}
 
 export type AppMachineEvent =
   | { type: "SET_REQUEST_TAB"; tab: RequestTab }
@@ -75,6 +111,16 @@ export type AppMachineEvent =
   | { type: "CLOSE_TAB"; tabId: string }
   | { type: "SET_ACTIVE_TAB"; tabId: string }
   | { type: "SEND" }
+  | { type: "SEND_STARTED"; tabId: string; requestId: string }
+  | {
+      type: "SEND_COMPLETE";
+      tabId: string;
+      requestId: string;
+      response: HttpResponse;
+      historyEntry: HistoryEntry;
+    }
+  | { type: "SEND_FAILED"; tabId: string; requestId: string; error: string }
+  | { type: "CANCEL_SEND"; tabId?: string }
   | { type: "SAVE_TO_COLLECTION" }
   | { type: "LOAD_SAVED_REQUEST"; saved: SavedRequest }
   | { type: "DELETE_SAVED_REQUEST"; id: string }
@@ -155,19 +201,21 @@ export const appMachine = setup({
     context: {} as AppMachineContext,
     events: {} as AppMachineEvent,
   },
-  actors: {
-    sendHttpRequest: fromPromise<SendOutput, SendInput>(async ({ input }) => {
-      const response = await sendRequest(input.request, input.environment);
-      const historyEntry = createHistoryEntry(input.request, {
-        status: response.status,
-        elapsedMs: response.elapsedMs,
-        sizeBytes: response.sizeBytes,
-      });
-      return { response, historyEntry };
-    }),
-  },
   actions: {
     persistLastRequest: ({ context }) => persistLastRequest(context),
+    startActiveTabRequest: ({ context, self }) => {
+      const tab = getActiveTab(context);
+      if (!tab || tab.loading || !tab.request.url.trim()) return;
+
+      const requestId = createId("http");
+      self.send({ type: "SEND_STARTED", tabId: tab.id, requestId });
+      startTabRequest(self, {
+        tabId: tab.id,
+        requestId,
+        request: tab.request,
+        environment: getActiveEnvironment(context),
+      });
+    },
   },
 }).createMachine({
   id: "app",
@@ -175,7 +223,6 @@ export const appMachine = setup({
   initial: "ready",
   states: {
     ready: {
-      initial: "idle",
       on: {
         SET_REQUEST_TAB: {
           actions: assign({ requestTab: ({ event }) => event.tab }),

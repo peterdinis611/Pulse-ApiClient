@@ -10,6 +10,18 @@ const SETTINGS_FILE: &str = "settings.json";
 pub struct AppSettings {
     #[serde(default = "default_theme")]
     pub theme: String,
+    #[serde(default = "default_http_max_concurrent")]
+    pub http_max_concurrent: u32,
+    #[serde(default = "default_http_timeout_ms")]
+    pub http_timeout_ms: u64,
+}
+
+fn default_http_max_concurrent() -> u32 {
+    32
+}
+
+fn default_http_timeout_ms() -> u64 {
+    30_000
 }
 
 fn default_theme() -> String {
@@ -20,6 +32,8 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             theme: default_theme(),
+            http_max_concurrent: default_http_max_concurrent(),
+            http_timeout_ms: default_http_timeout_ms(),
         }
     }
 }
