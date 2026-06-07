@@ -1,5 +1,13 @@
 import type { HttpMethod, HistoryEntry, SavedRequest } from "@/types";
 import { HTTP_METHODS } from "@/types";
+import {
+  fuzzyFilterByIds,
+  fuzzyRankIds,
+  toHistoryDocument,
+  toOverviewDocument,
+  toSavedRequestDocument,
+  type SearchDocument,
+} from "./fuzzy-search";
 
 export type OverviewStatusFilter = "2xx" | "3xx" | "4xx" | "5xx" | "none";
 
@@ -115,22 +123,40 @@ export function overviewFilterLabels(filter: OverviewFilter): string[] {
   return labels;
 }
 
-export function filterOverviewItems(items: FilterableItem[], filter: OverviewFilter): FilterableItem[] {
-  const query = filter.query.trim().toLowerCase();
-
+function applyStructuredOverviewFilters(
+  items: FilterableItem[],
+  filter: OverviewFilter,
+): FilterableItem[] {
   return items.filter((item) => {
     if (filter.sources.length > 0 && !filter.sources.includes(item.source)) return false;
     if (filter.methods.length > 0 && !filter.methods.includes(item.method)) return false;
     if (filter.statuses.length > 0 && !filter.statuses.includes(statusBucket(item.status))) return false;
-    if (!query) return true;
-
-    return (
-      item.title.toLowerCase().includes(query) ||
-      item.subtitle.toLowerCase().includes(query) ||
-      item.meta.toLowerCase().includes(query) ||
-      item.method.toLowerCase().includes(query)
-    );
+    return true;
   });
+}
+
+export function filterOverviewItems(items: FilterableItem[], filter: OverviewFilter): FilterableItem[] {
+  const structurallyFiltered = applyStructuredOverviewFilters(items, filter);
+  const query = filter.query.trim();
+  if (!query) return structurallyFiltered;
+
+  const documents = structurallyFiltered.map((item) => toOverviewDocument(item));
+  const rankedIds = fuzzyRankIds(documents, query);
+  return fuzzyFilterByIds(structurallyFiltered, rankedIds);
+}
+
+export async function filterOverviewItemsAsync(
+  items: FilterableItem[],
+  filter: OverviewFilter,
+): Promise<FilterableItem[]> {
+  const structurallyFiltered = applyStructuredOverviewFilters(items, filter);
+  const query = filter.query.trim();
+  if (!query) return structurallyFiltered;
+
+  const documents = structurallyFiltered.map((item) => toOverviewDocument(item));
+  const { fuzzyRankIdsHybrid } = await import("./search-client");
+  const rankedIds = await fuzzyRankIdsHybrid(documents, query);
+  return fuzzyFilterByIds(structurallyFiltered, rankedIds);
 }
 
 export function buildOverviewItems(
@@ -168,26 +194,45 @@ export function buildOverviewItems(
 }
 
 export function filterSavedRequests(requests: SavedRequest[], query: string): SavedRequest[] {
-  const normalized = query.trim().toLowerCase();
+  const normalized = query.trim();
   if (!normalized) return requests;
 
-  return requests.filter(
-    (item) =>
-      item.name.toLowerCase().includes(normalized) ||
-      item.request.url.toLowerCase().includes(normalized) ||
-      item.folder?.toLowerCase().includes(normalized),
-  );
+  const documents = requests.map((item) => toSavedRequestDocument(item));
+  return fuzzyFilterByIds(requests, fuzzyRankIds(documents, normalized));
 }
 
 export function filterHistoryEntries(entries: HistoryEntry[], query: string): HistoryEntry[] {
-  const normalized = query.trim().toLowerCase();
+  const normalized = query.trim();
   if (!normalized) return entries;
 
-  return entries.filter(
-    (entry) =>
-      entry.request.name.toLowerCase().includes(normalized) ||
-      entry.request.url.toLowerCase().includes(normalized),
-  );
+  const documents = entries.map((entry) => toHistoryDocument(entry));
+  return fuzzyFilterByIds(entries, fuzzyRankIds(documents, normalized));
+}
+
+export async function filterSavedRequestsAsync(
+  requests: SavedRequest[],
+  query: string,
+): Promise<SavedRequest[]> {
+  const normalized = query.trim();
+  if (!normalized) return requests;
+
+  const documents = requests.map((item) => toSavedRequestDocument(item));
+  const { fuzzyRankIdsHybrid } = await import("./search-client");
+  const rankedIds = await fuzzyRankIdsHybrid(documents, normalized);
+  return fuzzyFilterByIds(requests, rankedIds);
+}
+
+export async function filterHistoryEntriesAsync(
+  entries: HistoryEntry[],
+  query: string,
+): Promise<HistoryEntry[]> {
+  const normalized = query.trim();
+  if (!normalized) return entries;
+
+  const documents = entries.map((entry) => toHistoryDocument(entry));
+  const { fuzzyRankIdsHybrid } = await import("./search-client");
+  const rankedIds = await fuzzyRankIdsHybrid(documents, normalized);
+  return fuzzyFilterByIds(entries, rankedIds);
 }
 
 export const OVERVIEW_METHODS = HTTP_METHODS;
@@ -204,3 +249,5 @@ export const OVERVIEW_SOURCE_OPTIONS: Array<{ value: "history" | "collections"; 
   { value: "history", label: "History" },
   { value: "collections", label: "Collections" },
 ];
+
+export type { SearchDocument };

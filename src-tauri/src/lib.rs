@@ -2,6 +2,7 @@ pub mod cache;
 pub mod db;
 pub mod engine;
 pub mod http;
+pub mod search;
 pub mod settings;
 pub mod state;
 pub mod test_runner;
@@ -11,6 +12,7 @@ use cache::CacheConfig;
 use db::{DbState, DbUserSession};
 use engine::HttpEngineStats;
 use http::{BatchItemResult, HttpRequestPayload, HttpResponsePayload};
+use search::{SearchDocument, SearchMatch};
 use settings::AppSettings;
 use state::HttpState;
 use std::sync::Arc;
@@ -198,6 +200,15 @@ fn set_window_title(app: AppHandle, label: String, title: String) -> Result<(), 
     windows::set_window_title(&app, &label, &title)
 }
 
+#[tauri::command]
+fn fuzzy_search_documents(
+    query: String,
+    documents: Vec<SearchDocument>,
+    limit: Option<usize>,
+) -> Result<Vec<SearchMatch>, String> {
+    Ok(search::fuzzy_search_documents(&query, &documents, limit))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -247,6 +258,7 @@ pub fn run() {
             get_current_window_info,
             take_pending_window_init,
             set_window_title,
+            fuzzy_search_documents,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

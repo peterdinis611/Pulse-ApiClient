@@ -536,6 +536,17 @@ pm.test("Status code is 200", function () {
     }
 
     #[test]
+    fn runs_pulse_response_time_test() {
+        let script = r#"
+pulse.test("Fast response", function () {
+    pulse.expect(pulse.response.responseTime).to.be.below(500);
+});
+"#;
+        let result = run_http_tests(script, &sample_response(200, "{}", 120));
+        assert_eq!(result.passed, 1);
+    }
+
+    #[test]
     fn runs_json_assertions() {
         let script = r#"[
           {"name":"Status ok","assertion":"status","expected":200},

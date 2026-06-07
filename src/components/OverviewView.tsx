@@ -1,11 +1,13 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Clock3, MoreHorizontal, Search } from "lucide-react";
 import { useApp } from "@/machines";
 import {
   buildOverviewItems,
   filterOverviewItems,
+  filterOverviewItemsAsync,
   isOverviewFilterDefault,
 } from "@/lib/filters";
+import { useDebouncedValue } from "@/lib/use-debounced-search";
 import { MethodBadge } from "@/components/MethodBadge";
 import {
   ActiveOverviewFilters,
@@ -31,6 +33,8 @@ export function OverviewView() {
     resetOverviewFilter,
   } = useApp();
 
+  const debouncedQuery = useDebouncedValue(overviewFilter.query);
+
   const allItems = useMemo(
     () =>
       buildOverviewItems(history, collections, {
@@ -40,19 +44,44 @@ export function OverviewView() {
     [collections, history, loadHistoryEntry, loadSavedRequest],
   );
 
-  const filteredItems = useMemo(
-    () => filterOverviewItems(allItems, overviewFilter),
-    [allItems, overviewFilter],
+  const activeFilter = useMemo(
+    () => ({
+      ...overviewFilter,
+      query: debouncedQuery,
+    }),
+    [overviewFilter, debouncedQuery],
   );
+
+  const filteredItemsSync = useMemo(
+    () => filterOverviewItems(allItems, activeFilter),
+    [allItems, activeFilter],
+  );
+
+  const [filteredItems, setFilteredItems] = useState(filteredItemsSync);
+
+  useEffect(() => {
+    setFilteredItems(filteredItemsSync);
+
+    if (!debouncedQuery.trim()) return;
+
+    let cancelled = false;
+    void filterOverviewItemsAsync(allItems, activeFilter).then((next) => {
+      if (!cancelled) setFilteredItems(next);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [allItems, activeFilter, debouncedQuery, filteredItemsSync]);
 
   const recentItems = useMemo(() => filteredItems.slice(0, 20), [filteredItems]);
 
   return (
-    <ScrollAreaWithTop className="h-full" resetKey="overview">
+    <ScrollAreaWithTop className="h-full min-h-0" resetKey="overview">
       <div className="mx-auto max-w-5xl space-y-6 p-8">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">
-            Welcome back, {user?.name.split(" ")[0]}
+            Welcome back, {(user?.name ?? "there").split(" ")[0]}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Recent requests and saved endpoints across your workspace.
@@ -65,7 +94,7 @@ export function OverviewView() {
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 className="pl-9"
-                placeholder="Search requests"
+                placeholder="Fuzzy search requests, URLs, methods…"
                 value={overviewFilter.query}
                 onChange={(event) => setOverviewFilter({ query: event.target.value })}
               />
@@ -85,6 +114,7 @@ export function OverviewView() {
           {!isOverviewFilterDefault(overviewFilter) && (
             <p className="text-xs text-muted-foreground">
               Showing {filteredItems.length} of {allItems.length} items
+              {debouncedQuery.trim() ? " · ranked by relevance" : ""}
             </p>
           )}
         </div>

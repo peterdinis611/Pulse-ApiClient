@@ -26,6 +26,24 @@ fn pending_inits() -> &'static Mutex<HashMap<String, PendingWindowInit>> {
     STORE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+fn webview_url(app: &AppHandle) -> Result<WebviewUrl, String> {
+    if cfg!(debug_assertions) {
+        if let Some(main) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+            if let Ok(url) = main.url() {
+                return Ok(WebviewUrl::External(url));
+            }
+        }
+
+        return Ok(WebviewUrl::External(
+            "http://localhost:1420"
+                .parse()
+                .map_err(|error| format!("Invalid dev URL: {error}"))?,
+        ));
+    }
+
+    Ok(WebviewUrl::App("index.html".into()))
+}
+
 pub fn create_app_window(
     app: &AppHandle,
     title: Option<String>,
@@ -48,7 +66,7 @@ pub fn create_app_window(
             );
     }
 
-    WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
+    WebviewWindowBuilder::new(app, &label, webview_url(app)?)
         .title(window_title.clone())
         .inner_size(1280.0, 840.0)
         .min_inner_size(960.0, 640.0)

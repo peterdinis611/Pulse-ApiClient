@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -19,7 +19,8 @@ import {
 import { useApp } from "@/machines";
 import { groupRequestsByFolder, requestsForCollection } from "@/lib/collections";
 import { runCollection, type CollectionRunResult } from "@/lib/collection-runner";
-import { filterHistoryEntries, filterSavedRequests } from "@/lib/filters";
+import { filterHistoryEntries, filterHistoryEntriesAsync, filterSavedRequests, filterSavedRequestsAsync } from "@/lib/filters";
+import { useDebouncedValue } from "@/lib/use-debounced-search";
 import { toast } from "@/lib/toast";
 import type { FolderTreeNode } from "@/lib/collections";
 import { CollectionRunResultsPanel } from "@/components/CollectionRunResultsPanel";
@@ -71,13 +72,45 @@ export function Sidebar() {
   const [runProgress, setRunProgress] = useState<string | null>(null);
   const [showRunResults, setShowRunResults] = useState(false);
 
-  const filteredCollections = useMemo(() => {
-    return filterSavedRequests(collections, sidebarSearch);
-  }, [collections, sidebarSearch]);
+  const debouncedSidebarSearch = useDebouncedValue(sidebarSearch);
 
-  const filteredHistory = useMemo(() => {
-    return filterHistoryEntries(history, sidebarSearch).slice(0, 50);
-  }, [history, sidebarSearch]);
+  const filteredCollectionsSync = useMemo(() => {
+    return filterSavedRequests(collections, debouncedSidebarSearch);
+  }, [collections, debouncedSidebarSearch]);
+
+  const filteredHistorySync = useMemo(() => {
+    return filterHistoryEntries(history, debouncedSidebarSearch);
+  }, [history, debouncedSidebarSearch]);
+
+  const [filteredCollections, setFilteredCollections] = useState(filteredCollectionsSync);
+  const [filteredHistory, setFilteredHistory] = useState(filteredHistorySync);
+
+  useEffect(() => {
+    setFilteredCollections(filteredCollectionsSync);
+    setFilteredHistory(filteredHistorySync.slice(0, 50));
+
+    if (!debouncedSidebarSearch.trim()) return;
+
+    let cancelled = false;
+    void Promise.all([
+      filterSavedRequestsAsync(collections, debouncedSidebarSearch),
+      filterHistoryEntriesAsync(history, debouncedSidebarSearch),
+    ]).then(([nextCollections, nextHistory]) => {
+      if (cancelled) return;
+      setFilteredCollections(nextCollections);
+      setFilteredHistory(nextHistory.slice(0, 50));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    collections,
+    history,
+    debouncedSidebarSearch,
+    filteredCollectionsSync,
+    filteredHistorySync,
+  ]);
 
   const handleRunCollection = async (collectionId: string, collectionName: string) => {
     const items = requestsForCollection(collections, collectionId);
@@ -154,7 +187,7 @@ export function Sidebar() {
             value={sidebarSearch}
             onChange={(event) => setSidebarSearch(event.target.value)}
             className="h-9 bg-background pl-9 pr-12"
-            placeholder="Search"
+            placeholder="Fuzzy search collections & history"
           />
           <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
             ⌘K

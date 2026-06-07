@@ -24,6 +24,7 @@ moka = { version = "0.12", features = ["sync"] }
 sha2 = "0.10"
 regex = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
+fuzzy-matcher = "0.3"
 
 [dev-dependencies]
 wiremock = "0.6"
