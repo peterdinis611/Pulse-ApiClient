@@ -1,14 +1,26 @@
-import { useEffect } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { useApp } from "@/machines";
-import { ConsolePanel } from "./ConsolePanel";
-import { EnvironmentsView } from "./EnvironmentsView";
-import { OverviewView } from "./OverviewView";
+import { LoadingScreen } from "./LoadingScreen";
 import { RequestTabBar } from "./RequestTabBar";
-import { RequestWorkspace } from "./RequestWorkspace";
-import { SettingsView } from "./SettingsView";
 import { Sidebar } from "./Sidebar";
 import { StatusBar } from "./StatusBar";
 import { TopBar } from "./TopBar";
+
+const ConsolePanel = lazy(() =>
+  import("./ConsolePanel").then((module) => ({ default: module.ConsolePanel })),
+);
+const EnvironmentsView = lazy(() =>
+  import("./EnvironmentsView").then((module) => ({ default: module.EnvironmentsView })),
+);
+const OverviewView = lazy(() =>
+  import("./OverviewView").then((module) => ({ default: module.OverviewView })),
+);
+const RequestWorkspace = lazy(() =>
+  import("./RequestWorkspace").then((module) => ({ default: module.RequestWorkspace })),
+);
+const SettingsView = lazy(() =>
+  import("./SettingsView").then((module) => ({ default: module.SettingsView })),
+);
 import { APP_NAME } from "@/lib/app-config";
 import {
   createAppWindow,
@@ -71,12 +83,18 @@ export function ClientShell() {
         <div className="flex min-w-0 flex-1 flex-col">
           <RequestTabBar />
           <main className="flex min-h-0 flex-1 flex-col">
-            {mainView === "overview" && <OverviewView />}
-            {mainView === "environments" && <EnvironmentsView />}
-            {mainView === "settings" && <SettingsView />}
-            {mainView === "request" && <RequestWorkspace />}
+            <Suspense fallback={<LoadingScreen variant="inline" label="Loading view" />}>
+              {mainView === "overview" && <OverviewView />}
+              {mainView === "environments" && <EnvironmentsView />}
+              {mainView === "settings" && <SettingsView />}
+              {mainView === "request" && <RequestWorkspace />}
+            </Suspense>
           </main>
-          {consoleOpen && <ConsolePanel />}
+          {consoleOpen && (
+            <Suspense fallback={<LoadingScreen variant="inline" label="Loading console" />}>
+              <ConsolePanel />
+            </Suspense>
+          )}
           <StatusBar />
         </div>
       </div>

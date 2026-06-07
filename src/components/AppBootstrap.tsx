@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { LoaderCircle } from "lucide-react";
+import { LoadingScreen } from "@/components/LoadingScreen";
 import { loadUserSession } from "@/lib/auth";
 import { loadPersistedState } from "@/lib/storage";
 import { canUseTauriIpc, waitForTauriIpc } from "@/lib/tauri-runtime";
@@ -143,11 +143,7 @@ export function AppBootstrap({ children }: { children: ReactNode }) {
   }, [actorRef]);
 
   if (!ready) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">
-        <LoaderCircle className="size-6 animate-spin" />
-      </div>
-    );
+    return <LoadingScreen label="Starting Pulse" />;
   }
 
   return children;
