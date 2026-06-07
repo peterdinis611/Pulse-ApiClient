@@ -1,5 +1,5 @@
-use api_client_lib::http::{AuthConfig, HttpRequestPayload, KeyValue};
-use api_client_lib::state::HttpState;
+use crate::http::{execute_request, AuthConfig, HttpRequestPayload, KeyValue};
+use crate::state::HttpState;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -45,7 +45,7 @@ async fn execute_request_returns_json_body() {
 
     let state = HttpState::default();
     let payload = sample_payload(&format!("{}/hello", server.uri()));
-    let response = api_client_lib::http::execute_request(&state, payload)
+    let response = execute_request(&state, payload)
         .await
         .expect("request should succeed");
 
@@ -70,7 +70,7 @@ async fn execute_request_reports_timeout() {
     let mut payload = sample_payload(&format!("{}/slow", server.uri()));
     payload.timeout_ms = Some(50);
 
-    let error = api_client_lib::http::execute_request(&state, payload)
+    let error = execute_request(&state, payload)
         .await
         .expect_err("request should time out");
 

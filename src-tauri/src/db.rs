@@ -391,11 +391,5 @@ fn uuid_simple() -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn hashes_password_consistently() {
-        assert_eq!(hash_password("secret"), hash_password("secret"));
-    }
-}
+#[path = "__tests__/db_tests.rs"]
+mod tests;

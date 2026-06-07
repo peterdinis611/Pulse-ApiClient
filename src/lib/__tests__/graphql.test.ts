@@ -4,31 +4,35 @@ import {
   formatGraphqlResponse,
   parseGraphqlResponse,
   validateGraphqlRequest,
-} from "./graphql";
+} from "../graphql";
+
+const sampleRequest = {
+  graphqlQuery: "query Example { user { id } }",
+  graphqlVariables: '{"id":"abc"}',
+  graphqlOperationName: "Example",
+};
 
 describe("graphql", () => {
   it("builds a graphql request body", () => {
-    const body = buildGraphqlBody({
-      graphqlQuery: "query Example { user { id } }",
-      graphqlVariables: '{"id":"abc"}',
-      graphqlOperationName: "Example",
-    });
-
-    expect(JSON.parse(body)).toEqual({
+    expect(JSON.parse(buildGraphqlBody(sampleRequest))).toEqual({
       query: "query Example { user { id } }",
       variables: { id: "abc" },
       operationName: "Example",
     });
   });
 
-  it("validates missing query", () => {
-    expect(
-      validateGraphqlRequest({
-        graphqlQuery: "",
-        graphqlVariables: "{}",
-        graphqlOperationName: "",
-      }),
-    ).toBe("GraphQL query is required.");
+  it("omits operationName when empty", () => {
+    const body = JSON.parse(
+      buildGraphqlBody({ ...sampleRequest, graphqlOperationName: "" }),
+    );
+    expect(body).not.toHaveProperty("operationName");
+  });
+
+  it.each([
+    [{ ...sampleRequest, graphqlQuery: "" }, "GraphQL query is required."],
+    [{ ...sampleRequest, graphqlVariables: '"bad"' }, "GraphQL variables must be a JSON object."],
+  ] as const)("validateGraphqlRequest rejects invalid input", (request, message) => {
+    expect(validateGraphqlRequest(request)).toBe(message);
   });
 
   it("parses and formats graphql responses", () => {

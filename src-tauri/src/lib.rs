@@ -1,3 +1,7 @@
+#[cfg(test)]
+#[path = "__tests__/http_integration.rs"]
+mod http_integration;
+
 pub mod cache;
 pub mod db;
 pub mod engine;
