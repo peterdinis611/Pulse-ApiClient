@@ -42,6 +42,11 @@ import {
   type PersistedState,
 } from "@/lib/storage";
 import type { PendingWindowInit } from "@/lib/window-manager";
+import {
+  loadLayoutPreferences,
+  saveLayoutPreferences,
+  type SidebarPosition,
+} from "@/lib/layout-preferences";
 import { loadThemeMode, saveThemeMode, type ThemeMode } from "@/lib/theme";
 import { defaultWebSocketSession, inferProtocolFromUrl } from "@/lib/protocol";
 import { toast } from "@/lib/toast";
@@ -72,6 +77,9 @@ export type AppMachineContext = {
   consoleOpen: boolean;
   responsePanelOpen: boolean;
   theme: ThemeMode;
+  sidebarPosition: SidebarPosition;
+  sidebarCollapsed: boolean;
+  sidebarWidth: number;
   user: UserSession | null;
   overviewFilter: OverviewFilter;
 };
@@ -248,6 +256,7 @@ export type AppMachineEvent =
   | { type: "DELETE_FOLDER"; collectionId: string; folderPath: string }
   | { type: "MOVE_SAVED_REQUEST"; id: string; collectionId: string; folder?: string }
   | { type: "SET_ACTIVE_ENVIRONMENT"; id: string | null }
+  | { type: "SET_TAB_ENVIRONMENT"; environmentId: string | null }
   | { type: "ADD_ENVIRONMENT" }
   | { type: "UPDATE_ENVIRONMENT"; id: string; patch: Partial<Environment> }
   | { type: "DELETE_ENVIRONMENT"; id: string }
@@ -262,6 +271,10 @@ export type AppMachineEvent =
   | { type: "LOAD_HISTORY_ENTRY"; entry: HistoryEntry }
   | { type: "CLEAR_HISTORY" }
   | { type: "SET_THEME"; theme: ThemeMode }
+  | { type: "SET_SIDEBAR_POSITION"; position: SidebarPosition }
+  | { type: "SET_SIDEBAR_COLLAPSED"; collapsed: boolean }
+  | { type: "TOGGLE_SIDEBAR_COLLAPSED" }
+  | { type: "SET_SIDEBAR_WIDTH"; width: number }
   | { type: "HYDRATE_APP"; persisted: PersistedState; user: UserSession | null; windowId: string; pendingInit?: PendingWindowInit | null }
   | { type: "SYNC_WORKSPACE"; persisted: PersistedState }
   | { type: "RESET_WORKSPACE" }
@@ -286,6 +299,7 @@ function createInitialContext(): AppMachineContext {
     consoleOpen: false,
     responsePanelOpen: true,
     theme: loadThemeMode(),
+    ...loadLayoutPreferences(),
     user: null,
     overviewFilter: defaultOverviewFilter(),
   };
@@ -295,11 +309,24 @@ function getActiveTab(context: AppMachineContext): RequestTabState | undefined {
   return context.tabs.find((tab) => tab.id === context.activeTabId) ?? context.tabs[0];
 }
 
-function getActiveEnvironment(context: AppMachineContext): Environment | null {
+function getWorkspaceEnvironment(context: AppMachineContext): Environment | null {
   return (
     context.persisted.environments.find(
       (env) => env.id === context.persisted.activeEnvironmentId,
     ) ??
+    context.persisted.environments[0] ??
+    null
+  );
+}
+
+function getTabEnvironment(
+  context: AppMachineContext,
+  tab?: RequestTabState,
+): Environment | null {
+  const targetTab = tab ?? getActiveTab(context);
+  const envId = targetTab?.environmentId ?? context.persisted.activeEnvironmentId;
+  return (
+    context.persisted.environments.find((env) => env.id === envId) ??
     context.persisted.environments[0] ??
     null
   );
@@ -370,7 +397,7 @@ export const appMachine = setup({
         tabId: tab.id,
         requestId,
         request: tab.request,
-        environment: getActiveEnvironment(context),
+        environment: getTabEnvironment(context, tab),
       });
     },
     startActiveTabWebSocket: ({ context, self }) => {
@@ -382,7 +409,7 @@ export const appMachine = setup({
       startTabWebSocketConnect(self, {
         tabId: tab.id,
         request: tab.request,
-        environment: getActiveEnvironment(context),
+        environment: getTabEnvironment(context, tab),
       });
     },
   },
@@ -734,6 +761,16 @@ export const appMachine = setup({
             return { persisted };
           }),
         },
+        SET_TAB_ENVIRONMENT: {
+          actions: assign(({ context, event }) => {
+            const tabs = mapActiveTab(context, (tab) => ({
+              ...tab,
+              environmentId: event.environmentId,
+            }));
+            persistLastRequest({ ...context, tabs });
+            return { tabs };
+          }),
+        },
         ADD_ENVIRONMENT: {
           actions: assign(({ context }) => {
             const env = {
@@ -777,8 +814,12 @@ export const appMachine = setup({
                   ? (nextEnvironments[0]?.id ?? null)
                   : context.persisted.activeEnvironmentId,
             };
+            const tabs = context.tabs.map((tab) =>
+              tab.environmentId === event.id ? { ...tab, environmentId: null } : tab,
+            );
             saveSharedWorkspace(context, persisted);
-            return { persisted };
+            persistLastRequest({ ...context, persisted, tabs });
+            return { persisted, tabs };
           }),
         },
         UPDATE_ENVIRONMENT_VARIABLE: {
@@ -852,6 +893,50 @@ export const appMachine = setup({
           actions: assign(({ event }) => {
             saveThemeMode(event.theme);
             return { theme: event.theme };
+          }),
+        },
+        SET_SIDEBAR_POSITION: {
+          actions: assign(({ context, event }) => {
+            const next = { ...context, sidebarPosition: event.position };
+            saveLayoutPreferences({
+              sidebarPosition: next.sidebarPosition,
+              sidebarCollapsed: next.sidebarCollapsed,
+              sidebarWidth: next.sidebarWidth,
+            });
+            return { sidebarPosition: event.position };
+          }),
+        },
+        SET_SIDEBAR_COLLAPSED: {
+          actions: assign(({ context, event }) => {
+            const next = { ...context, sidebarCollapsed: event.collapsed };
+            saveLayoutPreferences({
+              sidebarPosition: next.sidebarPosition,
+              sidebarCollapsed: next.sidebarCollapsed,
+              sidebarWidth: next.sidebarWidth,
+            });
+            return { sidebarCollapsed: event.collapsed };
+          }),
+        },
+        TOGGLE_SIDEBAR_COLLAPSED: {
+          actions: assign(({ context }) => {
+            const sidebarCollapsed = !context.sidebarCollapsed;
+            saveLayoutPreferences({
+              sidebarPosition: context.sidebarPosition,
+              sidebarCollapsed,
+              sidebarWidth: context.sidebarWidth,
+            });
+            return { sidebarCollapsed };
+          }),
+        },
+        SET_SIDEBAR_WIDTH: {
+          actions: assign(({ context, event }) => {
+            const sidebarWidth = event.width;
+            saveLayoutPreferences({
+              sidebarPosition: context.sidebarPosition,
+              sidebarCollapsed: context.sidebarCollapsed,
+              sidebarWidth,
+            });
+            return { sidebarWidth };
           }),
         },
         HYDRATE_APP: {
@@ -1235,6 +1320,10 @@ export function selectActiveTab(context: AppMachineContext): RequestTabState | u
   return getActiveTab(context);
 }
 
+export function selectWorkspaceEnvironment(context: AppMachineContext): Environment | null {
+  return getWorkspaceEnvironment(context);
+}
+
 export function selectActiveEnvironment(context: AppMachineContext): Environment | null {
-  return getActiveEnvironment(context);
+  return getTabEnvironment(context);
 }

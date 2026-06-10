@@ -16,7 +16,11 @@ import type { TestRunResult } from "@/types";
 import { exportCollectionJson, exportEnvironmentsJson } from "@/lib/storage";
 import type { ThemeMode } from "@/lib/theme";
 import { AppMachineContext } from "@/machines/AppProvider";
-import { selectActiveEnvironment, selectActiveTab } from "@/machines/appMachine";
+import {
+  selectActiveEnvironment,
+  selectActiveTab,
+  selectWorkspaceEnvironment,
+} from "@/machines/appMachine";
 
 export function useApp() {
   const actorRef = AppMachineContext.useActorRef();
@@ -24,6 +28,7 @@ export function useApp() {
   const context = snapshot.context;
   const activeTab = selectActiveTab(context);
   const activeEnvironment = selectActiveEnvironment(context);
+  const workspaceEnvironment = selectWorkspaceEnvironment(context);
 
   const send = useCallback((event: Parameters<typeof actorRef.send>[0]) => {
     actorRef.send(event);
@@ -44,6 +49,9 @@ export function useApp() {
     consoleOpen: context.consoleOpen,
     responsePanelOpen: context.responsePanelOpen,
     theme: context.theme,
+    sidebarPosition: context.sidebarPosition,
+    sidebarCollapsed: context.sidebarCollapsed,
+    sidebarWidth: context.sidebarWidth,
     user: context.user,
     overviewFilter: context.overviewFilter,
     collectionGroups: context.persisted.collectionGroups,
@@ -52,6 +60,8 @@ export function useApp() {
     environments: context.persisted.environments,
     activeEnvironmentId: context.persisted.activeEnvironmentId,
     activeEnvironment,
+    workspaceEnvironment,
+    tabEnvironmentOverrideId: activeTab?.environmentId ?? null,
     history: context.persisted.history,
 
     ws: (activeTab?.ws ?? defaultWebSocketSession()) as WebSocketSession,
@@ -65,6 +75,12 @@ export function useApp() {
       send({ type: "SET_OVERVIEW_FILTER", patch }),
     resetOverviewFilter: () => send({ type: "RESET_OVERVIEW_FILTER" }),
     setTheme: (theme: ThemeMode) => send({ type: "SET_THEME", theme }),
+    setSidebarPosition: (position: "left" | "right") =>
+      send({ type: "SET_SIDEBAR_POSITION", position }),
+    setSidebarCollapsed: (collapsed: boolean) =>
+      send({ type: "SET_SIDEBAR_COLLAPSED", collapsed }),
+    toggleSidebarCollapsed: () => send({ type: "TOGGLE_SIDEBAR_COLLAPSED" }),
+    setSidebarWidth: (width: number) => send({ type: "SET_SIDEBAR_WIDTH", width }),
     signIn: (user: UserSession) => send({ type: "SIGN_IN", user }),
     signOut: () => send({ type: "SIGN_OUT" }),
     setTestResults: (results: TestRunResult | null) =>
@@ -107,6 +123,8 @@ export function useApp() {
     moveSavedRequest: (id: string, collectionId: string, folder?: string) =>
       send({ type: "MOVE_SAVED_REQUEST", id, collectionId, folder }),
     setActiveEnvironmentId: (id: string | null) => send({ type: "SET_ACTIVE_ENVIRONMENT", id }),
+    setTabEnvironmentOverrideId: (environmentId: string | null) =>
+      send({ type: "SET_TAB_ENVIRONMENT", environmentId }),
     addEnvironment: () => send({ type: "ADD_ENVIRONMENT" }),
     updateEnvironment: (id: string, patch: Partial<Environment>) =>
       send({ type: "UPDATE_ENVIRONMENT", id, patch }),

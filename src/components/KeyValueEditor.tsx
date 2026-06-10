@@ -1,5 +1,6 @@
 import type { KeyValue } from "@/types";
 import { Trash2 } from "lucide-react";
+import { TooltipIconButton } from "@/components/TooltipIconButton";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -65,9 +66,15 @@ export function KeyValueEditor({
             placeholder={valuePlaceholder}
             onChange={(event) => updateRow(row.id, { value: event.target.value })}
           />
-          <Button type="button" variant="ghost" size="icon" className="size-8" onClick={() => removeRow(row.id)}>
+          <TooltipIconButton
+            variant="ghost"
+            size="icon"
+            className="size-8"
+            label="Remove row"
+            onClick={() => removeRow(row.id)}
+          >
             <Trash2 className="size-4" />
-          </Button>
+          </TooltipIconButton>
         </div>
       ))}
       <Button type="button" variant="link" className="h-auto px-1" onClick={addRow}>

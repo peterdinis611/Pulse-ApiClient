@@ -40,6 +40,8 @@ export type WebSocketSession = {
 export type RequestTabState = {
   id: string;
   request: ApiRequest;
+  /** When set, this tab uses the environment instead of the workspace default. */
+  environmentId?: string | null;
   response: HttpResponse | null;
   error: string | null;
   loading: boolean;

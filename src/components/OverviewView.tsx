@@ -13,6 +13,7 @@ import {
   ActiveOverviewFilters,
   OverviewFilterMenu,
 } from "@/components/OverviewFilterMenu";
+import { TooltipIconButton } from "@/components/TooltipIconButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollAreaWithTop } from "@/components/ui/scroll-area-with-top";
@@ -88,8 +89,8 @@ export function OverviewView() {
 
   return (
     <ScrollAreaWithTop className="h-full min-h-0" resetKey="overview">
-      <div className="mx-auto max-w-5xl space-y-6 p-8">
-        <div>
+      <div className="mx-auto max-w-5xl space-y-6 p-6 md:p-8">
+        <div className="rounded-2xl border border-border/70 bg-card/80 p-6 shadow-sm backdrop-blur-sm">
           <h1 className="text-2xl font-semibold tracking-tight">
             Welcome back, {(user?.name ?? "there").split(" ")[0]}
           </h1>
@@ -129,8 +130,8 @@ export function OverviewView() {
           )}
         </div>
 
-        <div className="overflow-hidden rounded-lg border border-border bg-card">
-          <div className="grid grid-cols-[1fr_120px_160px_40px] gap-4 border-b border-border bg-muted/40 px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
+          <div className="grid grid-cols-[1fr_120px_160px_40px] gap-4 border-b border-border/80 bg-muted/30 px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             <span>Name</span>
             <span>Method</span>
             <span>Details</span>
@@ -165,9 +166,14 @@ export function OverviewView() {
                     <Clock3 className="size-3.5" />
                     {item.meta}
                   </button>
-                  <Button type="button" variant="ghost" size="icon" className="size-8">
+                  <TooltipIconButton
+                    variant="ghost"
+                    size="icon"
+                    className="size-8"
+                    label="More actions"
+                  >
                     <MoreHorizontal className="size-4" />
-                  </Button>
+                  </TooltipIconButton>
                 </div>
                 {index < recentItems.length - 1 && <Separator />}
               </div>
@@ -176,15 +182,15 @@ export function OverviewView() {
         </div>
 
         <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-lg border border-border bg-card p-4">
+          <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Collections</p>
             <p className="mt-2 text-2xl font-semibold">{collectionGroups.length}</p>
           </div>
-          <div className="rounded-lg border border-border bg-card p-4">
+          <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">History</p>
             <p className="mt-2 text-2xl font-semibold">{history.length}</p>
           </div>
-          <div className="rounded-lg border border-border bg-card p-4">
+          <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Open tabs</p>
             <p className="mt-2 text-2xl font-semibold">{tabs.length}</p>
           </div>

@@ -9,6 +9,8 @@ import {
   History,
   Monitor,
   Moon,
+  PanelLeft,
+  PanelRight,
   Sun,
   Trash2,
   Upload,
@@ -31,6 +33,7 @@ import { toast } from "@/lib/toast";
 import { requestsForCollection } from "@/lib/collections";
 import type { ThemeMode } from "@/lib/theme";
 import { emitWorkspaceReset } from "@/lib/workspace-sync";
+import { TooltipIconButton } from "@/components/TooltipIconButton";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -124,6 +127,10 @@ export function SettingsView() {
   const {
     theme,
     setTheme,
+    sidebarPosition,
+    sidebarCollapsed,
+    setSidebarPosition,
+    setSidebarCollapsed,
     mainView,
     windowId,
     collectionGroups,
@@ -556,6 +563,55 @@ export function SettingsView() {
         </SettingsSection>
 
         <SettingsSection
+          icon={PanelLeft}
+          title="Layout"
+          description="Sidebar position, width, and collapse behavior."
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setSidebarPosition("left")}
+              className={cn(
+                "rounded-lg border p-4 text-left transition-colors",
+                sidebarPosition === "left"
+                  ? "border-primary bg-primary/5 ring-1 ring-primary/20"
+                  : "border-border hover:border-primary/30 hover:bg-muted/30",
+              )}
+            >
+              <PanelLeft className="size-4 text-primary" />
+              <p className="mt-3 text-sm font-medium">Sidebar on left</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">Default explorer layout</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSidebarPosition("right")}
+              className={cn(
+                "rounded-lg border p-4 text-left transition-colors",
+                sidebarPosition === "right"
+                  ? "border-primary bg-primary/5 ring-1 ring-primary/20"
+                  : "border-border hover:border-primary/30 hover:bg-muted/30",
+              )}
+            >
+              <PanelRight className="size-4 text-primary" />
+              <p className="mt-3 text-sm font-medium">Sidebar on right</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">More room for request editor</p>
+            </button>
+          </div>
+          <label className="flex items-center gap-3 rounded-lg border border-border/70 p-4 text-sm">
+            <Checkbox
+              checked={sidebarCollapsed}
+              onCheckedChange={(checked) => setSidebarCollapsed(checked === true)}
+            />
+            <div>
+              <p className="font-medium">Start with collapsed sidebar</p>
+              <p className="text-xs text-muted-foreground">
+                Show icon rail only. Toggle anytime with ⌘B or the layout menu.
+              </p>
+            </div>
+          </label>
+        </SettingsSection>
+
+        <SettingsSection
           icon={Cookie}
           title="Cookie jar"
           description="Cookies received from HTTP responses are stored automatically and sent on matching requests."
@@ -713,16 +769,16 @@ export function SettingsView() {
                       }
                     }}
                   />
-                  <Button
-                    type="button"
+                  <TooltipIconButton
                     variant="ghost"
                     size="icon"
                     className="size-8 text-destructive"
+                    label="Delete collection"
                     disabled={collectionGroups.length === 1}
                     onClick={() => deleteCollectionGroup(group.id)}
                   >
                     <Trash2 className="size-4" />
-                  </Button>
+                  </TooltipIconButton>
                 </div>
               );
             })}
@@ -784,15 +840,15 @@ export function SettingsView() {
                     className="flex items-center justify-between rounded-lg border border-border px-3 py-2"
                   >
                     <span className="text-sm">{folder}</span>
-                    <Button
-                      type="button"
+                    <TooltipIconButton
                       variant="ghost"
                       size="icon"
                       className="size-8 text-destructive"
+                      label="Delete folder"
                       onClick={() => deleteFolder(activeCollection.id, folder)}
                     >
                       <Trash2 className="size-4" />
-                    </Button>
+                    </TooltipIconButton>
                   </div>
                 ))
               )}

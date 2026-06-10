@@ -11,6 +11,7 @@ import {
   type AppWindowInfo,
 } from "@/lib/window-manager";
 import { toast } from "@/lib/toast";
+import { TooltipWrap } from "@/components/TooltipIconButton";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -72,16 +73,17 @@ export function WindowMenu() {
 
   return (
     <DropdownMenu onOpenChange={(open) => open && void refresh()}>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          className="h-8 gap-1.5 px-2 text-topbar-foreground hover:bg-topbar-border hover:text-topbar-foreground"
-          title="Windows"
-        >
-          <AppWindow className="size-4" />
-          Windows
-        </Button>
-      </DropdownMenuTrigger>
+      <TooltipWrap label="Manage windows">
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            className="h-8 gap-1.5 px-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <AppWindow className="size-4" />
+            Windows
+          </Button>
+        </DropdownMenuTrigger>
+      </TooltipWrap>
       <DropdownMenuContent align="start" className="w-72">
         <DropdownMenuLabel>Open windows</DropdownMenuLabel>
         {windows.length === 0 ? (

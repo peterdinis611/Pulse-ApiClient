@@ -1,6 +1,6 @@
 import { useState, type ComponentPropsWithoutRef } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { TooltipIconButton } from "@/components/TooltipIconButton";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -16,17 +16,16 @@ export function PasswordInput({ className, ...props }: PasswordInputProps) {
         type={visible ? "text" : "password"}
         className={cn("pr-10", className)}
       />
-      <Button
-        type="button"
+      <TooltipIconButton
         variant="ghost"
         size="icon"
         className="absolute right-0 top-0 size-9 text-muted-foreground hover:text-foreground"
+        label={visible ? "Hide password" : "Show password"}
         onClick={() => setVisible((current) => !current)}
-        aria-label={visible ? "Hide password" : "Show password"}
         tabIndex={-1}
       >
         {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-      </Button>
+      </TooltipIconButton>
     </div>
   );
 }

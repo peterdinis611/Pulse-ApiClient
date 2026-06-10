@@ -10,6 +10,7 @@ import {
   History,
   LayoutGrid,
   LoaderCircle,
+  PanelLeftOpen,
   Play,
   Plus,
   Search,
@@ -26,18 +27,12 @@ import { toast } from "@/lib/toast";
 import type { FolderTreeNode } from "@/lib/collections";
 import { CollectionRunResultsPanel } from "@/components/CollectionRunResultsPanel";
 import { MethodBadge } from "@/components/MethodBadge";
+import { TooltipIconButton, TooltipWrap } from "@/components/TooltipIconButton";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { EnvironmentSwitcher } from "@/components/EnvironmentSwitcher";
 import { ScrollAreaWithTop } from "@/components/ui/scroll-area-with-top";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import {
   DropdownMenu,
@@ -48,7 +43,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import type { HistoryEntry, SavedRequest } from "@/types";
+import type { HistoryEntry, MainView, SavedRequest } from "@/types";
 
 export function Sidebar() {
   const {
@@ -61,16 +56,20 @@ export function Sidebar() {
     history,
     environments,
     activeEnvironmentId,
+    workspaceEnvironment,
     setActiveEnvironmentId,
     loadSavedRequest,
     deleteSavedRequest,
     duplicateSavedRequest,
     moveSavedRequest,
     loadHistoryEntry,
+    clearHistory,
     exportCollections,
     importCollections,
     addEnvironment,
     activeEnvironment,
+    sidebarCollapsed,
+    toggleSidebarCollapsed,
   } = useApp();
 
   const importRef = useRef<HTMLInputElement>(null);
@@ -167,36 +166,52 @@ export function Sidebar() {
     }
   };
 
+  if (sidebarCollapsed) {
+    return (
+      <SidebarRail
+        mainView={mainView}
+        setMainView={setMainView}
+        onExpand={toggleSidebarCollapsed}
+      />
+    );
+  }
+
   return (
-    <aside className="flex min-h-0 w-[280px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
-      <div className="space-y-3 border-b border-sidebar-border p-3">
-        <div className="space-y-2">
-          <Label htmlFor="sidebar-env" className="text-xs text-muted-foreground">
-            Environment
-          </Label>
-          <Select
-            value={activeEnvironmentId ?? undefined}
-            onValueChange={(value) => setActiveEnvironmentId(value)}
+    <aside className="flex min-h-0 flex-1 flex-col">
+      <div className="space-y-3 border-b border-sidebar-border/80 bg-sidebar/80 p-3 backdrop-blur-sm">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Explorer
+          </p>
+          <TooltipIconButton
+            variant="ghost"
+            size="icon"
+            className="size-7 text-muted-foreground"
+            label="Collapse sidebar (⌘B)"
+            onClick={toggleSidebarCollapsed}
           >
-            <SelectTrigger id="sidebar-env" className="h-9 bg-background">
-              <SelectValue placeholder="Select environment" />
-            </SelectTrigger>
-            <SelectContent>
-              {environments.map((env) => (
-                <SelectItem key={env.id} value={env.id}>
-                  {env.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <PanelLeftOpen className="size-4" />
+          </TooltipIconButton>
         </div>
+        <EnvironmentSwitcher
+          mode="workspace"
+          environments={environments}
+          workspaceEnvironmentId={activeEnvironmentId}
+          workspaceEnvironment={workspaceEnvironment}
+          requestEnvironment={activeEnvironment}
+          onSetWorkspace={setActiveEnvironmentId}
+          onAddEnvironment={addEnvironment}
+          onManageEnvironments={() => setMainView("environments")}
+          compact
+          className="w-full max-w-none"
+        />
 
         <div className="relative">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={sidebarSearch}
             onChange={(event) => setSidebarSearch(event.target.value)}
-            className="h-9 bg-background pl-9 pr-12"
+            className="h-9 border-sidebar-border/80 bg-background/80 pl-9 pr-12"
             placeholder="Fuzzy search collections & history"
           />
           <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
@@ -244,22 +259,20 @@ export function Sidebar() {
                 </button>
               </CollapsibleTrigger>
               <div className="flex items-center gap-0.5">
-                <Button
-                  type="button"
+                <TooltipIconButton
                   variant="ghost"
                   size="icon"
                   className="size-7"
-                  title="Import collection"
+                  label="Import collection"
                   onClick={() => importRef.current?.click()}
                 >
                   <Upload className="size-3.5" />
-                </Button>
-                <Button
-                  type="button"
+                </TooltipIconButton>
+                <TooltipIconButton
                   variant="ghost"
                   size="icon"
                   className="size-7"
-                  title="Export collections"
+                  label="Export collections"
                   onClick={() => {
                     const blob = new Blob([exportCollections()], { type: "application/json" });
                     const url = URL.createObjectURL(blob);
@@ -271,7 +284,7 @@ export function Sidebar() {
                   }}
                 >
                   <Download className="size-3.5" />
-                </Button>
+                </TooltipIconButton>
               </div>
               <input
                 ref={importRef}
@@ -315,12 +328,11 @@ export function Sidebar() {
                           <span className="text-xs text-muted-foreground">{items.length}</span>
                         </button>
                       </CollapsibleTrigger>
-                      <Button
-                        type="button"
+                      <TooltipIconButton
                         variant="ghost"
                         size="icon"
                         className="size-7 shrink-0"
-                        title="Run collection"
+                        label="Run collection"
                         disabled={items.length === 0 || runningCollectionId !== null}
                         onClick={() => void handleRunCollection(group.id, group.name)}
                       >
@@ -329,7 +341,7 @@ export function Sidebar() {
                         ) : (
                           <Play className="size-3.5" />
                         )}
-                      </Button>
+                      </TooltipIconButton>
                     </div>
                     <CollapsibleContent className="space-y-0.5 pl-2">
                       {grouped.folders.map((folder) => (
@@ -369,20 +381,40 @@ export function Sidebar() {
           </Collapsible>
 
           <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
-            <CollapsibleTrigger asChild>
-              <button
-                type="button"
-                className="flex w-full items-center gap-1 px-2 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+            <div className="flex items-center justify-between pr-1">
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-center gap-1 px-2 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                >
+                  {historyOpen ? (
+                    <ChevronDown className="size-3.5 shrink-0" />
+                  ) : (
+                    <ChevronRight className="size-3.5 shrink-0" />
+                  )}
+                  <History className="size-3.5 shrink-0" />
+                  <span>History</span>
+                  {history.length > 0 && (
+                    <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium normal-case tracking-normal text-muted-foreground">
+                      {history.length}
+                    </span>
+                  )}
+                </button>
+              </CollapsibleTrigger>
+              <TooltipIconButton
+                variant="ghost"
+                size="icon"
+                className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
+                label="Clear history"
+                disabled={history.length === 0}
+                onClick={() => {
+                  clearHistory();
+                  toast.success("History cleared");
+                }}
               >
-                {historyOpen ? (
-                  <ChevronDown className="size-3.5" />
-                ) : (
-                  <ChevronRight className="size-3.5" />
-                )}
-                <History className="size-3.5" />
-                History
-              </button>
-            </CollapsibleTrigger>
+                <Trash2 className="size-3.5" />
+              </TooltipIconButton>
+            </div>
             <CollapsibleContent className="space-y-0.5">
               {filteredHistory.map((entry) => (
                 <button
@@ -503,6 +535,55 @@ function FolderBranch({
   );
 }
 
+function SidebarRail({
+  mainView,
+  setMainView,
+  onExpand,
+}: {
+  mainView: MainView;
+  setMainView: (view: MainView) => void;
+  onExpand: () => void;
+}) {
+  const items = [
+    { view: "overview" as const, icon: LayoutGrid, label: "Overview" },
+    { view: "environments" as const, icon: Globe2, label: "Environments" },
+    { view: "settings" as const, icon: Settings, label: "Settings" },
+  ];
+
+  return (
+    <aside className="flex min-h-0 flex-1 flex-col items-center py-3">
+      <div className="flex flex-col items-center gap-1">
+        {items.map(({ view, icon: Icon, label }) => (
+          <TooltipWrap key={view} label={label}>
+            <button
+              type="button"
+              aria-label={label}
+              onClick={() => setMainView(view)}
+              className={cn(
+                "flex size-9 items-center justify-center rounded-lg transition-colors",
+                mainView === view
+                  ? "bg-primary/15 text-primary"
+                  : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
+              )}
+            >
+              <Icon className="size-4" />
+            </button>
+          </TooltipWrap>
+        ))}
+      </div>
+      <TooltipIconButton
+        variant="ghost"
+        size="icon"
+        className="mt-auto size-9 text-muted-foreground"
+        label="Expand sidebar (⌘B)"
+        onClick={onExpand}
+      >
+        <PanelLeftOpen className="size-4" />
+      </TooltipIconButton>
+    </aside>
+  );
+}
+
 function SidebarNavItem({
   active,
   icon: Icon,
@@ -519,13 +600,13 @@ function SidebarNavItem({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+        "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
         active
-          ? "bg-sidebar-accent text-sidebar-accent-foreground"
-          : "text-foreground hover:bg-muted",
+          ? "bg-primary/10 font-medium text-primary"
+          : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
       )}
     >
-      <Icon className="size-4" />
+      <Icon className="size-4 shrink-0" />
       {label}
     </button>
   );
@@ -557,17 +638,20 @@ function CollectionItem({
         <span className="truncate text-sm">{item.name}</span>
       </button>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-7 opacity-0 group-hover:opacity-100"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <FolderInput className="size-3.5" />
-          </Button>
-        </DropdownMenuTrigger>
+        <TooltipWrap label="Move to folder">
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-7 opacity-0 group-hover:opacity-100"
+              aria-label="Move to folder"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <FolderInput className="size-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipWrap>
         <DropdownMenuContent align="end" className="w-48">
           <DropdownMenuLabel>Move to folder</DropdownMenuLabel>
           <DropdownMenuItem onClick={() => onMove(undefined)}>No folder</DropdownMenuItem>
@@ -579,30 +663,30 @@ function CollectionItem({
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
-      <Button
-        type="button"
+      <TooltipIconButton
         variant="ghost"
         size="icon"
         className="size-7 opacity-0 group-hover:opacity-100"
+        label="Duplicate request"
         onClick={(event) => {
           event.stopPropagation();
           onDuplicate();
         }}
       >
         <Copy className="size-3.5" />
-      </Button>
-      <Button
-        type="button"
+      </TooltipIconButton>
+      <TooltipIconButton
         variant="ghost"
         size="icon"
         className="size-7 text-destructive opacity-0 group-hover:opacity-100"
+        label="Delete request"
         onClick={(event) => {
           event.stopPropagation();
           onDelete();
         }}
       >
         <Trash2 className="size-3.5" />
-      </Button>
+      </TooltipIconButton>
     </div>
   );
 }

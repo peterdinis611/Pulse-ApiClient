@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area";
 import { ArrowUp } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { TooltipIconButton } from "@/components/TooltipIconButton";
 import { ScrollBar } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
@@ -61,19 +61,18 @@ export const ScrollAreaWithTop = React.forwardRef<
         <ScrollBar />
         <ScrollAreaPrimitive.Corner />
         {showTopButton && showButton && (
-          <Button
-            type="button"
+          <TooltipIconButton
             size="icon"
             variant="secondary"
             className={cn(
               "absolute bottom-4 right-4 z-10 size-8 rounded-full shadow-md",
               topButtonClassName,
             )}
+            label="Scroll to top"
             onClick={scrollToTop}
-            title="Scroll to top"
           >
             <ArrowUp className="size-4" />
-          </Button>
+          </TooltipIconButton>
         )}
       </ScrollAreaPrimitive.Root>
     );

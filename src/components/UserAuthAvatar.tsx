@@ -1,5 +1,6 @@
 import { LogOut } from "lucide-react";
 import { useApp } from "@/machines";
+import { TooltipWrap } from "@/components/TooltipIconButton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -26,20 +27,22 @@ export function UserAuthAvatar({ size = "sm", showLabel = false, className }: Us
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className={cn("inline-flex items-center gap-2 rounded-full outline-none", className)}
-          title={user.name}
-        >
-          <Avatar className={avatarSize}>
-            <AvatarFallback className={cn("bg-primary text-primary-foreground", textSize)}>
-              {user.initials}
-            </AvatarFallback>
-          </Avatar>
-          {showLabel && <span className="text-sm font-medium text-foreground">{user.name}</span>}
-        </button>
-      </DropdownMenuTrigger>
+      <TooltipWrap label={`Account · ${user.name}`}>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className={cn("inline-flex items-center gap-2 rounded-full outline-none", className)}
+            aria-label={`Account menu for ${user.name}`}
+          >
+            <Avatar className={avatarSize}>
+              <AvatarFallback className={cn("bg-primary text-primary-foreground", textSize)}>
+                {user.initials}
+              </AvatarFallback>
+            </Avatar>
+            {showLabel && <span className="text-sm font-medium text-foreground">{user.name}</span>}
+          </button>
+        </DropdownMenuTrigger>
+      </TooltipWrap>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col gap-1">

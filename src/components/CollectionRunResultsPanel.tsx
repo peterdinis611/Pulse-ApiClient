@@ -3,7 +3,7 @@ import type { CollectionRunResult } from "@/lib/collection-runner";
 import { MethodBadge } from "@/components/MethodBadge";
 import { TestResultsList } from "@/components/TestResultsList";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { TooltipIconButton } from "@/components/TooltipIconButton";
 import { ScrollAreaWithTop } from "@/components/ui/scroll-area-with-top";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -43,9 +43,9 @@ export function CollectionRunResultsPanel({ result, onClose }: CollectionRunResu
             ) : (
               <Badge variant="outline">{result.steps.length} requests</Badge>
             )}
-            <Button type="button" variant="ghost" size="icon" onClick={onClose}>
+            <TooltipIconButton variant="ghost" size="icon" label="Close results" onClick={onClose}>
               <X className="size-4" />
-            </Button>
+            </TooltipIconButton>
           </div>
         </div>
 

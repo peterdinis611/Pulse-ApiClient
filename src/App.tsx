@@ -4,6 +4,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { LoadingScreen } from "./components/LoadingScreen";
 import { ThemeSync } from "./components/ThemeSync";
 import { Toaster } from "./components/ui/sonner";
+import { TooltipProvider } from "./components/ui/tooltip";
 
 const AuthPage = lazy(() =>
   import("./components/AuthPage").then((module) => ({ default: module.AuthPage })),
@@ -26,9 +27,11 @@ function App() {
   return (
     <ErrorBoundary>
       <AppProvider>
-        <ThemeSync />
-        <Toaster position="top-right" />
-        <AppContent />
+        <TooltipProvider delayDuration={300}>
+          <ThemeSync />
+          <Toaster position="top-right" />
+          <AppContent />
+        </TooltipProvider>
       </AppProvider>
     </ErrorBoundary>
   );

@@ -5,6 +5,7 @@ import { BODY_KINDS } from "@/types";
 import type { BodyKind, MultipartField } from "@/types";
 import { Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { TooltipIconButton } from "@/components/TooltipIconButton";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -299,17 +300,17 @@ export function RequestTabs() {
                           </span>
                         </div>
                       )}
-                      <Button
-                        type="button"
+                      <TooltipIconButton
                         variant="ghost"
                         size="icon"
                         className="size-8"
+                        label="Remove field"
                         onClick={() =>
                           updateMultipart(request.multipart.filter((item) => item.id !== row.id))
                         }
                       >
                         <Trash2 className="size-4" />
-                      </Button>
+                      </TooltipIconButton>
                     </div>
                   ))}
                   <Button type="button" variant="link" className="h-auto px-1" onClick={addMultipartRow}>

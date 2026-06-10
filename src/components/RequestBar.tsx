@@ -7,6 +7,7 @@ import { isWebSocketProtocol } from "@/lib/protocol";
 import { methodTextClass } from "@/lib/method-colors";
 import { cn } from "@/lib/utils";
 import { HTTP_METHODS } from "@/types";
+import { TooltipIconButton } from "@/components/TooltipIconButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { EnvironmentSwitcher } from "@/components/EnvironmentSwitcher";
 import { FolderSelect } from "@/components/FolderSelect";
 import { requestToCurl, curlToRequest } from "@/lib/curl";
 import { toast } from "@/lib/toast";
@@ -45,6 +47,14 @@ export function RequestBar() {
     collectionGroups,
     setActiveCollectionId,
     activeEnvironment,
+    workspaceEnvironment,
+    activeEnvironmentId,
+    tabEnvironmentOverrideId,
+    environments,
+    setActiveEnvironmentId,
+    setTabEnvironmentOverrideId,
+    setMainView,
+    addEnvironment,
   } = useApp();
 
   const [saveFolder, setSaveFolder] = useState<string | undefined>();
@@ -84,11 +94,16 @@ export function RequestBar() {
   }, [canConnect, canSend, connectWebSocket, isWebSocket, sendCurrentRequest]);
 
   return (
-    <div className="space-y-3 border-b border-border bg-background px-4 py-4">
-      <div className="flex items-center gap-2">
-        <Button type="button" variant="outline" size="icon" onClick={newRequestTab}>
+    <div className="space-y-3 border-b border-border/80 bg-card/40 px-4 py-4 backdrop-blur-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <TooltipIconButton
+          variant="outline"
+          size="icon"
+          label="New request tab"
+          onClick={newRequestTab}
+        >
           <Plus />
-        </Button>
+        </TooltipIconButton>
         <Input
           className="h-9 max-w-md border-transparent bg-transparent px-2 font-medium shadow-none focus-visible:ring-0"
           value={request.name}
@@ -116,6 +131,19 @@ export function RequestBar() {
           value={saveFolder}
           onChange={setSaveFolder}
           className="h-9 w-[160px]"
+        />
+        <EnvironmentSwitcher
+          mode="request"
+          environments={environments}
+          workspaceEnvironmentId={activeEnvironmentId}
+          workspaceEnvironment={workspaceEnvironment}
+          requestEnvironment={activeEnvironment}
+          tabOverrideId={tabEnvironmentOverrideId}
+          onSetWorkspace={setActiveEnvironmentId}
+          onSetTabOverride={setTabEnvironmentOverrideId}
+          onAddEnvironment={addEnvironment}
+          onManageEnvironments={() => setMainView("environments")}
+          compact
         />
         <Button
           type="button"
@@ -171,7 +199,7 @@ export function RequestBar() {
         />
       </div>
 
-      <div className="flex overflow-hidden rounded-md border border-input bg-card shadow-sm">
+      <div className="flex overflow-hidden rounded-lg border border-border/80 bg-background shadow-sm ring-1 ring-black/[0.02] dark:ring-white/[0.04]">
         {isWebSocket ? (
           <div className="flex h-11 w-[108px] items-center justify-center border-r bg-muted/30 px-3">
             <Badge variant="secondary" className="font-mono text-[10px] uppercase">

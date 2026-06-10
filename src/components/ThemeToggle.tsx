@@ -1,6 +1,7 @@
 import { Monitor, Moon, Sun } from "lucide-react";
 import { useApp } from "@/machines";
 import type { ThemeMode } from "@/lib/theme";
+import { TooltipWrap } from "@/components/TooltipIconButton";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -22,17 +23,19 @@ export function ThemeToggle() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-8 text-topbar-muted hover:bg-topbar-border hover:text-topbar-foreground"
-          title="Theme"
-        >
-          <Icon className="size-4" />
-        </Button>
-      </DropdownMenuTrigger>
+      <TooltipWrap label="Theme">
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8 text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label="Theme"
+          >
+            <Icon className="size-4" />
+          </Button>
+        </DropdownMenuTrigger>
+      </TooltipWrap>
       <DropdownMenuContent align="end">
         {options.map(({ mode, label, icon: OptionIcon }) => (
           <DropdownMenuItem
