@@ -18,16 +18,16 @@ fn close_missing_connection_returns_false() {
     assert!(!state.close_connection("missing"));
 }
 
-#[test]
-fn close_existing_connection_returns_true() {
+#[tokio::test]
+async fn close_existing_connection_returns_true() {
     let state = WsState::new();
     state.insert("conn-1".to_string(), sample_handle("tab-1"));
     assert!(state.close_connection("conn-1"));
     assert!(!state.close_connection("conn-1"));
 }
 
-#[test]
-fn close_tab_connections_only_closes_matching_tab() {
+#[tokio::test]
+async fn close_tab_connections_only_closes_matching_tab() {
     let state = WsState::new();
     state.insert("conn-a".to_string(), sample_handle("tab-1"));
     state.insert("conn-b".to_string(), sample_handle("tab-1"));
