@@ -3,6 +3,7 @@ import type { ApiRequest, AppSettings, HttpEngineStats, HttpResponse, TestRunRes
 import { substituteVariables } from "./env";
 import type { Environment } from "../types";
 import { buildGraphqlBody } from "./graphql";
+import { normalizeRequest } from "./helpers";
 
 function enabledPairs(items: Array<{ key: string; value: string; enabled: boolean }>) {
   return items
@@ -15,40 +16,41 @@ function enabledPairs(items: Array<{ key: string; value: string; enabled: boolea
 }
 
 export function prepareRequest(request: ApiRequest, environment: Environment | null): ApiRequest {
+  const normalized = normalizeRequest(request);
   const prepared: ApiRequest = {
-    ...request,
-    url: substituteVariables(request.url, environment),
-    headers: request.headers.map((item) => ({
+    ...normalized,
+    url: substituteVariables(normalized.url, environment),
+    headers: normalized.headers.map((item) => ({
       ...item,
       key: substituteVariables(item.key, environment),
       value: substituteVariables(item.value, environment),
     })),
-    query: request.query.map((item) => ({
+    query: normalized.query.map((item) => ({
       ...item,
       key: substituteVariables(item.key, environment),
       value: substituteVariables(item.value, environment),
     })),
-    body: substituteVariables(request.body, environment),
-    graphqlQuery: substituteVariables(request.graphqlQuery, environment),
-    graphqlVariables: substituteVariables(request.graphqlVariables, environment),
-    graphqlOperationName: substituteVariables(request.graphqlOperationName, environment),
-    form: request.form.map((item) => ({
+    body: substituteVariables(normalized.body, environment),
+    graphqlQuery: substituteVariables(normalized.graphqlQuery, environment),
+    graphqlVariables: substituteVariables(normalized.graphqlVariables, environment),
+    graphqlOperationName: substituteVariables(normalized.graphqlOperationName, environment),
+    form: normalized.form.map((item) => ({
       ...item,
       key: substituteVariables(item.key, environment),
       value: substituteVariables(item.value, environment),
     })),
-    multipart: request.multipart.map((item) => ({
+    multipart: normalized.multipart.map((item) => ({
       ...item,
       key: substituteVariables(item.key, environment),
       value: substituteVariables(item.value, environment),
     })),
     auth: {
-      ...request.auth,
-      bearerToken: substituteVariables(request.auth.bearerToken, environment),
-      basicUsername: substituteVariables(request.auth.basicUsername, environment),
-      basicPassword: substituteVariables(request.auth.basicPassword, environment),
-      apiKeyKey: substituteVariables(request.auth.apiKeyKey, environment),
-      apiKeyValue: substituteVariables(request.auth.apiKeyValue, environment),
+      ...normalized.auth,
+      bearerToken: substituteVariables(normalized.auth.bearerToken, environment),
+      basicUsername: substituteVariables(normalized.auth.basicUsername, environment),
+      basicPassword: substituteVariables(normalized.auth.basicPassword, environment),
+      apiKeyKey: substituteVariables(normalized.auth.apiKeyKey, environment),
+      apiKeyValue: substituteVariables(normalized.auth.apiKeyValue, environment),
     },
   };
 
@@ -156,4 +158,20 @@ export async function setHttpSettings(
 
 export async function clearHttpCache(): Promise<number> {
   return invoke<number>("clear_http_cache");
+}
+
+export type StoredCookie = {
+  name: string;
+  value: string;
+  domain?: string | null;
+  path?: string | null;
+  url: string;
+};
+
+export async function getHttpCookies(): Promise<StoredCookie[]> {
+  return invoke<StoredCookie[]>("get_http_cookies");
+}
+
+export async function clearHttpCookies(): Promise<void> {
+  await invoke("clear_http_cookies");
 }

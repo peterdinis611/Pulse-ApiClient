@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { AppWindow, CopyPlus, LayoutGrid, SquareStack } from "lucide-react";
+import { useApp } from "@/machines";
 import {
   createAppWindow,
   focusAppWindow,
   getCurrentWindowLabel,
   listAppWindows,
   openOverviewWindow,
+  openRequestInNewWindow,
   type AppWindowInfo,
 } from "@/lib/window-manager";
 import { toast } from "@/lib/toast";
@@ -20,6 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export function WindowMenu() {
+  const { request } = useApp();
   const [windows, setWindows] = useState<AppWindowInfo[]>([]);
   const [currentLabel, setCurrentLabel] = useState("main");
 
@@ -106,9 +109,15 @@ export function WindowMenu() {
           <LayoutGrid className="size-4" />
           New overview window
         </DropdownMenuItem>
-        <DropdownMenuItem disabled>
+        <DropdownMenuItem
+          onClick={() => {
+            void openRequestInNewWindow(request)
+              .then(() => toast.success("Opened active request in new window"))
+              .catch(() => toast.error("Failed to pop out request"));
+          }}
+        >
           <SquareStack className="size-4" />
-          Pop out a tab from the tab bar
+          Pop out active request
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

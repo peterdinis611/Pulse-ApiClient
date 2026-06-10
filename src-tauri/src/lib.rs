@@ -3,6 +3,7 @@
 mod http_integration;
 
 pub mod cache;
+pub mod cookies;
 pub mod db;
 pub mod engine;
 pub mod http;
@@ -253,8 +254,28 @@ async fn ws_connect(
 }
 
 #[tauri::command]
-async fn ws_send(ws: State<'_, WsState>, connection_id: String, data: String) -> Result<(), String> {
-    websocket::send_message(&ws, &connection_id, data).await
+async fn ws_send(
+    ws: State<'_, WsState>,
+    connection_id: String,
+    data: String,
+    binary: Option<bool>,
+) -> Result<(), String> {
+    websocket::send_message(&ws, &connection_id, data, binary.unwrap_or(false)).await
+}
+
+#[tauri::command]
+async fn ws_ping(ws: State<'_, WsState>, connection_id: String) -> Result<(), String> {
+    websocket::send_ping(&ws, &connection_id).await
+}
+
+#[tauri::command]
+fn get_http_cookies(state: State<'_, HttpState>) -> Vec<cookies::StoredCookie> {
+    state.list_cookies()
+}
+
+#[tauri::command]
+fn clear_http_cookies(state: State<'_, HttpState>) -> Result<(), String> {
+    state.clear_cookies()
 }
 
 #[tauri::command]
@@ -318,7 +339,10 @@ pub fn run() {
             fuzzy_search_documents,
             ws_connect,
             ws_send,
+            ws_ping,
             ws_close,
+            get_http_cookies,
+            clear_http_cookies,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

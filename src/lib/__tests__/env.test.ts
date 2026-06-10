@@ -23,6 +23,10 @@ describe("env", () => {
     expect(substituteVariables("{{disabled}}", environment)).toBe("{{disabled}}");
   });
 
+  it("handles undefined input", () => {
+    expect(substituteVariables(undefined, environment)).toBe("");
+  });
+
   it("lists unresolved variables", () => {
     expect(unresolvedVariables("{{baseUrl}} {{missing}}")).toEqual(["baseUrl", "missing"]);
   });

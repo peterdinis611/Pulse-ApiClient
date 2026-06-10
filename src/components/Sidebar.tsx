@@ -4,6 +4,7 @@ import {
   ChevronRight,
   Copy,
   Download,
+  FolderInput,
   Folder,
   Globe2,
   History,
@@ -18,7 +19,7 @@ import {
 } from "lucide-react";
 import { useApp } from "@/machines";
 import { groupRequestsByFolder, requestsForCollection } from "@/lib/collections";
-import { runCollection, type CollectionRunResult } from "@/lib/collection-runner";
+import { runCollectionParallel, type CollectionRunResult } from "@/lib/collection-runner";
 import { filterHistoryEntries, filterHistoryEntriesAsync, filterSavedRequests, filterSavedRequestsAsync } from "@/lib/filters";
 import { useDebouncedValue } from "@/lib/use-debounced-search";
 import { toast } from "@/lib/toast";
@@ -38,6 +39,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import type { HistoryEntry, SavedRequest } from "@/types";
 
@@ -56,6 +65,7 @@ export function Sidebar() {
     loadSavedRequest,
     deleteSavedRequest,
     duplicateSavedRequest,
+    moveSavedRequest,
     loadHistoryEntry,
     exportCollections,
     importCollections,
@@ -121,7 +131,7 @@ export function Sidebar() {
     setRunProgress(`Running 0/${items.length}`);
 
     try {
-      const result = await runCollection(
+      const result = await runCollectionParallel(
         collectionId,
         collectionName,
         items,
@@ -266,7 +276,7 @@ export function Sidebar() {
               <input
                 ref={importRef}
                 type="file"
-                accept="application/json,.json"
+                accept="application/json,.json,.yaml,.yml"
                 hidden
                 onChange={(event) => {
                   const file = event.target.files?.[0];
@@ -326,18 +336,23 @@ export function Sidebar() {
                         <FolderBranch
                           key={folder.path}
                           folder={folder}
+                          collectionId={group.id}
+                          folders={group.folders}
                           onOpen={loadSavedRequest}
                           onDuplicate={duplicateSavedRequest}
                           onDelete={deleteSavedRequest}
+                          onMove={(id, targetFolder) => moveSavedRequest(id, group.id, targetFolder)}
                         />
                       ))}
                       {grouped.root.map((item) => (
                         <CollectionItem
                           key={item.id}
                           item={item}
+                          folders={group.folders}
                           onOpen={() => loadSavedRequest(item)}
                           onDuplicate={() => duplicateSavedRequest(item.id)}
                           onDelete={() => deleteSavedRequest(item.id)}
+                          onMove={(targetFolder) => moveSavedRequest(item.id, group.id, targetFolder)}
                         />
                       ))}
                       {items.length === 0 && (
@@ -429,14 +444,20 @@ export function Sidebar() {
 
 function FolderBranch({
   folder,
+  collectionId,
+  folders,
   onOpen,
   onDuplicate,
   onDelete,
+  onMove,
 }: {
   folder: FolderTreeNode;
+  collectionId: string;
+  folders: string[];
   onOpen: (item: SavedRequest) => void;
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
+  onMove: (id: string, folder?: string) => void;
 }) {
   const [open, setOpen] = useState(true);
 
@@ -457,18 +478,23 @@ function FolderBranch({
             <CollectionItem
               key={item.id}
               item={item}
+              folders={folders}
               onOpen={() => onOpen(item)}
               onDuplicate={() => onDuplicate(item.id)}
               onDelete={() => onDelete(item.id)}
+              onMove={(targetFolder) => onMove(item.id, targetFolder)}
             />
           ))}
           {folder.children.map((child) => (
             <FolderBranch
               key={child.path}
               folder={child}
+              collectionId={collectionId}
+              folders={folders}
               onOpen={onOpen}
               onDuplicate={onDuplicate}
               onDelete={onDelete}
+              onMove={onMove}
             />
           ))}
         </div>
@@ -507,14 +533,18 @@ function SidebarNavItem({
 
 function CollectionItem({
   item,
+  folders,
   onOpen,
   onDuplicate,
   onDelete,
+  onMove,
 }: {
   item: SavedRequest;
+  folders: string[];
   onOpen: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  onMove: (folder?: string) => void;
 }) {
   return (
     <div className="group flex items-center gap-1 rounded-md pr-1 hover:bg-sidebar-accent">
@@ -526,6 +556,29 @@ function CollectionItem({
         <MethodBadge method={item.request.method} />
         <span className="truncate text-sm">{item.name}</span>
       </button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-7 opacity-0 group-hover:opacity-100"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <FolderInput className="size-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuLabel>Move to folder</DropdownMenuLabel>
+          <DropdownMenuItem onClick={() => onMove(undefined)}>No folder</DropdownMenuItem>
+          {folders.length > 0 && <DropdownMenuSeparator />}
+          {folders.map((folder) => (
+            <DropdownMenuItem key={folder} onClick={() => onMove(folder)}>
+              {folder}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
       <Button
         type="button"
         variant="ghost"

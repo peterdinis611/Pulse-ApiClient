@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
+  Cookie,
   Database,
   Download,
   FolderPlus,
@@ -17,9 +18,12 @@ import { useApp } from "@/machines";
 import { dbGetDatabasePath, dbResetDatabase } from "@/lib/db-client";
 import {
   clearHttpCache,
+  clearHttpCookies,
   getAppSettings,
+  getHttpCookies,
   getHttpEngineStats,
   setHttpSettings,
+  type StoredCookie,
 } from "@/lib/http-client";
 import { canUseTauriIpc } from "@/lib/tauri-runtime";
 import { clearLegacyPersistedState, defaultPersistedState, savePersistedState } from "@/lib/storage";
@@ -135,12 +139,14 @@ export function SettingsView() {
     exportCollections,
     importCollections,
     importPostmanCollection,
+    importOpenApiCollection,
     clearHistory,
     resetWorkspace,
   } = useApp();
 
   const nativeImportRef = useRef<HTMLInputElement>(null);
   const postmanImportRef = useRef<HTMLInputElement>(null);
+  const openApiImportRef = useRef<HTMLInputElement>(null);
   const [newCollectionName, setNewCollectionName] = useState("");
   const [newFolderName, setNewFolderName] = useState("");
   const [httpMaxConcurrent, setHttpMaxConcurrent] = useState("32");
@@ -155,6 +161,8 @@ export function SettingsView() {
   const [confirmResetDb, setConfirmResetDb] = useState(false);
   const [resettingDb, setResettingDb] = useState(false);
   const [clearingCache, setClearingCache] = useState(false);
+  const [cookies, setCookies] = useState<StoredCookie[]>([]);
+  const [clearingCookies, setClearingCookies] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -172,6 +180,9 @@ export function SettingsView() {
           }),
           getHttpEngineStats().then((stats) => {
             if (!cancelled) setEngineStats(stats);
+          }),
+          getHttpCookies().then((items) => {
+            if (!cancelled) setCookies(items);
           }),
         ];
 
@@ -257,12 +268,15 @@ export function SettingsView() {
     }
   };
 
-  const handleImport = async (file: File, kind: "pulse" | "postman") => {
+  const handleImport = async (file: File, kind: "pulse" | "postman" | "openapi") => {
     try {
       const raw = await file.text();
       if (kind === "postman") {
         importPostmanCollection(raw);
         toast.success("Postman collection imported", file.name);
+      } else if (kind === "openapi") {
+        importOpenApiCollection(raw);
+        toast.success("OpenAPI collection imported", file.name);
       } else {
         importCollections(raw);
         toast.success(`${APP_NAME} collection imported`, file.name);
@@ -272,6 +286,19 @@ export function SettingsView() {
         "Import failed",
         error instanceof Error ? error.message : "Could not import file.",
       );
+    }
+  };
+
+  const handleClearCookies = async () => {
+    setClearingCookies(true);
+    try {
+      await clearHttpCookies();
+      setCookies([]);
+      toast.success("Cookie jar cleared");
+    } catch {
+      toast.error("Failed to clear cookies");
+    } finally {
+      setClearingCookies(false);
     }
   };
 
@@ -529,11 +556,51 @@ export function SettingsView() {
         </SettingsSection>
 
         <SettingsSection
+          icon={Cookie}
+          title="Cookie jar"
+          description="Cookies received from HTTP responses are stored automatically and sent on matching requests."
+          action={
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={clearingCookies || cookies.length === 0}
+              onClick={() => void handleClearCookies()}
+            >
+              {clearingCookies ? "Clearing…" : "Clear cookies"}
+            </Button>
+          }
+        >
+          {cookies.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No cookies stored yet. Send a request that returns Set-Cookie headers.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {cookies.map((cookie) => (
+                <div
+                  key={`${cookie.url}-${cookie.name}`}
+                  className="rounded-lg border border-border/70 px-3 py-2 font-mono text-xs"
+                >
+                  <p className="font-semibold text-foreground">{cookie.name}</p>
+                  <p className="mt-1 break-all text-muted-foreground">{cookie.value}</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">{cookie.url}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </SettingsSection>
+
+        <SettingsSection
           icon={FolderPlus}
           title="Collections"
-          description="Organize saved requests and import from Postman."
+          description="Organize saved requests and import from Postman or OpenAPI."
           action={
             <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => openApiImportRef.current?.click()}>
+                <Upload className="size-4" />
+                OpenAPI
+              </Button>
               <Button type="button" variant="outline" size="sm" onClick={() => postmanImportRef.current?.click()}>
                 <Upload className="size-4" />
                 Postman
@@ -563,6 +630,18 @@ export function SettingsView() {
             </div>
           }
         >
+          <input
+            ref={openApiImportRef}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (!file) return;
+              void handleImport(file, "openapi");
+              event.target.value = "";
+            }}
+          />
           <input
             ref={postmanImportRef}
             type="file"

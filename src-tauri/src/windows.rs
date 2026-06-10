@@ -146,6 +146,10 @@ pub fn set_window_title(app: &AppHandle, label: &str, title: &str) -> Result<(),
         .map_err(|error| format!("Failed to set window title: {error}"))
 }
 
+#[cfg(test)]
+#[path = "__tests__/windows_tests.rs"]
+mod windows_tests;
+
 fn uuid_simple() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let nanos = SystemTime::now()

@@ -13,7 +13,7 @@ import type { WebSocketSession } from "@/types";
 import { createRequest } from "@/lib/helpers";
 import type { UserSession } from "@/lib/auth";
 import type { TestRunResult } from "@/types";
-import { exportCollectionJson } from "@/lib/storage";
+import { exportCollectionJson, exportEnvironmentsJson } from "@/lib/storage";
 import type { ThemeMode } from "@/lib/theme";
 import { AppMachineContext } from "@/machines/AppProvider";
 import { selectActiveEnvironment, selectActiveTab } from "@/machines/appMachine";
@@ -77,9 +77,11 @@ export function useApp() {
     sendCurrentRequest: () => send({ type: "SEND" }),
     connectWebSocket: () => send({ type: "WS_CONNECT" }),
     disconnectWebSocket: () => send({ type: "WS_DISCONNECT" }),
-    sendWebSocketMessage: (data: string) => send({ type: "WS_SEND", data }),
+    sendWebSocketMessage: (data: string, binary?: boolean) =>
+      send({ type: "WS_SEND", data, binary }),
+    sendWebSocketPing: () => send({ type: "WS_PING" }),
     cancelCurrentRequest: () => send({ type: "CANCEL_SEND" }),
-    saveCurrentToCollection: () => send({ type: "SAVE_TO_COLLECTION" }),
+    saveCurrentToCollection: (folder?: string) => send({ type: "SAVE_TO_COLLECTION", folder }),
     loadSavedRequest: (saved: SavedRequest) => send({ type: "LOAD_SAVED_REQUEST", saved }),
     deleteSavedRequest: (id: string) => send({ type: "DELETE_SAVED_REQUEST", id }),
     duplicateSavedRequest: (id: string) => send({ type: "DUPLICATE_SAVED_REQUEST", id }),
@@ -90,6 +92,9 @@ export function useApp() {
       }),
     importCollections: (raw: string) => send({ type: "IMPORT_COLLECTIONS", raw }),
     importPostmanCollection: (raw: string) => send({ type: "IMPORT_POSTMAN", raw }),
+    importOpenApiCollection: (raw: string) => send({ type: "IMPORT_OPENAPI", raw }),
+    importEnvironments: (raw: string) => send({ type: "IMPORT_ENVIRONMENTS", raw }),
+    exportEnvironments: () => exportEnvironmentsJson(context.persisted.environments),
     addCollectionGroup: (name: string) => send({ type: "ADD_COLLECTION_GROUP", name }),
     deleteCollectionGroup: (id: string) => send({ type: "DELETE_COLLECTION_GROUP", id }),
     renameCollectionGroup: (id: string, name: string) =>

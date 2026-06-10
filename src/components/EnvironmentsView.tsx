@@ -1,4 +1,5 @@
-import { Trash2 } from "lucide-react";
+import { useRef } from "react";
+import { Download, Trash2, Upload } from "lucide-react";
 import { useApp } from "@/machines";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -24,16 +25,57 @@ export function EnvironmentsView() {
     updateEnvironmentVariable,
     addEnvironmentVariable,
     removeEnvironmentVariable,
+    exportEnvironments,
+    importEnvironments,
   } = useApp();
+
+  const importRef = useRef<HTMLInputElement>(null);
 
   return (
     <ScrollAreaWithTop className="h-full" resetKey="environments">
       <div className="mx-auto max-w-4xl space-y-6 p-8">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Environments</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Manage variables and switch active environment for request substitution.
-          </p>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Environments</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Manage variables and switch active environment for request substitution.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const blob = new Blob([exportEnvironments()], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const anchor = document.createElement("a");
+                anchor.href = url;
+                anchor.download = "pulse-environments.json";
+                anchor.click();
+                URL.revokeObjectURL(url);
+              }}
+            >
+              <Download />
+              Export
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => importRef.current?.click()}>
+              <Upload />
+              Import
+            </Button>
+            <input
+              ref={importRef}
+              type="file"
+              accept="application/json,.json"
+              hidden
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                void file.text().then(importEnvironments);
+                event.target.value = "";
+              }}
+            />
+          </div>
         </div>
 
         <div className="max-w-xs space-y-2">

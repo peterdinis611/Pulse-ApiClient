@@ -38,33 +38,70 @@ export function defaultAuth(): AuthConfig {
   };
 }
 
+function normalizeKeyValues(items: KeyValue[] | undefined, fallback: KeyValue[]): KeyValue[] {
+  if (!items?.length) return fallback;
+  return items.map((item) => ({
+    id: item.id ?? createId("kv"),
+    key: item.key ?? "",
+    value: item.value ?? "",
+    enabled: item.enabled ?? true,
+  }));
+}
+
+function normalizeAuth(partial?: Partial<AuthConfig>): AuthConfig {
+  const base = defaultAuth();
+  return {
+    authType: partial?.authType ?? base.authType,
+    bearerToken: partial?.bearerToken ?? base.bearerToken,
+    basicUsername: partial?.basicUsername ?? base.basicUsername,
+    basicPassword: partial?.basicPassword ?? base.basicPassword,
+    apiKeyKey: partial?.apiKeyKey ?? base.apiKeyKey,
+    apiKeyValue: partial?.apiKeyValue ?? base.apiKeyValue,
+    apiKeyIn: partial?.apiKeyIn ?? base.apiKeyIn,
+  };
+}
+
+export function normalizeRequest(partial?: Partial<ApiRequest>): ApiRequest {
+  return createRequest(partial);
+}
+
 export function createRequest(partial?: Partial<ApiRequest>): ApiRequest {
-  const auth = { ...defaultAuth(), ...partial?.auth };
+  const defaultHeaders = [createKeyValue({ key: "Accept", value: "application/json" })];
 
   return {
     id: partial?.id ?? createId("req"),
     name: partial?.name ?? "Untitled Request",
-    protocol: partial?.protocol ?? inferProtocolFromUrl(partial?.url ?? "https://httpbin.org/get"),
+    protocol:
+      partial?.protocol ?? inferProtocolFromUrl(partial?.url ?? "https://httpbin.org/get"),
     method: partial?.method ?? "GET",
     url: partial?.url ?? "https://httpbin.org/get",
-    headers: partial?.headers ?? [createKeyValue({ key: "Accept", value: "application/json" })],
-    query: partial?.query ?? [createKeyValue()],
+    headers: normalizeKeyValues(partial?.headers, defaultHeaders),
+    query: normalizeKeyValues(partial?.query, [createKeyValue()]),
     bodyKind: partial?.bodyKind ?? "none",
     body: partial?.body ?? '{\n  \n}',
     graphqlQuery: partial?.graphqlQuery ?? defaultGraphqlQuery(),
     graphqlVariables: partial?.graphqlVariables ?? defaultGraphqlVariables(),
     graphqlOperationName: partial?.graphqlOperationName ?? "",
-    form: partial?.form ?? [createKeyValue()],
-    multipart: partial?.multipart ?? [
-      {
-        id: createId("mp"),
-        key: "",
-        value: "",
-        enabled: true,
-        fieldType: "text",
-      },
-    ],
-    auth,
+    form: normalizeKeyValues(partial?.form, [createKeyValue()]),
+    multipart:
+      partial?.multipart?.map((item) => ({
+        id: item.id ?? createId("mp"),
+        key: item.key ?? "",
+        value: item.value ?? "",
+        enabled: item.enabled ?? true,
+        fieldType: item.fieldType ?? "text",
+        fileName: item.fileName,
+        mimeType: item.mimeType,
+      })) ?? [
+        {
+          id: createId("mp"),
+          key: "",
+          value: "",
+          enabled: true,
+          fieldType: "text",
+        },
+      ],
+    auth: normalizeAuth(partial?.auth),
     tests: partial?.tests ?? defaultRequestTests,
   };
 }

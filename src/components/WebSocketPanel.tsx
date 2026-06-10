@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, Plug, Unplug } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Plug, Radio, Unplug } from "lucide-react";
 import { useApp } from "@/machines";
 import { prettyJson } from "@/lib/helpers";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/EmptyState";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ScrollAreaWithTop } from "@/components/ui/scroll-area-with-top";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { WebSocketMessage } from "@/types";
@@ -36,8 +38,10 @@ function statusBadgeClass(status: string): string {
 }
 
 export function WebSocketPanel() {
-  const { ws, connectWebSocket, disconnectWebSocket, sendWebSocketMessage } = useApp();
+  const { ws, connectWebSocket, disconnectWebSocket, sendWebSocketMessage, sendWebSocketPing } =
+    useApp();
   const [draft, setDraft] = useState('{"type":"ping"}');
+  const [sendBinary, setSendBinary] = useState(false);
   const [view, setView] = useState<"messages" | "handshake">("messages");
 
   useEffect(() => {
@@ -161,17 +165,44 @@ export function WebSocketPanel() {
           </ScrollAreaWithTop>
 
           <div className="border-t border-border p-4">
+            <div className="mb-3 flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="ws-binary"
+                  checked={sendBinary}
+                  onCheckedChange={(checked) => setSendBinary(checked === true)}
+                  disabled={ws.status !== "open"}
+                />
+                <Label htmlFor="ws-binary" className="text-sm text-muted-foreground">
+                  Send as base64 binary
+                </Label>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={ws.status !== "open"}
+                onClick={() => sendWebSocketPing()}
+              >
+                <Radio className="size-4" />
+                Ping
+              </Button>
+            </div>
             <div className="flex gap-2">
               <Input
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
-                placeholder='Message payload, e.g. {"type":"ping"}'
+                placeholder={
+                  sendBinary
+                    ? "Base64 payload"
+                    : 'Message payload, e.g. {"type":"ping"}'
+                }
                 className="font-mono text-sm"
                 disabled={ws.status !== "open"}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey && canSend) {
                     event.preventDefault();
-                    sendWebSocketMessage(draft);
+                    sendWebSocketMessage(draft, sendBinary);
                     setDraft("");
                   }
                 }}
@@ -180,7 +211,7 @@ export function WebSocketPanel() {
                 type="button"
                 disabled={!canSend}
                 onClick={() => {
-                  sendWebSocketMessage(draft);
+                  sendWebSocketMessage(draft, sendBinary);
                   setDraft("");
                 }}
               >

@@ -121,6 +121,16 @@ pub async fn connect(
                                 break;
                             }
                         }
+                        Some(WsWriteMessage::Binary(data)) => {
+                            if write.send(Message::Binary(data.into())).await.is_err() {
+                                break;
+                            }
+                        }
+                        Some(WsWriteMessage::Ping) => {
+                            if write.send(Message::Ping(Vec::new().into())).await.is_err() {
+                                break;
+                            }
+                        }
                         Some(WsWriteMessage::Close) | None => {
                             let _ = write.send(Message::Close(None)).await;
                             break;
@@ -211,13 +221,37 @@ pub async fn connect(
     })
 }
 
-pub async fn send_message(state: &WsState, connection_id: &str, data: String) -> Result<(), String> {
+pub async fn send_message(
+    state: &WsState,
+    connection_id: &str,
+    data: String,
+    binary: bool,
+) -> Result<(), String> {
+    let write_tx = state
+        .get_write_tx(connection_id)
+        .ok_or_else(|| "WebSocket connection not found".to_string())?;
+
+    if binary {
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(data.as_bytes())
+            .map_err(|error| format!("Invalid base64 payload: {error}"))?;
+        write_tx
+            .send(WsWriteMessage::Binary(bytes))
+            .map_err(|_| "WebSocket connection is closed".to_string())
+    } else {
+        write_tx
+            .send(WsWriteMessage::Text(data))
+            .map_err(|_| "WebSocket connection is closed".to_string())
+    }
+}
+
+pub async fn send_ping(state: &WsState, connection_id: &str) -> Result<(), String> {
     let write_tx = state
         .get_write_tx(connection_id)
         .ok_or_else(|| "WebSocket connection not found".to_string())?;
 
     write_tx
-        .send(WsWriteMessage::Text(data))
+        .send(WsWriteMessage::Ping)
         .map_err(|_| "WebSocket connection is closed".to_string())
 }
 

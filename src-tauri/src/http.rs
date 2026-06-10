@@ -259,6 +259,15 @@ pub async fn execute_request(
             .insert(cache_key(&payload), response.clone());
     }
 
+    state.record_set_cookies(
+        &payload.url,
+        &response
+            .headers
+            .iter()
+            .map(|header| (header.key.clone(), header.value.clone()))
+            .collect::<Vec<_>>(),
+    );
+
     Ok(HttpResponsePayload {
         request_id: payload.request_id,
         ..response
@@ -320,6 +329,10 @@ pub fn cache_size(state: &HttpState) -> u64 {
     let cache = state.cache();
     cache.memory_len().saturating_add(cache.disk_len())
 }
+
+#[cfg(test)]
+#[path = "__tests__/http_tests.rs"]
+mod http_tests;
 
 async fn perform_request(
     client: &reqwest::Client,

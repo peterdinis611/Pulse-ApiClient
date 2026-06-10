@@ -6,15 +6,20 @@ import type {
   Environment,
   HistoryEntry,
   MainView,
-  RequestProtocol,
   RequestTab,
   RequestTabState,
   SavedRequest,
 } from "../types";
-import { createEnvironment, createRequest, createSavedRequest } from "./helpers";
+import {
+  createEnvironment,
+  createId,
+  createRequest,
+  createSavedRequest,
+  normalizeRequest,
+} from "./helpers";
 import { defaultCollectionGroup } from "./collections";
 import { importPostmanCollection, isPostmanCollection } from "./postman-import";
-import { inferProtocolFromUrl } from "./protocol";
+import { isOpenApiSpec, importOpenApiIntoState } from "./openapi-import";
 import { emitWorkspaceUpdated } from "./workspace-sync";
 
 const STATE_SUFFIX = "v1";
@@ -117,15 +122,26 @@ function migratePersistedState(parsed: Partial<PersistedState>): PersistedState 
   const collections = (parsed.collections ?? []).map((item) => ({
     ...item,
     collectionId: item.collectionId ?? activeCollectionId ?? defaults.activeCollectionId!,
-    request: {
-      ...createRequest(),
-      ...item.request,
-      protocol:
-        (item.request?.protocol as RequestProtocol | undefined) ??
-        inferProtocolFromUrl(item.request?.url ?? ""),
-      tests: item.request?.tests ?? createRequest().tests,
-    },
+    request: normalizeRequest(item.request),
   }));
+
+  const history = (parsed.history ?? defaults.history).map((entry) => ({
+    ...entry,
+    request: normalizeRequest(entry.request),
+  }));
+
+  const windowSessions = Object.fromEntries(
+    Object.entries(parsed.windowSessions ?? defaults.windowSessions).map(([key, session]) => [
+      key,
+      {
+        ...session,
+        tabs: session.tabs.map((tab) => ({
+          ...tab,
+          request: normalizeRequest(tab.request),
+        })),
+      },
+    ]),
+  );
 
   return {
     collectionGroups,
@@ -133,15 +149,9 @@ function migratePersistedState(parsed: Partial<PersistedState>): PersistedState 
     collections,
     environments: parsed.environments?.length ? parsed.environments : defaults.environments,
     activeEnvironmentId: parsed.activeEnvironmentId ?? defaults.activeEnvironmentId,
-    history: parsed.history ?? defaults.history,
-    lastRequest: {
-      ...createRequest(),
-      ...parsed.lastRequest,
-      protocol:
-        (parsed.lastRequest?.protocol as RequestProtocol | undefined) ??
-        inferProtocolFromUrl(parsed.lastRequest?.url ?? ""),
-    },
-    windowSessions: parsed.windowSessions ?? defaults.windowSessions,
+    history,
+    lastRequest: normalizeRequest(parsed.lastRequest),
+    windowSessions,
   };
 }
 
@@ -208,10 +218,79 @@ export function exportCollectionJson(state: Pick<PersistedState, "collectionGrou
   );
 }
 
+export function exportEnvironmentsJson(environments: Environment[]): string {
+  return JSON.stringify({ version: 1, environments }, null, 2);
+}
+
+type PostmanEnvironment = {
+  name?: string;
+  values?: Array<{ key?: string; value?: string; enabled?: boolean }>;
+};
+
+export function importEnvironmentsJson(
+  raw: string,
+  state: PersistedState,
+): Pick<PersistedState, "environments" | "activeEnvironmentId"> {
+  const parsed = JSON.parse(raw) as
+    | { version?: number; environments?: Environment[] }
+    | PostmanEnvironment
+    | PostmanEnvironment[];
+
+  if (Array.isArray(parsed)) {
+    const environments = parsed.map((item) => {
+      const env = createEnvironment(item.name?.trim() || "Imported Environment");
+      env.variables = (item.values ?? []).map((variable) => ({
+        id: createId("var"),
+        key: variable.key ?? "",
+        value: variable.value ?? "",
+        enabled: variable.enabled !== false,
+      }));
+      return env;
+    });
+    return {
+      environments: [...environments, ...state.environments],
+      activeEnvironmentId: environments[0]?.id ?? state.activeEnvironmentId,
+    };
+  }
+
+  if ("values" in parsed && Array.isArray(parsed.values)) {
+    const env = createEnvironment(parsed.name?.trim() || "Imported Environment");
+    env.variables = parsed.values.map((variable) => ({
+      id: createId("var"),
+      key: variable.key ?? "",
+      value: variable.value ?? "",
+      enabled: variable.enabled !== false,
+    }));
+    return {
+      environments: [env, ...state.environments],
+      activeEnvironmentId: env.id,
+    };
+  }
+
+  const pulseExport = parsed as { version?: number; environments?: Environment[] };
+  const environments = (pulseExport.environments ?? []).map((item: Environment) => ({
+    ...item,
+    id: item.id || createId("env"),
+    variables: item.variables.map((variable) => ({
+      ...variable,
+      id: variable.id || createId("var"),
+    })),
+  }));
+
+  return {
+    environments: [...environments, ...state.environments],
+    activeEnvironmentId: environments[0]?.id ?? state.activeEnvironmentId,
+  };
+}
+
 export function importCollectionJson(
   raw: string,
   state: PersistedState,
 ): Pick<PersistedState, "collectionGroups" | "collections" | "activeCollectionId"> {
+  if (isOpenApiSpec(raw)) {
+    return importOpenApiIntoState(raw, state);
+  }
+
   if (isPostmanCollection(raw)) {
     const imported = importPostmanCollection(raw);
     return {

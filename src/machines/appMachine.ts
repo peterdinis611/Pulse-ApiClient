@@ -22,6 +22,7 @@ import {
   createKeyValue,
   createRequest,
   createSavedRequest,
+  normalizeRequest,
 } from "@/lib/helpers";
 import { cancelHttpRequest, sendRequest } from "@/lib/http-client";
 import type { OverviewFilter } from "@/lib/filters";
@@ -35,6 +36,7 @@ import {
   buildWindowSession,
   defaultPersistedState,
   importCollectionJson,
+  importEnvironmentsJson,
   importPostmanIntoState,
   savePersistedState,
   type PersistedState,
@@ -43,12 +45,13 @@ import type { PendingWindowInit } from "@/lib/window-manager";
 import { loadThemeMode, saveThemeMode, type ThemeMode } from "@/lib/theme";
 import { defaultWebSocketSession, inferProtocolFromUrl } from "@/lib/protocol";
 import { toast } from "@/lib/toast";
-import { wsClose, wsConnect, wsSend } from "@/lib/ws-client";
+import { importOpenApiIntoState } from "@/lib/openapi-import";
+import { wsClose, wsConnect, wsPing, wsSend } from "@/lib/ws-client";
 
 export function createTabState(request = createRequest()): RequestTabState {
   return {
     id: createId("tab"),
-    request,
+    request: normalizeRequest(request),
     response: null,
     error: null,
     loading: false,
@@ -134,10 +137,7 @@ function normalizeTabState(tab: RequestTabState): RequestTabState {
   return {
     ...tab,
     ws: tab.ws ?? defaultWebSocketSession(),
-    request: {
-      ...tab.request,
-      protocol: tab.request.protocol ?? inferProtocolFromUrl(tab.request.url),
-    },
+    request: normalizeRequest(tab.request),
   };
 }
 
@@ -214,7 +214,8 @@ export type AppMachineEvent =
     }
   | { type: "WS_CONNECT_FAILED"; tabId: string; error: string }
   | { type: "WS_DISCONNECT"; tabId?: string }
-  | { type: "WS_SEND"; data: string }
+  | { type: "WS_SEND"; data: string; binary?: boolean }
+  | { type: "WS_PING" }
   | {
       type: "WS_MESSAGE_RECEIVED";
       connectionId: string;
@@ -231,12 +232,14 @@ export type AppMachineEvent =
       reason?: string;
     }
   | { type: "WS_ERROR"; connectionId: string; tabId: string; message: string }
-  | { type: "SAVE_TO_COLLECTION" }
+  | { type: "SAVE_TO_COLLECTION"; folder?: string }
   | { type: "LOAD_SAVED_REQUEST"; saved: SavedRequest }
   | { type: "DELETE_SAVED_REQUEST"; id: string }
   | { type: "DUPLICATE_SAVED_REQUEST"; id: string }
   | { type: "IMPORT_COLLECTIONS"; raw: string }
   | { type: "IMPORT_POSTMAN"; raw: string }
+  | { type: "IMPORT_OPENAPI"; raw: string }
+  | { type: "IMPORT_ENVIRONMENTS"; raw: string }
   | { type: "ADD_COLLECTION_GROUP"; name: string }
   | { type: "DELETE_COLLECTION_GROUP"; id: string }
   | { type: "RENAME_COLLECTION_GROUP"; id: string; name: string }
@@ -512,7 +515,7 @@ export const appMachine = setup({
         },
         SAVE_TO_COLLECTION: {
           actions: [
-            assign(({ context }) => {
+            assign(({ context, event }) => {
               const activeTab = getActiveTab(context);
               if (!activeTab) return {};
 
@@ -525,7 +528,7 @@ export const appMachine = setup({
                   ...activeTab.request,
                   name: activeTab.request.name || "Untitled Request",
                 },
-                { collectionId },
+                { collectionId, folder: event.folder },
               );
 
               const persisted = {
@@ -590,6 +593,22 @@ export const appMachine = setup({
         IMPORT_POSTMAN: {
           actions: assign(({ context, event }) => {
             const persisted = importPostmanIntoState(event.raw, context.persisted);
+            saveSharedWorkspace(context, persisted);
+            return { persisted };
+          }),
+        },
+        IMPORT_OPENAPI: {
+          actions: assign(({ context, event }) => {
+            const imported = importOpenApiIntoState(event.raw, context.persisted);
+            const persisted = { ...context.persisted, ...imported };
+            saveSharedWorkspace(context, persisted);
+            return { persisted };
+          }),
+        },
+        IMPORT_ENVIRONMENTS: {
+          actions: assign(({ context, event }) => {
+            const imported = importEnvironmentsJson(event.raw, context.persisted);
+            const persisted = { ...context.persisted, ...imported };
             saveSharedWorkspace(context, persisted);
             return { persisted };
           }),
@@ -1042,19 +1061,26 @@ export const appMachine = setup({
           actions: assign(({ context, event }) => {
             const tab = getActiveTab(context);
             if (!tab?.ws.connectionId || tab.ws.status !== "open") return {};
-            void wsSend(tab.ws.connectionId, event.data);
+            void wsSend(tab.ws.connectionId, event.data, event.binary ?? false);
             return {
               tabs: mapActiveTab(context, (current) =>
                 appendWsMessage(current, {
                   id: createId("ws"),
                   direction: "outgoing",
                   data: event.data,
-                  binary: false,
+                  binary: event.binary ?? false,
                   timestamp: Date.now(),
                 }),
               ),
             };
           }),
+        },
+        WS_PING: {
+          actions: ({ context }) => {
+            const tab = getActiveTab(context);
+            if (!tab?.ws.connectionId || tab.ws.status !== "open") return;
+            void wsPing(tab.ws.connectionId);
+          },
         },
         WS_MESSAGE_RECEIVED: {
           actions: assign(({ context, event }) => ({

@@ -82,8 +82,16 @@ export async function wsConnect(
   });
 }
 
-export async function wsSend(connectionId: string, data: string): Promise<void> {
-  await invoke("ws_send", { connectionId, data });
+export async function wsSend(
+  connectionId: string,
+  data: string,
+  binary = false,
+): Promise<void> {
+  await invoke("ws_send", { connectionId, data, binary });
+}
+
+export async function wsPing(connectionId: string): Promise<void> {
+  await invoke("ws_ping", { connectionId });
 }
 
 export async function wsClose(connectionId: string): Promise<void> {

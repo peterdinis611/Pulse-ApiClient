@@ -2,7 +2,11 @@ import type { Environment } from "../types";
 
 const VARIABLE_PATTERN = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
 
-export function substituteVariables(input: string, environment: Environment | null): string {
+export function substituteVariables(
+  input: string | undefined | null,
+  environment: Environment | null,
+): string {
+  if (input == null || input === "") return "";
   if (!input.includes("{{")) return input;
 
   return input.replace(VARIABLE_PATTERN, (_, name: string) => {
@@ -13,7 +17,8 @@ export function substituteVariables(input: string, environment: Environment | nu
   });
 }
 
-export function unresolvedVariables(input: string): string[] {
+export function unresolvedVariables(input: string | undefined | null): string[] {
+  if (!input) return [];
   const matches = [...input.matchAll(VARIABLE_PATTERN)];
   return matches.map((match) => match[1]);
 }

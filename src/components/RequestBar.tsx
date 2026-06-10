@@ -1,5 +1,5 @@
-import { useEffect, useMemo } from "react";
-import { LoaderCircle, Plug, Plus, Save, Send, Square, Unplug } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Braces, ClipboardCopy, LoaderCircle, Plug, Plus, Save, Send, Square, Terminal, Unplug } from "lucide-react";
 import { useApp } from "@/machines";
 import { getCollectionName } from "@/lib/collections";
 import { validateGraphqlRequest } from "@/lib/graphql";
@@ -18,6 +18,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { FolderSelect } from "@/components/FolderSelect";
+import { requestToCurl, curlToRequest } from "@/lib/curl";
+import { toast } from "@/lib/toast";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export function RequestBar() {
   const {
@@ -30,11 +39,16 @@ export function RequestBar() {
     connectWebSocket,
     disconnectWebSocket,
     saveCurrentToCollection,
+    openRequestTab,
     newRequestTab,
     activeCollectionId,
     collectionGroups,
     setActiveCollectionId,
+    activeEnvironment,
   } = useApp();
+
+  const [saveFolder, setSaveFolder] = useState<string | undefined>();
+  const curlImportRef = useRef<HTMLInputElement>(null);
 
   const isWebSocket = isWebSocketProtocol(request.protocol);
 
@@ -96,10 +110,65 @@ export function RequestBar() {
             ))}
           </SelectContent>
         </Select>
-        <Button type="button" variant="outline" size="sm" onClick={saveCurrentToCollection}>
+        <FolderSelect
+          collectionId={activeCollectionId}
+          collectionGroups={collectionGroups}
+          value={saveFolder}
+          onChange={setSaveFolder}
+          className="h-9 w-[160px]"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => saveCurrentToCollection(saveFolder)}
+        >
           <Save />
           Save to {getCollectionName(collectionGroups, activeCollectionId ?? "")}
         </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" variant="outline" size="sm">
+              <Terminal />
+              cURL
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={async () => {
+                const command = requestToCurl(request, activeEnvironment);
+                await navigator.clipboard.writeText(command);
+                toast.success("cURL copied to clipboard");
+              }}
+            >
+              <ClipboardCopy className="size-4" />
+              Copy as cURL
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => curlImportRef.current?.click()}>
+              <Braces className="size-4" />
+              Import from cURL
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <input
+          ref={curlImportRef}
+          type="file"
+          accept=".txt,.sh,text/plain"
+          hidden
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (!file) return;
+            void file.text().then((raw) => {
+              try {
+                openRequestTab(curlToRequest(raw));
+                toast.success("Imported request from cURL");
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : "Invalid cURL command");
+              }
+            });
+            event.target.value = "";
+          }}
+        />
       </div>
 
       <div className="flex overflow-hidden rounded-md border border-input bg-card shadow-sm">

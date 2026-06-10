@@ -8,6 +8,8 @@ use tokio_util::sync::CancellationToken;
 #[derive(Debug)]
 pub enum WsWriteMessage {
     Text(String),
+    Binary(Vec<u8>),
+    Ping,
     Close,
 }
 
@@ -78,6 +80,10 @@ impl WsState {
             .sum()
     }
 }
+
+#[cfg(test)]
+#[path = "__tests__/ws_state_tests.rs"]
+mod ws_state_tests;
 
 impl Default for WsState {
     fn default() -> Self {

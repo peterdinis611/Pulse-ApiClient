@@ -76,3 +76,55 @@ async fn execute_request_reports_timeout() {
 
     assert!(error.contains("timed out"));
 }
+
+#[tokio::test]
+async fn execute_request_records_set_cookie() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/session"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string("ok")
+                .insert_header("set-cookie", "session=abc123; Path=/; HttpOnly"),
+        )
+        .mount(&server)
+        .await;
+
+    let state = HttpState::default();
+    let payload = sample_payload(&format!("{}/session", server.uri()));
+    let response = execute_request(&state, payload)
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status, 200);
+    let cookies = state.list_cookies();
+    assert_eq!(cookies.len(), 1);
+    assert_eq!(cookies[0].name, "session");
+    assert_eq!(cookies[0].value, "abc123");
+}
+
+#[tokio::test]
+async fn execute_requests_batch_returns_all_results() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/one"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("one"))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/two"))
+        .respond_with(ResponseTemplate::new(201).set_body_string("two"))
+        .mount(&server)
+        .await;
+
+    let state = HttpState::default();
+    let payloads = vec![
+        sample_payload(&format!("{}/one", server.uri())),
+        sample_payload(&format!("{}/two", server.uri())),
+    ];
+
+    let results = crate::http::execute_requests_batch(&state, payloads).await;
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0].response.as_ref().map(|item| item.status), Some(200));
+    assert_eq!(results[1].response.as_ref().map(|item| item.status), Some(201));
+}
