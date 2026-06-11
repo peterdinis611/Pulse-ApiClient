@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
+import { VariableField } from "@/components/VariableField";
 import { cn } from "@/lib/utils";
 
 function applyBodyKind(bodyKind: BodyKind) {
@@ -33,7 +33,7 @@ function applyBodyKind(bodyKind: BodyKind) {
 }
 
 export function RequestTabs() {
-  const { request, requestTab, setRequestTab, updateRequest } = useApp();
+  const { request, requestTab, setRequestTab, updateRequest, activeEnvironment } = useApp();
 
   const paramCount = request.query.filter((q) => q.enabled && q.key.trim()).length;
   const headerCount = request.headers.filter((h) => h.enabled && h.key.trim()).length;
@@ -131,6 +131,7 @@ export function RequestTabs() {
           {requestTab === "params" && (
             <KeyValueEditor
               rows={request.query}
+              environment={activeEnvironment}
               onChange={(query) => updateRequest({ query })}
               keyPlaceholder="Query param"
             />
@@ -139,6 +140,7 @@ export function RequestTabs() {
           {requestTab === "headers" && (
             <KeyValueEditor
               rows={request.headers}
+              environment={activeEnvironment}
               onChange={(headers) => updateRequest({ headers })}
               keyPlaceholder="Header"
             />
@@ -168,54 +170,64 @@ export function RequestTabs() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="graphql-operation">Operation name</Label>
-                    <Input
+                    <VariableField
                       id="graphql-operation"
+                      environment={activeEnvironment}
                       value={request.graphqlOperationName}
-                      onChange={(event) =>
-                        updateRequest({ graphqlOperationName: event.target.value })
+                      onChange={(graphqlOperationName) =>
+                        updateRequest({ graphqlOperationName })
                       }
                       placeholder="Optional operation name"
-                      spellCheck={false}
                     />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="graphql-query">Query</Label>
-                    <Textarea
+                    <VariableField
                       id="graphql-query"
+                      multiline
+                      environment={activeEnvironment}
                       value={request.graphqlQuery}
-                      onChange={(event) => updateRequest({ graphqlQuery: event.target.value })}
-                      spellCheck={false}
-                      className="min-h-[220px] font-mono text-sm"
+                      onChange={(graphqlQuery) => updateRequest({ graphqlQuery })}
+                      inputClassName="min-h-[220px]"
                       placeholder={`query Example {\n  __typename\n}`}
                     />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="graphql-variables">Variables (JSON)</Label>
-                    <Textarea
+                    <VariableField
                       id="graphql-variables"
+                      multiline
+                      environment={activeEnvironment}
                       value={request.graphqlVariables}
-                      onChange={(event) => updateRequest({ graphqlVariables: event.target.value })}
-                      spellCheck={false}
-                      className="min-h-[120px] font-mono text-sm"
-                      placeholder='{\n  "id": "1"\n}'
+                      onChange={(graphqlVariables) => updateRequest({ graphqlVariables })}
+                      inputClassName="min-h-[120px]"
+                      placeholder='{\n  "id": "{{id}}"\n}'
                     />
                   </div>
                 </div>
               )}
 
               {(request.bodyKind === "json" || request.bodyKind === "raw") && (
-                <Textarea
+                <VariableField
+                  multiline
+                  environment={activeEnvironment}
                   value={request.body}
-                  onChange={(event) => updateRequest({ body: event.target.value })}
-                  spellCheck={false}
+                  onChange={(body) => updateRequest({ body })}
+                  inputClassName="min-h-[180px]"
                   placeholder={
-                    request.bodyKind === "json" ? '{\n  "key": "value"\n}' : "Raw body content"
+                    request.bodyKind === "json"
+                      ? '{\n  "key": "{{value}}"\n}'
+                      : "Raw body with {{variables}}"
                   }
                 />
               )}
 
               {request.bodyKind === "form" && (
-                <KeyValueEditor rows={request.form} onChange={(form) => updateRequest({ form })} />
+                <KeyValueEditor
+                  rows={request.form}
+                  environment={activeEnvironment}
+                  onChange={(form) => updateRequest({ form })}
+                />
               )}
 
               {request.bodyKind === "multipart" && (
@@ -355,12 +367,13 @@ export function RequestTabs() {
               {request.auth.authType === "bearer" && (
                 <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="bearer-token">Token</Label>
-                  <Input
+                  <VariableField
                     id="bearer-token"
+                    environment={activeEnvironment}
                     value={request.auth.bearerToken}
-                    onChange={(event) =>
+                    onChange={(bearerToken) =>
                       updateRequest({
-                        auth: { ...request.auth, bearerToken: event.target.value },
+                        auth: { ...request.auth, bearerToken },
                       })
                     }
                     placeholder="{{token}}"
@@ -372,27 +385,31 @@ export function RequestTabs() {
                 <>
                   <div className="space-y-2">
                     <Label htmlFor="basic-user">Username</Label>
-                    <Input
+                    <VariableField
                       id="basic-user"
+                      environment={activeEnvironment}
                       value={request.auth.basicUsername}
-                      onChange={(event) =>
+                      onChange={(basicUsername) =>
                         updateRequest({
-                          auth: { ...request.auth, basicUsername: event.target.value },
+                          auth: { ...request.auth, basicUsername },
                         })
                       }
+                      placeholder="{{username}}"
                     />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="basic-pass">Password</Label>
-                    <Input
+                    <VariableField
                       id="basic-pass"
                       type="password"
+                      environment={activeEnvironment}
                       value={request.auth.basicPassword}
-                      onChange={(event) =>
+                      onChange={(basicPassword) =>
                         updateRequest({
-                          auth: { ...request.auth, basicPassword: event.target.value },
+                          auth: { ...request.auth, basicPassword },
                         })
                       }
+                      placeholder="{{password}}"
                     />
                   </div>
                 </>
@@ -402,12 +419,13 @@ export function RequestTabs() {
                 <>
                   <div className="space-y-2">
                     <Label htmlFor="api-key-name">Key name</Label>
-                    <Input
+                    <VariableField
                       id="api-key-name"
+                      environment={activeEnvironment}
                       value={request.auth.apiKeyKey}
-                      onChange={(event) =>
+                      onChange={(apiKeyKey) =>
                         updateRequest({
-                          auth: { ...request.auth, apiKeyKey: event.target.value },
+                          auth: { ...request.auth, apiKeyKey },
                         })
                       }
                       placeholder="X-API-Key"
@@ -415,14 +433,16 @@ export function RequestTabs() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="api-key-value">Value</Label>
-                    <Input
+                    <VariableField
                       id="api-key-value"
+                      environment={activeEnvironment}
                       value={request.auth.apiKeyValue}
-                      onChange={(event) =>
+                      onChange={(apiKeyValue) =>
                         updateRequest({
-                          auth: { ...request.auth, apiKeyValue: event.target.value },
+                          auth: { ...request.auth, apiKeyValue },
                         })
                       }
+                      placeholder="{{apiKey}}"
                     />
                   </div>
                   <div className="space-y-2">

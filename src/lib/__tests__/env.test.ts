@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { substituteVariables, unresolvedVariables } from "../env";
+import {
+  getActiveVariableQuery,
+  insertVariableAtCursor,
+  substituteVariables,
+  unresolvedVariables,
+  variableTemplate,
+} from "../env";
 import { createEnvironment, createKeyValue } from "../helpers";
 
 const environment = createEnvironment("Local");
@@ -29,5 +35,25 @@ describe("env", () => {
 
   it("lists unresolved variables", () => {
     expect(unresolvedVariables("{{baseUrl}} {{missing}}")).toEqual(["baseUrl", "missing"]);
+  });
+
+  it("builds variable templates", () => {
+    expect(variableTemplate("baseUrl")).toBe("{{baseUrl}}");
+  });
+
+  it("detects active variable query while typing", () => {
+    expect(getActiveVariableQuery("{{base", 6)).toBe("base");
+    expect(getActiveVariableQuery("{{baseUrl}}/x", 10)).toBeNull();
+  });
+
+  it("inserts variables at cursor", () => {
+    expect(insertVariableAtCursor("{{ba", 4, "baseUrl")).toEqual({
+      value: "{{baseUrl}}",
+      cursor: 11,
+    });
+    expect(insertVariableAtCursor("https://", 8, "baseUrl")).toEqual({
+      value: "https://{{baseUrl}}",
+      cursor: 19,
+    });
   });
 });

@@ -1,6 +1,49 @@
 import type { Environment } from "../types";
 
 const VARIABLE_PATTERN = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
+const VARIABLE_AUTOCOMPLETE_PATTERN = /\{\{\s*([a-zA-Z0-9_.-]*)$/;
+
+export function variableTemplate(key: string): string {
+  return `{{${key}}}`;
+}
+
+export function getEnabledVariables(environment: Environment | null) {
+  return (
+    environment?.variables.filter((item) => item.enabled && item.key.trim()) ?? []
+  );
+}
+
+export function containsVariables(input: string | undefined | null): boolean {
+  return Boolean(input?.includes("{{"));
+}
+
+/** Partial variable name being typed before the cursor, e.g. `{{base` → `base`. */
+export function getActiveVariableQuery(value: string, cursor: number): string | null {
+  const before = value.slice(0, cursor);
+  const match = before.match(VARIABLE_AUTOCOMPLETE_PATTERN);
+  return match ? match[1] : null;
+}
+
+export function insertVariableAtCursor(
+  value: string,
+  cursor: number,
+  key: string,
+): { value: string; cursor: number } {
+  const before = value.slice(0, cursor);
+  const after = value.slice(cursor);
+  const match = before.match(VARIABLE_AUTOCOMPLETE_PATTERN);
+
+  if (match) {
+    const start = before.length - match[0].length;
+    const template = variableTemplate(key);
+    const next = before.slice(0, start) + template + after;
+    return { value: next, cursor: start + template.length };
+  }
+
+  const template = variableTemplate(key);
+  const next = before + template + after;
+  return { value: next, cursor: before.length + template.length };
+}
 
 export function substituteVariables(
   input: string | undefined | null,

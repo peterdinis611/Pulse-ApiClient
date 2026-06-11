@@ -1,14 +1,15 @@
-import type { KeyValue } from "@/types";
+import type { Environment, KeyValue } from "@/types";
 import { Trash2 } from "lucide-react";
+import { VariableField } from "@/components/VariableField";
 import { TooltipIconButton } from "@/components/TooltipIconButton";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 type KeyValueEditorProps = {
   rows: KeyValue[];
   onChange: (rows: KeyValue[]) => void;
+  environment?: Environment | null;
   keyPlaceholder?: string;
   valuePlaceholder?: string;
 };
@@ -16,6 +17,7 @@ type KeyValueEditorProps = {
 export function KeyValueEditor({
   rows,
   onChange,
+  environment = null,
   keyPlaceholder = "Key",
   valuePlaceholder = "Value",
 }: KeyValueEditorProps) {
@@ -56,15 +58,19 @@ export function KeyValueEditor({
             onCheckedChange={(checked) => updateRow(row.id, { enabled: checked === true })}
             aria-label="Enable row"
           />
-          <Input
+          <VariableField
+            embedded
+            environment={environment}
             value={row.key}
             placeholder={keyPlaceholder}
-            onChange={(event) => updateRow(row.id, { key: event.target.value })}
+            onChange={(key) => updateRow(row.id, { key })}
           />
-          <Input
+          <VariableField
+            embedded
+            environment={environment}
             value={row.value}
             placeholder={valuePlaceholder}
-            onChange={(event) => updateRow(row.id, { value: event.target.value })}
+            onChange={(value) => updateRow(row.id, { value })}
           />
           <TooltipIconButton
             variant="ghost"

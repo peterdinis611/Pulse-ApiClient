@@ -4,7 +4,9 @@ import { useApp } from "@/machines";
 import { getCollectionName } from "@/lib/collections";
 import { validateGraphqlRequest } from "@/lib/graphql";
 import { isWebSocketProtocol } from "@/lib/protocol";
+import { containsVariables, substituteVariables } from "@/lib/env";
 import { methodTextClass } from "@/lib/method-colors";
+import { VariableField } from "@/components/VariableField";
 import { cn } from "@/lib/utils";
 import { HTTP_METHODS } from "@/types";
 import { TooltipIconButton } from "@/components/TooltipIconButton";
@@ -75,6 +77,11 @@ export function RequestBar() {
     if (!request.url.trim()) return false;
     return ws.status === "idle" || ws.status === "closed" || ws.status === "error";
   }, [request.url, ws.status]);
+
+  const resolvedUrl = useMemo(
+    () => substituteVariables(request.url, activeEnvironment),
+    [activeEnvironment, request.url],
+  );
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -230,18 +237,20 @@ export function RequestBar() {
             </SelectContent>
           </Select>
         )}
-        <Input
-          className="h-11 flex-1 rounded-none border-0 font-mono text-sm shadow-none focus-visible:ring-0"
+        <VariableField
+          embedded
+          environment={activeEnvironment}
+          className="min-w-0 flex-1"
+          inputClassName="h-11 rounded-none border-0 shadow-none focus-visible:ring-0"
           value={request.url}
-          onChange={(event) => updateRequest({ url: event.target.value })}
+          onChange={(url) => updateRequest({ url })}
           placeholder={
             isWebSocket
-              ? "wss://api.example.com/ws"
+              ? "wss://{{baseUrl}}/ws"
               : request.bodyKind === "graphql"
-                ? "https://api.example.com/graphql"
-                : "https://api.example.com/users"
+                ? "{{baseUrl}}/graphql"
+                : "{{baseUrl}}/users"
           }
-          spellCheck={false}
         />
         <Separator orientation="vertical" className="h-11" />
         {isWebSocket ? (
@@ -296,6 +305,13 @@ export function RequestBar() {
           </>
         )}
       </div>
+
+      {containsVariables(request.url) && (
+        <p className="truncate px-1 font-mono text-xs text-muted-foreground" title={resolvedUrl}>
+          <span className="text-foreground/70">Resolved URL: </span>
+          {resolvedUrl}
+        </p>
+      )}
     </div>
   );
 }
