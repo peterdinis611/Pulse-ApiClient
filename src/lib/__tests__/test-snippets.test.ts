@@ -8,9 +8,10 @@ import { normalizeTestsToPulse } from "../test-snippets";
 
 describe("test-snippets", () => {
   it("exposes pulse snippets and template", () => {
-    expect(testSnippets.length).toBeGreaterThan(0);
+    expect(testSnippets.length).toBeGreaterThanOrEqual(15);
     expect(testSnippets.every((snippet) => snippet.code.includes("pulse.test"))).toBe(true);
-    expect(pulseTestsTemplate).toContain("Pulse Tests tab");
+    expect(testSnippets.every((snippet) => snippet.group)).toBe(true);
+    expect(pulseTestsTemplate).toContain("Pulse test script");
     expect(defaultRequestTests).toContain("pulse.test");
     expect(defaultRequestTests).not.toContain("pm.");
   });

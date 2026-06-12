@@ -25,7 +25,10 @@ export function requestsForCollection(requests: SavedRequest[], collectionId: st
   return requests.filter((item) => item.collectionId === collectionId);
 }
 
-export function groupRequestsByFolder(items: SavedRequest[]): { root: SavedRequest[]; folders: FolderTreeNode[] } {
+export function groupRequestsByFolder(
+  items: SavedRequest[],
+  folderPaths: string[] = [],
+): { root: SavedRequest[]; folders: FolderTreeNode[] } {
   const root: SavedRequest[] = [];
   const nodeMap = new Map<string, FolderTreeNode>();
 
@@ -57,6 +60,11 @@ export function groupRequestsByFolder(items: SavedRequest[]): { root: SavedReque
     }
 
     ensureNode(folder).requests.push(item);
+  }
+
+  for (const folderPath of folderPaths) {
+    const normalized = folderPath.trim().replace(/^\/+|\/+$/g, "");
+    if (normalized) ensureNode(normalized);
   }
 
   const topLevel = [...nodeMap.values()].filter((node) => !node.path.includes("/"));

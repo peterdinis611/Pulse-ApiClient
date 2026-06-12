@@ -121,3 +121,77 @@ fn reads_nested_json_path() {
     let value = read_json_path(&json, "data.id").unwrap();
     assert_eq!(value, serde_json::json!(42));
 }
+
+#[test]
+fn reads_array_json_path() {
+    let json = serde_json::json!({ "items": [{ "id": 7 }] });
+    let value = read_json_path(&json, "items[0].id").unwrap();
+    assert_eq!(value, serde_json::json!(7));
+}
+
+#[test]
+fn runs_graphql_errors_fallback() {
+    let script = r#"
+pulse.test("GraphQL has no errors", function () {
+    var jsonData = pulse.response.json();
+    pulse.expect(jsonData.errors || []).to.eql([]);
+});
+"#;
+    let result = run_http_tests(script, &sample_response(200, r#"{"data":{"ok":true}}"#, 50));
+    assert_eq!(result.passed, 1);
+}
+
+#[test]
+fn runs_client_error_assertion() {
+    let script = r#"
+pulse.test("Client error", function () {
+    pulse.response.to.be.clientError;
+});
+"#;
+    let result = run_http_tests(script, &sample_response(404, "{}", 50));
+    assert_eq!(result.passed, 1);
+}
+
+#[test]
+fn runs_json_array_length_assertion() {
+    let script = r#"
+pulse.test("Items length", function () {
+    var jsonData = pulse.response.json();
+    pulse.expect(jsonData.items).to.have.lengthOf(2);
+});
+"#;
+    let result = run_http_tests(script, &sample_response(200, r#"{"items":[1,2]}"#, 50));
+    assert_eq!(result.passed, 1);
+}
+
+#[test]
+fn runs_json_type_assertion() {
+    let script = r#"
+pulse.test("Results is array", function () {
+    var jsonData = pulse.response.json();
+    pulse.expect(jsonData.results).to.be.an("array");
+});
+"#;
+    let result = run_http_tests(script, &sample_response(200, r#"{"results":[]}"#, 50));
+    assert_eq!(result.passed, 1);
+}
+
+#[test]
+fn runs_header_include_assertion() {
+    let script = r#"
+pulse.test("JSON content type", function () {
+    pulse.expect(pulse.response.headers.get("Content-Type")).to.include("json");
+});
+"#;
+    let result = run_http_tests(script, &sample_response(200, "{}", 50));
+    assert_eq!(result.passed, 1);
+}
+
+#[test]
+fn runs_json_exists_json_assertion() {
+    let script = r#"[
+      {"name":"Slug exists","assertion":"jsonExists","path":"slug"}
+    ]"#;
+    let result = run_http_tests(script, &sample_response(200, r#"{"slug":"demo"}"#, 50));
+    assert_eq!(result.passed, 1);
+}

@@ -5,6 +5,7 @@ import {
   Copy,
   Download,
   FolderInput,
+  FolderPlus,
   Folder,
   Globe2,
   History,
@@ -25,6 +26,7 @@ import { filterHistoryEntries, filterHistoryEntriesAsync, filterSavedRequests, f
 import { useDebouncedValue } from "@/lib/use-debounced-search";
 import { toast } from "@/lib/toast";
 import type { FolderTreeNode } from "@/lib/collections";
+import { AddFolderMenu } from "@/components/AddFolderMenu";
 import { CollectionRunResultsPanel } from "@/components/CollectionRunResultsPanel";
 import { MethodBadge } from "@/components/MethodBadge";
 import { TooltipIconButton, TooltipWrap } from "@/components/TooltipIconButton";
@@ -67,6 +69,7 @@ export function Sidebar() {
     exportCollections,
     importCollections,
     addEnvironment,
+    deleteFolder,
     activeEnvironment,
     sidebarCollapsed,
     toggleSidebarCollapsed,
@@ -302,7 +305,7 @@ export function Sidebar() {
             <CollapsibleContent className="space-y-1">
               {collectionGroups.map((group) => {
                 const items = requestsForCollection(filteredCollections, group.id);
-                const grouped = groupRequestsByFolder(items);
+                const grouped = groupRequestsByFolder(items, group.folders);
                 const open = openCollections[group.id] ?? true;
 
                 return (
@@ -328,6 +331,24 @@ export function Sidebar() {
                           <span className="text-xs text-muted-foreground">{items.length}</span>
                         </button>
                       </CollapsibleTrigger>
+                      <AddFolderMenu
+                        collectionId={group.id}
+                        collectionName={group.name}
+                        folders={group.folders}
+                        trigger={
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="size-7 shrink-0"
+                            title="Add folder"
+                            aria-label="Add folder"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <FolderPlus className="size-3.5" />
+                          </Button>
+                        }
+                      />
                       <TooltipIconButton
                         variant="ghost"
                         size="icon"
@@ -349,10 +370,12 @@ export function Sidebar() {
                           key={folder.path}
                           folder={folder}
                           collectionId={group.id}
+                          collectionName={group.name}
                           folders={group.folders}
                           onOpen={loadSavedRequest}
                           onDuplicate={duplicateSavedRequest}
                           onDelete={deleteSavedRequest}
+                          onDeleteFolder={(folderPath) => deleteFolder(group.id, folderPath)}
                           onMove={(id, targetFolder) => moveSavedRequest(id, group.id, targetFolder)}
                         />
                       ))}
@@ -474,36 +497,86 @@ export function Sidebar() {
   );
 }
 
+function folderIsEmpty(folder: FolderTreeNode): boolean {
+  if (folder.requests.length > 0) return false;
+  return folder.children.every(folderIsEmpty);
+}
+
 function FolderBranch({
   folder,
   collectionId,
+  collectionName,
   folders,
   onOpen,
   onDuplicate,
   onDelete,
+  onDeleteFolder,
   onMove,
 }: {
   folder: FolderTreeNode;
   collectionId: string;
+  collectionName: string;
   folders: string[];
   onOpen: (item: SavedRequest) => void;
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
+  onDeleteFolder: (folderPath: string) => void;
   onMove: (id: string, folder?: string) => void;
 }) {
   const [open, setOpen] = useState(true);
+  const isEmpty = folderIsEmpty(folder);
 
   return (
     <div className="space-y-0.5">
-      <button
-        type="button"
-        className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm text-muted-foreground hover:bg-sidebar-accent"
-        onClick={() => setOpen((value) => !value)}
-      >
-        {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-        <Folder className="size-3.5" />
-        <span className="truncate">{folder.name}</span>
-      </button>
+      <div className="group/folder flex items-center gap-0.5 rounded-md pr-1 hover:bg-sidebar-accent">
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5 text-left text-sm text-muted-foreground"
+          onClick={() => setOpen((value) => !value)}
+        >
+          {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+          <Folder className="size-3.5 shrink-0" />
+          <span className="truncate">{folder.name}</span>
+          {isEmpty && (
+            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
+              Empty
+            </span>
+          )}
+        </button>
+        <AddFolderMenu
+          collectionId={collectionId}
+          collectionName={collectionName}
+          folders={folders}
+          parentFolder={folder.path}
+          trigger={
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-6 shrink-0 opacity-0 group-hover/folder:opacity-100"
+              title="Add subfolder"
+              aria-label="Add subfolder"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <FolderPlus className="size-3.5" />
+            </Button>
+          }
+        />
+        {isEmpty && (
+          <TooltipIconButton
+            variant="ghost"
+            size="icon"
+            className="size-6 shrink-0 text-destructive opacity-0 group-hover/folder:opacity-100"
+            label="Delete folder"
+            onClick={(event) => {
+              event.stopPropagation();
+              onDeleteFolder(folder.path);
+            }}
+          >
+            <Trash2 className="size-3.5" />
+          </TooltipIconButton>
+        )}
+      </div>
       {open && (
         <div className="space-y-0.5 pl-4">
           {folder.requests.map((item) => (
@@ -522,10 +595,12 @@ function FolderBranch({
               key={child.path}
               folder={child}
               collectionId={collectionId}
+              collectionName={collectionName}
               folders={folders}
               onOpen={onOpen}
               onDuplicate={onDuplicate}
               onDelete={onDelete}
+              onDeleteFolder={onDeleteFolder}
               onMove={onMove}
             />
           ))}

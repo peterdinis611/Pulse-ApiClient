@@ -1,8 +1,12 @@
-import { useMemo, useState } from "react";
-import { FlaskConical, Play, Plus } from "lucide-react";
+import { useState } from "react";
+import { BookOpen, FlaskConical, Play, Plus } from "lucide-react";
 import { useApp } from "@/machines";
 import { runHttpTests } from "@/lib/http-client";
-import { pulseTestsTemplate, testSnippets } from "@/lib/test-snippets";
+import {
+  pulseTestApiReference,
+  pulseTestsTemplate,
+  snippetsByGroup,
+} from "@/lib/test-snippets";
 import { toast } from "@/lib/toast";
 import { TestResultsList } from "@/components/TestResultsList";
 import { Button } from "@/components/ui/button";
@@ -15,9 +19,11 @@ export function TestsTabPanel() {
   const [previewResults, setPreviewResults] = useState<TestRunResult | null>(null);
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
+  const [showReference, setShowReference] = useState(false);
 
   const activeResults = previewResults ?? testResults;
   const canRun = Boolean(response && !loading && request.tests.trim());
+  const snippetGroups = snippetsByGroup();
 
   const insertSnippet = (code: string) => {
     const next = request.tests.trim()
@@ -57,26 +63,28 @@ export function TestsTabPanel() {
     toast.success("Test template applied");
   };
 
-  const snippetGroups = useMemo(
-    () => [
-      { title: "Common", items: testSnippets.slice(0, 4) },
-      { title: "Advanced", items: testSnippets.slice(4) },
-    ],
-    [],
-  );
-
   return (
-    <div className="grid min-h-[420px] grid-cols-1 gap-4 xl:grid-cols-[1fr_320px]">
+    <div className="grid min-h-[420px] grid-cols-1 gap-4 xl:grid-cols-[1fr_340px]">
       <div className="flex min-h-0 flex-col space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <p className="text-sm font-medium">Test script</p>
             <p className="text-xs text-muted-foreground">
-              Pulse <code className="rounded bg-muted px-1">pulse.test</code> blocks. Click Run tests
-              after sending, or use collection runner.
+              Write <code className="rounded bg-muted px-1">pulse.test</code> blocks to validate
+              responses. Use <code className="rounded bg-muted px-1">{"{{var}}"}</code> in requests,
+              then assert on <code className="rounded bg-muted px-1">pulse.response</code>.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowReference((open) => !open)}
+            >
+              <BookOpen className="size-3.5" />
+              API reference
+            </Button>
             <Button type="button" variant="outline" size="sm" onClick={handleUseTemplate}>
               Use template
             </Button>
@@ -91,6 +99,25 @@ export function TestsTabPanel() {
             </Button>
           </div>
         </div>
+
+        {showReference && (
+          <div className="grid gap-3 rounded-lg border border-border bg-muted/20 p-4 sm:grid-cols-2">
+            {pulseTestApiReference.map((section) => (
+              <div key={section.title}>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {section.title}
+                </p>
+                <ul className="mt-2 space-y-1 text-xs text-foreground/90">
+                  {section.items.map((item) => (
+                    <li key={item} className="font-mono leading-relaxed">
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
 
         <Textarea
           value={request.tests}
@@ -107,7 +134,7 @@ export function TestsTabPanel() {
             <FlaskConical className="size-4 text-muted-foreground" />
             <p className="text-sm font-medium">Snippets</p>
           </div>
-          <div className="space-y-3">
+          <div className="max-h-[320px] space-y-3 overflow-auto pr-1">
             {snippetGroups.map((group) => (
               <div key={group.title} className="space-y-2">
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
