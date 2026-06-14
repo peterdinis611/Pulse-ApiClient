@@ -1095,8 +1095,8 @@ export const appMachine = setup({
                 },
               })),
             })),
-            ({ event }) => {
-              toast.success("WebSocket connected", `Handshake ${event.status}`);
+            () => {
+              toast.success("WebSocket connected", "Connection established");
             },
           ],
         },
@@ -1266,12 +1266,7 @@ export const appMachine = setup({
               };
             }),
             ({ event }) => {
-              const { response } = event;
-              const cacheLabel = response.fromCache ? " · cached" : "";
-              toast.success(
-                `${response.status} ${response.statusText}`,
-                `${response.elapsedMs} ms${cacheLabel}`,
-              );
+              toast.requestResponse(event.response);
             },
           ],
         },
