@@ -4,6 +4,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { LoadingScreen } from "./components/LoadingScreen";
 import { ThemeSync } from "./components/ThemeSync";
 import { CustomThemeSync } from "./components/CustomThemeSync";
+import { HistoryProvider } from "./hooks/useHistory";
 import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
 
@@ -26,11 +27,13 @@ function AppContent() {
 
 function AppShell() {
   return (
-    <TooltipProvider delayDuration={300}>
-      <ThemeSync />
-      <CustomThemeSync />
-      <AppContent />
-    </TooltipProvider>
+    <HistoryProvider>
+      <TooltipProvider delayDuration={300}>
+        <ThemeSync />
+        <CustomThemeSync />
+        <AppContent />
+      </TooltipProvider>
+    </HistoryProvider>
   );
 }
 

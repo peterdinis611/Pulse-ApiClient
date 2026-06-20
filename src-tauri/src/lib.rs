@@ -7,9 +7,11 @@ pub mod cookies;
 pub mod custom_theme;
 pub mod db;
 pub mod engine;
+pub mod history;
 pub mod http;
 pub mod search;
 pub mod settings;
+pub mod sql_safety;
 pub mod state;
 pub mod test_runner;
 pub mod websocket;
@@ -19,6 +21,7 @@ pub mod ws_state;
 use cache::CacheConfig;
 use db::{DbState, DbUserSession};
 use engine::HttpEngineStats;
+use history::HistoryEntryPayload;
 use http::{BatchItemResult, HttpRequestPayload, HttpResponsePayload};
 use search::{SearchDocument, SearchMatch};
 use settings::AppSettings;
@@ -158,6 +161,47 @@ fn db_save_workspace(db: State<'_, Arc<DbState>>, payload: String) -> Result<(),
 }
 
 #[tauri::command]
+fn db_append_history(db: State<'_, Arc<DbState>>, entry: HistoryEntryPayload) -> Result<(), String> {
+    db.append_history_entry(entry)
+}
+
+#[tauri::command]
+fn db_import_history(
+    db: State<'_, Arc<DbState>>,
+    entries: Vec<HistoryEntryPayload>,
+) -> Result<u64, String> {
+    db.import_history_entries(entries)
+}
+
+#[tauri::command]
+fn db_list_history(
+    db: State<'_, Arc<DbState>>,
+    limit: u32,
+    offset: u32,
+) -> Result<history::HistoryPage, String> {
+    db.list_history_page(limit, offset)
+}
+
+#[tauri::command]
+fn db_search_history(
+    db: State<'_, Arc<DbState>>,
+    query: String,
+    limit: u32,
+) -> Result<Vec<HistoryEntryPayload>, String> {
+    db.search_history(&query, limit)
+}
+
+#[tauri::command]
+fn db_history_count(db: State<'_, Arc<DbState>>) -> Result<u64, String> {
+    db.history_count()
+}
+
+#[tauri::command]
+fn db_clear_history(db: State<'_, Arc<DbState>>) -> Result<(), String> {
+    db.clear_history()
+}
+
+#[tauri::command]
 fn db_load_session(db: State<'_, Arc<DbState>>) -> Result<Option<DbUserSession>, String> {
     db.load_session()
 }
@@ -185,6 +229,7 @@ fn db_switch_user(
     user_id: Option<String>,
 ) -> Result<(), String> {
     if let Some(user_id) = user_id {
+        crate::sql_safety::validate_user_id(&user_id)?;
         db.switch_to_user(&app, &user_id)?;
     } else {
         db.clear_user_database()?;
@@ -366,6 +411,12 @@ pub fn run() {
             run_http_tests,
             db_load_workspace,
             db_save_workspace,
+            db_append_history,
+            db_import_history,
+            db_list_history,
+            db_search_history,
+            db_history_count,
+            db_clear_history,
             db_load_session,
             db_save_session,
             db_clear_session,

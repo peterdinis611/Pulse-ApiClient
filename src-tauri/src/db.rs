@@ -1,3 +1,5 @@
+use crate::history;
+use crate::sql_safety::{validate_cache_key, validate_user_id};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -64,6 +66,7 @@ impl DbState {
     }
 
     pub fn switch_to_user(&self, app: &AppHandle, user_id: &str) -> Result<(), String> {
+        validate_user_id(user_id)?;
         let path = user_db_path(app, user_id)?;
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -89,6 +92,7 @@ impl DbState {
         key: &str,
         now_ms: u64,
     ) -> Result<Option<DiskCacheEntry>, String> {
+        validate_cache_key(key)?;
         let conn = self.user_conn.lock().map_err(|e| e.to_string())?;
         let mut stmt = conn
             .prepare(
@@ -122,6 +126,7 @@ impl DbState {
         size_bytes: usize,
         max_entries: u64,
     ) -> Result<(), String> {
+        validate_cache_key(key)?;
         let conn = self.user_conn.lock().map_err(|e| e.to_string())?;
         conn.execute(
             "INSERT INTO http_response_cache (cache_key, response_json, cached_at_ms, expires_at_ms, size_bytes)
@@ -372,6 +377,50 @@ impl DbState {
         *guard = conn;
         Ok(())
     }
+
+    pub fn append_history_entry(
+        &self,
+        entry: history::HistoryEntryPayload,
+    ) -> Result<(), String> {
+        let conn = self.user_conn.lock().map_err(|e| e.to_string())?;
+        history::append_history_entry(&conn, &entry)
+    }
+
+    pub fn import_history_entries(
+        &self,
+        entries: Vec<history::HistoryEntryPayload>,
+    ) -> Result<u64, String> {
+        let conn = self.user_conn.lock().map_err(|e| e.to_string())?;
+        history::import_history_entries(&conn, &entries)
+    }
+
+    pub fn list_history_page(
+        &self,
+        limit: u32,
+        offset: u32,
+    ) -> Result<history::HistoryPage, String> {
+        let conn = self.user_conn.lock().map_err(|e| e.to_string())?;
+        history::list_history_page(&conn, limit, offset)
+    }
+
+    pub fn search_history(
+        &self,
+        query: &str,
+        limit: u32,
+    ) -> Result<Vec<history::HistoryEntryPayload>, String> {
+        let conn = self.user_conn.lock().map_err(|e| e.to_string())?;
+        history::search_history(&conn, query, limit)
+    }
+
+    pub fn history_count(&self) -> Result<u64, String> {
+        let conn = self.user_conn.lock().map_err(|e| e.to_string())?;
+        history::history_count(&conn)
+    }
+
+    pub fn clear_history(&self) -> Result<(), String> {
+        let conn = self.user_conn.lock().map_err(|e| e.to_string())?;
+        history::clear_history(&conn)
+    }
 }
 
 fn run_auth_migration(conn: &Connection) -> Result<(), String> {
@@ -429,6 +478,23 @@ fn run_user_migration(conn: &Connection) -> Result<(), String> {
 
         CREATE INDEX IF NOT EXISTS idx_http_response_cache_expires
           ON http_response_cache(expires_at_ms);
+
+        CREATE TABLE IF NOT EXISTS request_history (
+          id TEXT PRIMARY KEY NOT NULL,
+          sent_at TEXT NOT NULL,
+          method TEXT NOT NULL,
+          name TEXT NOT NULL DEFAULT '',
+          url TEXT NOT NULL,
+          request_json TEXT NOT NULL,
+          status INTEGER,
+          elapsed_ms INTEGER,
+          size_bytes INTEGER
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_request_history_sent_at
+          ON request_history(sent_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_request_history_method
+          ON request_history(method);
         ",
     )
     .map_err(|e| e.to_string())?;
@@ -685,6 +751,7 @@ fn legacy_db_path(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 fn user_db_path(app: &AppHandle, user_id: &str) -> Result<PathBuf, String> {
+    validate_user_id(user_id)?;
     Ok(app_data_dir(app)?.join("users").join(user_id).join("pulse.db"))
 }
 

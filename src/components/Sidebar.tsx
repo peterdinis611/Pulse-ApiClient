@@ -20,9 +20,10 @@ import {
   Upload,
 } from "lucide-react";
 import { useApp } from "@/machines";
+import { useHistory } from "@/hooks/useHistory";
 import { groupRequestsByFolder, requestsForCollection } from "@/lib/collections";
 import { runCollectionParallel, type CollectionRunResult } from "@/lib/collection-runner";
-import { filterHistoryEntries, filterHistoryEntriesAsync, filterSavedRequests, filterSavedRequestsAsync } from "@/lib/filters";
+import { filterSavedRequests, filterSavedRequestsAsync } from "@/lib/filters";
 import { useDebouncedValue } from "@/lib/use-debounced-search";
 import { toast } from "@/lib/toast";
 import type { FolderTreeNode } from "@/lib/collections";
@@ -45,7 +46,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import type { HistoryEntry, MainView, SavedRequest } from "@/types";
+import type { MainView, SavedRequest } from "@/types";
 
 export function Sidebar() {
   const {
@@ -55,7 +56,6 @@ export function Sidebar() {
     setMainView,
     collectionGroups,
     collections,
-    history,
     environments,
     activeEnvironmentId,
     workspaceEnvironment,
@@ -75,6 +75,15 @@ export function Sidebar() {
     toggleSidebarCollapsed,
   } = useApp();
 
+  const {
+    visibleEntries: historyEntries,
+    totalCount: historyCount,
+    hasMore: historyHasMore,
+    loadMore: loadMoreHistory,
+    loadingMore: historyLoadingMore,
+    setSearchQuery: setHistorySearchQuery,
+  } = useHistory();
+
   const importRef = useRef<HTMLInputElement>(null);
   const [collectionsOpen, setCollectionsOpen] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(true);
@@ -90,39 +99,32 @@ export function Sidebar() {
     return filterSavedRequests(collections, debouncedSidebarSearch);
   }, [collections, debouncedSidebarSearch]);
 
-  const filteredHistorySync = useMemo(() => {
-    return filterHistoryEntries(history, debouncedSidebarSearch);
-  }, [history, debouncedSidebarSearch]);
-
   const [asyncFilteredCollections, setAsyncFilteredCollections] = useState<SavedRequest[] | null>(
     null,
   );
-  const [asyncFilteredHistory, setAsyncFilteredHistory] = useState<HistoryEntry[] | null>(null);
+
+  useEffect(() => {
+    setHistorySearchQuery(debouncedSidebarSearch);
+  }, [debouncedSidebarSearch, setHistorySearchQuery]);
 
   useEffect(() => {
     if (!debouncedSidebarSearch.trim()) {
       setAsyncFilteredCollections(null);
-      setAsyncFilteredHistory(null);
       return;
     }
 
     let cancelled = false;
-    void Promise.all([
-      filterSavedRequestsAsync(collections, debouncedSidebarSearch),
-      filterHistoryEntriesAsync(history, debouncedSidebarSearch),
-    ]).then(([nextCollections, nextHistory]) => {
+    void filterSavedRequestsAsync(collections, debouncedSidebarSearch).then((nextCollections) => {
       if (cancelled) return;
       setAsyncFilteredCollections(nextCollections);
-      setAsyncFilteredHistory(nextHistory.slice(0, 50));
     });
 
     return () => {
       cancelled = true;
     };
-  }, [collections, history, debouncedSidebarSearch]);
+  }, [collections, debouncedSidebarSearch]);
 
   const filteredCollections = asyncFilteredCollections ?? filteredCollectionsSync;
-  const filteredHistory = (asyncFilteredHistory ?? filteredHistorySync).slice(0, 50);
 
   const handleRunCollection = async (collectionId: string, collectionName: string) => {
     const items = requestsForCollection(collections, collectionId);
@@ -417,9 +419,9 @@ export function Sidebar() {
                   )}
                   <History className="size-3.5 shrink-0" />
                   <span>History</span>
-                  {history.length > 0 && (
+                  {historyCount > 0 && (
                     <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium normal-case tracking-normal text-muted-foreground">
-                      {history.length}
+                      {historyCount}
                     </span>
                   )}
                 </button>
@@ -429,7 +431,7 @@ export function Sidebar() {
                 size="icon"
                 className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
                 label="Clear history"
-                disabled={history.length === 0}
+                disabled={historyCount === 0}
                 onClick={() => {
                   clearHistory();
                   toast.success("History cleared");
@@ -439,7 +441,7 @@ export function Sidebar() {
               </TooltipIconButton>
             </div>
             <CollapsibleContent className="space-y-0.5">
-              {filteredHistory.map((entry) => (
+              {historyEntries.map((entry) => (
                 <button
                   key={entry.id}
                   type="button"
@@ -452,8 +454,20 @@ export function Sidebar() {
                   </span>
                 </button>
               ))}
-              {filteredHistory.length === 0 && (
+              {historyEntries.length === 0 && (
                 <p className="px-3 py-2 text-xs text-muted-foreground">No history yet</p>
+              )}
+              {historyHasMore && !debouncedSidebarSearch.trim() && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="mx-2 mt-1 h-7 w-[calc(100%-1rem)] text-xs text-muted-foreground"
+                  disabled={historyLoadingMore}
+                  onClick={() => void loadMoreHistory()}
+                >
+                  {historyLoadingMore ? "Loading…" : "Load more"}
+                </Button>
               )}
             </CollapsibleContent>
           </Collapsible>

@@ -8,6 +8,9 @@ pub fn read_css_file(path: &str) -> Result<String, String> {
     if path.is_empty() {
         return Err("CSS file path is empty".to_string());
     }
+    if path.contains('\0') || path.contains("..") {
+        return Err("Invalid CSS file path".to_string());
+    }
 
     let file_path = Path::new(path);
     if !file_path.exists() {

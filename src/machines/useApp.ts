@@ -63,7 +63,6 @@ export function useApp() {
     activeEnvironment,
     workspaceEnvironment,
     tabEnvironmentOverrideId: activeTab?.environmentId ?? null,
-    history: context.persisted.history,
 
     ws: (activeTab?.ws ?? defaultWebSocketSession()) as WebSocketSession,
 

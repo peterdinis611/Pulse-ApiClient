@@ -31,6 +31,7 @@ import { toast } from "@/lib/toast";
 import { requestsForCollection } from "@/lib/collections";
 import { ThemePicker } from "@/components/ThemePicker";
 import { CustomThemeSettings } from "@/components/CustomThemeSettings";
+import { useHistory } from "@/hooks/useHistory";
 import { emitWorkspaceReset } from "@/lib/workspace-sync";
 import { TooltipIconButton } from "@/components/TooltipIconButton";
 import { Button } from "@/components/ui/button";
@@ -129,7 +130,6 @@ export function SettingsView() {
     collectionGroups,
     activeCollectionId,
     collections,
-    history,
     setActiveCollectionId,
     addCollectionGroup,
     deleteCollectionGroup,
@@ -143,6 +143,8 @@ export function SettingsView() {
     clearHistory,
     resetWorkspace,
   } = useApp();
+
+  const { totalCount: historyCount } = useHistory();
 
   const nativeImportRef = useRef<HTMLInputElement>(null);
   const postmanImportRef = useRef<HTMLInputElement>(null);
@@ -390,13 +392,13 @@ export function SettingsView() {
 
           <SettingRow
             title="Clear request history"
-            description={`Remove ${history.length} saved history ${history.length === 1 ? "entry" : "entries"} from the workspace.`}
+            description={`Remove ${historyCount} saved history ${historyCount === 1 ? "entry" : "entries"} from the workspace.`}
           >
             <Button
               type="button"
               variant="outline"
               size="sm"
-              disabled={history.length === 0}
+              disabled={historyCount === 0}
               onClick={() => {
                 clearHistory();
                 toast.success("History cleared");

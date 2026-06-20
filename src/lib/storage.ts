@@ -1,6 +1,9 @@
 import { readStorageItem, storageKey } from "./app-config";
 import { dbLoadWorkspace, dbSaveWorkspace } from "./db-client";
+import { importHistoryEntries } from "./history-client";
+import { emitHistoryUpdated } from "./history-sync";
 import { canUseTauriIpc } from "./tauri-runtime";
+import { getCurrentWindowLabel } from "./window-manager";
 import type {
   CollectionGroup,
   Environment,
@@ -125,11 +128,6 @@ function migratePersistedState(parsed: Partial<PersistedState>): PersistedState 
     request: normalizeRequest(item.request),
   }));
 
-  const history = (parsed.history ?? defaults.history).map((entry) => ({
-    ...entry,
-    request: normalizeRequest(entry.request),
-  }));
-
   const windowSessions = Object.fromEntries(
     Object.entries(parsed.windowSessions ?? defaults.windowSessions).map(([key, session]) => [
       key,
@@ -149,7 +147,7 @@ function migratePersistedState(parsed: Partial<PersistedState>): PersistedState 
     collections,
     environments: parsed.environments?.length ? parsed.environments : defaults.environments,
     activeEnvironmentId: parsed.activeEnvironmentId ?? defaults.activeEnvironmentId,
-    history,
+    history: [],
     lastRequest: normalizeRequest(parsed.lastRequest),
     windowSessions,
   };
@@ -172,7 +170,12 @@ export async function loadPersistedState(): Promise<PersistedState> {
       const raw = await dbLoadWorkspace();
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<PersistedState>;
-        return migratePersistedState(parsed);
+        const embeddedHistory = (parsed.history ?? []).map((entry) => ({
+          ...entry,
+          request: normalizeRequest(entry.request),
+        }));
+        const migrated = migratePersistedState(parsed);
+        return migrateEmbeddedHistory(migrated, embeddedHistory);
       }
       return defaultPersistedState();
     } catch {
@@ -181,6 +184,21 @@ export async function loadPersistedState(): Promise<PersistedState> {
   }
 
   return loadLegacyPersistedState();
+}
+
+async function migrateEmbeddedHistory(
+  state: PersistedState,
+  embeddedHistory: HistoryEntry[],
+): Promise<PersistedState> {
+  if (!canUseTauriIpc() || embeddedHistory.length === 0) {
+    return state;
+  }
+
+  await importHistoryEntries(embeddedHistory);
+  const windowId = await getCurrentWindowLabel().catch(() => undefined);
+  await emitHistoryUpdated(windowId);
+  await dbSaveWorkspace(JSON.stringify(state));
+  return state;
 }
 
 export async function savePersistedState(

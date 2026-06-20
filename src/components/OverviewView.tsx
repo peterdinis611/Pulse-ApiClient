@@ -1,13 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Clock3, MoreHorizontal, Search } from "lucide-react";
 import { useApp } from "@/machines";
+import { useHistory } from "@/hooks/useHistory";
 import {
   buildOverviewItems,
   filterOverviewItems,
   filterOverviewItemsAsync,
   isOverviewFilterDefault,
 } from "@/lib/filters";
+import {
+  HISTORY_OVERVIEW_LIMIT,
+  listHistoryPage,
+  searchHistoryEntries,
+} from "@/lib/history-client";
 import { useDebouncedValue } from "@/lib/use-debounced-search";
+import type { HistoryEntry } from "@/types";
 import { MethodBadge } from "@/components/MethodBadge";
 import {
   ActiveOverviewFilters,
@@ -21,7 +28,6 @@ import { Separator } from "@/components/ui/separator";
 
 export function OverviewView() {
   const {
-    history,
     loadHistoryEntry,
     collections,
     collectionGroups,
@@ -34,6 +40,10 @@ export function OverviewView() {
     resetOverviewFilter,
   } = useApp();
 
+  const { totalCount: historyCount } = useHistory();
+  const [overviewHistory, setOverviewHistory] = useState<HistoryEntry[]>([]);
+  const [searchedHistory, setSearchedHistory] = useState<HistoryEntry[] | null>(null);
+
   const debouncedQuery = useDebouncedValue(overviewFilter.query);
   const loadHistoryEntryRef = useRef(loadHistoryEntry);
   const loadSavedRequestRef = useRef(loadSavedRequest);
@@ -41,13 +51,45 @@ export function OverviewView() {
   loadHistoryEntryRef.current = loadHistoryEntry;
   loadSavedRequestRef.current = loadSavedRequest;
 
+  useEffect(() => {
+    let cancelled = false;
+    void listHistoryPage(0, HISTORY_OVERVIEW_LIMIT).then((page) => {
+      if (!cancelled) setOverviewHistory(page.items);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [historyCount]);
+
+  useEffect(() => {
+    const query = debouncedQuery.trim();
+    if (!query) {
+      setSearchedHistory(null);
+      return;
+    }
+
+    let cancelled = false;
+    const timeout = window.setTimeout(() => {
+      void searchHistoryEntries(query, HISTORY_OVERVIEW_LIMIT).then((results) => {
+        if (!cancelled) setSearchedHistory(results);
+      });
+    }, 180);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [debouncedQuery]);
+
+  const historyForOverview = debouncedQuery.trim() ? searchedHistory ?? [] : overviewHistory;
+
   const allItems = useMemo(
     () =>
-      buildOverviewItems(history, collections, {
+      buildOverviewItems(historyForOverview, collections, {
         onHistory: (entry) => loadHistoryEntryRef.current(entry),
         onSaved: (item) => loadSavedRequestRef.current(item),
       }),
-    [collections, history],
+    [collections, historyForOverview],
   );
 
   const activeFilter = useMemo(
@@ -188,7 +230,7 @@ export function OverviewView() {
           </div>
           <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">History</p>
-            <p className="mt-2 text-2xl font-semibold">{history.length}</p>
+            <p className="mt-2 text-2xl font-semibold">{historyCount}</p>
           </div>
           <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Open tabs</p>

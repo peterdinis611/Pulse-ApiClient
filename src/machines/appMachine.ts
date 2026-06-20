@@ -24,6 +24,8 @@ import {
   createSavedRequest,
   normalizeRequest,
 } from "@/lib/helpers";
+import { appendHistoryEntry, clearHistoryStore } from "@/lib/history-client";
+import { emitHistoryUpdated } from "@/lib/history-sync";
 import { cancelHttpRequest, sendRequest } from "@/lib/http-client";
 import type { OverviewFilter } from "@/lib/filters";
 import { defaultOverviewFilter } from "@/lib/filters";
@@ -41,6 +43,7 @@ import {
   type PersistedState,
 } from "@/lib/storage";
 import type { PendingWindowInit } from "@/lib/window-manager";
+import { getCurrentWindowLabel } from "@/lib/window-manager";
 import {
   loadLayoutPreferences,
   saveLayoutPreferences,
@@ -176,6 +179,15 @@ function startTabRequest(
         historyEntry,
         testResults: null,
       });
+
+      void appendHistoryEntry(historyEntry)
+        .then(async () => {
+          const windowId = await getCurrentWindowLabel().catch(() => undefined);
+          await emitHistoryUpdated(windowId);
+        })
+        .catch((error) => {
+          console.warn("Failed to persist history entry:", error);
+        });
     })
     .catch((error) => {
       self.send({
@@ -919,11 +931,16 @@ export const appMachine = setup({
           })),
         },
         CLEAR_HISTORY: {
-          actions: assign(({ context }) => {
-            const persisted = { ...context.persisted, history: [] };
-            saveSharedWorkspace(context, persisted);
-            return { persisted };
-          }),
+          actions: () => {
+            void clearHistoryStore()
+              .then(async () => {
+                const windowId = await getCurrentWindowLabel().catch(() => undefined);
+                await emitHistoryUpdated(windowId);
+              })
+              .catch((error) => {
+                console.warn("Failed to clear history:", error);
+              });
+          },
         },
         SET_THEME: {
           actions: assign(({ event }) => {
@@ -1300,11 +1317,6 @@ export const appMachine = setup({
                 return {};
               }
 
-              const persisted = {
-                ...context.persisted,
-                history: [event.historyEntry, ...context.persisted.history].slice(0, 50),
-              };
-
               return {
                 tabs: mapTabById(context, event.tabId, (current) => ({
                   ...current,
@@ -1314,7 +1326,6 @@ export const appMachine = setup({
                   error: null,
                   testResults: event.testResults,
                 })),
-                persisted,
               };
             }),
             ({ context }) => {
