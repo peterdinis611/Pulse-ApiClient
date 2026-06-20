@@ -1,8 +1,19 @@
 @import "tailwindcss";
+@import "./styles/themes.css";
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-serif: ui-serif, Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --radius: 0.625rem;
+  --tracking-normal: 0rem;
+  --spacing: 0.25rem;
+}
+
+html:not([data-theme]),
+html[data-theme="light"] {
   --background: oklch(0.985 0.004 264);
   --foreground: oklch(0.22 0.03 264);
   --card: oklch(1 0 0);
@@ -49,10 +60,6 @@
     oklch(0.99 0.004 262) 0%,
     oklch(0.985 0.006 264) 100%
   );
-  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-serif: ui-serif, Georgia, serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --radius: 0.625rem;
   --shadow-x: 0px;
   --shadow-y: 1px;
   --shadow-blur: 3px;
@@ -67,11 +74,9 @@
   --shadow-lg: 0px 4px 10px 0px hsl(0 0% 0% / 0.06), 0px 4px 6px -1px hsl(0 0% 0% / 0.04);
   --shadow-xl: 0px 8px 16px 0px hsl(0 0% 0% / 0.06), 0px 8px 10px -1px hsl(0 0% 0% / 0.04);
   --shadow-2xl: 0px 12px 24px 0px hsl(0 0% 0% / 0.1);
-  --tracking-normal: 0rem;
-  --spacing: 0.25rem;
 }
 
-.dark {
+html[data-theme="dark"] {
   --background: oklch(0.17 0.015 264);
   --foreground: oklch(0.93 0.01 264);
   --card: oklch(0.2 0.018 264);
@@ -118,10 +123,6 @@
     oklch(0.175 0.018 262) 0%,
     oklch(0.17 0.015 264) 100%
   );
-  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-serif: ui-serif, Georgia, serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --radius: 0.625rem;
   --shadow-2xs: 0px 1px 2px 0px hsl(0 0% 0% / 0.2);
   --shadow-xs: 0px 1px 3px 0px hsl(0 0% 0% / 0.25);
   --shadow-sm: 0px 1px 3px 0px hsl(0 0% 0% / 0.3), 0px 1px 2px -1px hsl(0 0% 0% / 0.2);

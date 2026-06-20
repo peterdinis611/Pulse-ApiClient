@@ -9,6 +9,7 @@ import { listenWorkspaceReset, listenWorkspaceUpdated } from "@/lib/workspace-sy
 import { listenWsClose, listenWsError, listenWsMessage } from "@/lib/ws-client";
 import { getCurrentWindowLabel, takePendingWindowInit } from "@/lib/window-manager";
 import { AppMachineContext } from "@/machines/AppProvider";
+import { flushWorkspaceFromContext } from "@/machines/appMachine";
 
 export function AppBootstrap({ children }: { children: ReactNode }) {
   const actorRef = AppMachineContext.useActorRef();
@@ -132,9 +133,28 @@ export function AppBootstrap({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isTauri() || !canUseTauriIpc()) return;
 
+    const flush = () => {
+      void flushWorkspaceFromContext(actorRef.getSnapshot().context);
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        flush();
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [actorRef]);
+
+  useEffect(() => {
+    if (!isTauri() || !canUseTauriIpc()) return;
+
     const currentWindow = getCurrentWindow();
-    const unlistenPromise = currentWindow.onCloseRequested(() => {
-      actorRef.send({ type: "PERSIST_WINDOW_SESSION" });
+    const unlistenPromise = currentWindow.onCloseRequested(async (event) => {
+      event.preventDefault();
+      await flushWorkspaceFromContext(actorRef.getSnapshot().context);
+      await currentWindow.destroy();
     });
 
     return () => {

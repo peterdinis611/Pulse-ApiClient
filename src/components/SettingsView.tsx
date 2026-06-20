@@ -7,8 +7,6 @@ import {
   FolderPlus,
   Gauge,
   History,
-  Monitor,
-  Moon,
   PanelLeft,
   PanelRight,
   Sun,
@@ -31,7 +29,8 @@ import { canUseTauriIpc } from "@/lib/tauri-runtime";
 import { clearLegacyPersistedState, defaultPersistedState, savePersistedState } from "@/lib/storage";
 import { toast } from "@/lib/toast";
 import { requestsForCollection } from "@/lib/collections";
-import type { ThemeMode } from "@/lib/theme";
+import { ThemePicker } from "@/components/ThemePicker";
+import { CustomThemeSettings } from "@/components/CustomThemeSettings";
 import { emitWorkspaceReset } from "@/lib/workspace-sync";
 import { TooltipIconButton } from "@/components/TooltipIconButton";
 import { Button } from "@/components/ui/button";
@@ -48,12 +47,6 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-
-const themeOptions: { mode: ThemeMode; label: string; description: string; icon: typeof Sun }[] = [
-  { mode: "light", label: "Light", description: "Bright surfaces", icon: Sun },
-  { mode: "dark", label: "Dark", description: "Low-light friendly", icon: Moon },
-  { mode: "system", label: "System", description: "Match OS setting", icon: Monitor },
-];
 
 function SettingsSection({
   icon: Icon,
@@ -361,28 +354,8 @@ export function SettingsView() {
           title="Appearance"
           description={`Choose how ${APP_NAME} looks on this device.`}
         >
-          <div className="grid gap-3 sm:grid-cols-3">
-            {themeOptions.map(({ mode, label, description, icon: Icon }) => {
-              const active = theme === mode;
-              return (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setTheme(mode)}
-                  className={cn(
-                    "rounded-lg border p-4 text-left transition-colors",
-                    active
-                      ? "border-primary bg-primary/5 ring-1 ring-primary/20"
-                      : "border-border hover:border-primary/30 hover:bg-muted/30",
-                  )}
-                >
-                  <Icon className={cn("size-4", active ? "text-primary" : "text-muted-foreground")} />
-                  <p className="mt-3 text-sm font-medium">{label}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
-                </button>
-              );
-            })}
-          </div>
+          <ThemePicker value={theme} onChange={setTheme} />
+          <CustomThemeSettings />
         </SettingsSection>
 
         <SettingsSection
@@ -436,7 +409,7 @@ export function SettingsView() {
 
           <SettingRow
             title="Reset database"
-            description="Delete pulse.db and recreate an empty database. Removes collections, environments, accounts, sessions, and cache."
+            description="Delete your workspace database and recreate it empty. Removes your collections, environments, history, and HTTP cache. Your account stays signed in."
             danger
           >
             {!confirmResetDb ? (

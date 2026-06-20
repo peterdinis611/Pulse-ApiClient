@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
@@ -10,11 +10,17 @@
         try {
           var theme =
             localStorage.getItem("pulse-api-client/theme") ||
-            localStorage.getItem("relay-api-client/theme");
-          var dark =
-            theme === "dark" ||
-            (theme !== "light" &&
-              window.matchMedia("(prefers-color-scheme: dark)").matches);
+            localStorage.getItem("relay-api-client/theme") ||
+            "system";
+          var darkThemes = ["dark", "midnight", "graphite", "amethyst", "obsidian"];
+          var resolved =
+            theme === "system"
+              ? window.matchMedia("(prefers-color-scheme: dark)").matches
+                ? "dark"
+                : "light"
+              : theme;
+          var dark = darkThemes.indexOf(resolved) >= 0;
+          document.documentElement.setAttribute("data-theme", resolved);
           if (dark) {
             document.documentElement.classList.add("dark");
             document.documentElement.style.colorScheme = "dark";

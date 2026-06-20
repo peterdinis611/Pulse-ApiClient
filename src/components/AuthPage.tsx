@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { LoaderCircle, Zap } from "lucide-react";
 import { useApp } from "@/machines";
-import { AuthError, getInitials, loginAccount, registerAccount } from "@/lib/auth";
+import { AuthError, activateUserSession, getInitials, loginAccount, registerAccount } from "@/lib/auth";
+import { loadPersistedState } from "@/lib/storage";
 import { toast } from "@/lib/toast";
 import { APP_NAME } from "@/lib/app-config";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -39,12 +40,15 @@ export function AuthPage() {
         if (password !== confirmPassword) {
           throw new AuthError("Passwords do not match.");
         }
-        const user = await registerAccount(name, email, password);
-        signIn(user);
-        return;
       }
 
-      signIn(await loginAccount(email, password));
+      const user =
+        mode === "register"
+          ? await registerAccount(name, email, password)
+          : await loginAccount(email, password);
+      await activateUserSession(user);
+      const persisted = await loadPersistedState();
+      signIn(user, persisted);
     } catch (caught) {
       const message = caught instanceof AuthError ? caught.message : "Something went wrong.";
       setError(message);
@@ -75,7 +79,9 @@ export function AuthPage() {
           </p>
         </div>
 
-        <p className="text-xs text-topbar-muted">Local accounts are stored on this device.</p>
+        <p className="text-xs text-topbar-muted">
+          Local accounts and per-user workspaces are stored on this device.
+        </p>
       </section>
 
       <section className="flex min-h-screen flex-1 flex-col">

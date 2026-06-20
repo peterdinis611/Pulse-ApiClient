@@ -174,20 +174,13 @@ export async function loadPersistedState(): Promise<PersistedState> {
         const parsed = JSON.parse(raw) as Partial<PersistedState>;
         return migratePersistedState(parsed);
       }
+      return defaultPersistedState();
     } catch {
-      // fall through to legacy import
+      return defaultPersistedState();
     }
   }
 
-  const legacy = loadLegacyPersistedState();
-  if (canUseTauriIpc()) {
-    try {
-      await savePersistedState(legacy, { broadcast: false });
-    } catch {
-      // keep legacy state in memory if migration fails
-    }
-  }
-  return legacy;
+  return loadLegacyPersistedState();
 }
 
 export async function savePersistedState(

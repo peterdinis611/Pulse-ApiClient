@@ -4,6 +4,7 @@ mod http_integration;
 
 pub mod cache;
 pub mod cookies;
+pub mod custom_theme;
 pub mod db;
 pub mod engine;
 pub mod http;
@@ -118,6 +119,27 @@ fn set_http_settings(
 }
 
 #[tauri::command]
+fn read_custom_theme_css(path: String) -> Result<String, String> {
+    custom_theme::read_css_file(&path)
+}
+
+#[tauri::command]
+fn set_custom_theme_css(app: AppHandle, path: Option<String>) -> Result<AppSettings, String> {
+    let mut settings = settings::load_settings(&app)?;
+    let normalized = path
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+
+    if let Some(ref css_path) = normalized {
+        custom_theme::read_css_file(css_path)?;
+    }
+
+    settings.custom_theme_css_path = normalized;
+    settings::save_settings(&app, &settings)?;
+    Ok(settings)
+}
+
+#[tauri::command]
 fn run_http_tests(
     script: String,
     response: HttpResponsePayload,
@@ -151,8 +173,25 @@ fn db_clear_session(db: State<'_, Arc<DbState>>) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn db_get_database_path(app: AppHandle) -> Result<String, String> {
-    DbState::database_path(&app)
+fn db_get_database_path(app: AppHandle, db: State<'_, Arc<DbState>>) -> Result<String, String> {
+    db.database_path(&app)
+}
+
+#[tauri::command]
+fn db_switch_user(
+    app: AppHandle,
+    db: State<'_, Arc<DbState>>,
+    http: State<'_, HttpState>,
+    user_id: Option<String>,
+) -> Result<(), String> {
+    if let Some(user_id) = user_id {
+        db.switch_to_user(&app, &user_id)?;
+    } else {
+        db.clear_user_database()?;
+    }
+    http::clear_cache(http.inner());
+    http.inner().cache().prune_expired();
+    Ok(())
 }
 
 #[tauri::command]
@@ -163,26 +202,29 @@ fn db_reset_database(
 ) -> Result<(), String> {
     db.reset_database(&app)?;
     http::clear_cache(http.inner());
+    http.inner().cache().prune_expired();
     Ok(())
 }
 
 #[tauri::command]
 fn db_register_account(
+    app: AppHandle,
     db: State<'_, Arc<DbState>>,
     name: String,
     email: String,
     password: String,
 ) -> Result<DbUserSession, String> {
-    db.register_account(&name, &email, &password)
+    db.register_account(&app, &name, &email, &password)
 }
 
 #[tauri::command]
 fn db_login_account(
+    app: AppHandle,
     db: State<'_, Arc<DbState>>,
     email: String,
     password: String,
 ) -> Result<DbUserSession, String> {
-    db.login_account(&email, &password)
+    db.login_account(&app, &email, &password)
 }
 
 #[tauri::command]
@@ -286,6 +328,7 @@ fn ws_close(ws: State<'_, WsState>, connection_id: String) -> Result<(), String>
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let db_state = Arc::new(DbState::new(app.handle())?);
@@ -318,6 +361,8 @@ pub fn run() {
             set_theme,
             get_app_settings,
             set_http_settings,
+            read_custom_theme_css,
+            set_custom_theme_css,
             run_http_tests,
             db_load_workspace,
             db_save_workspace,
@@ -325,6 +370,7 @@ pub fn run() {
             db_save_session,
             db_clear_session,
             db_get_database_path,
+            db_switch_user,
             db_reset_database,
             db_register_account,
             db_login_account,

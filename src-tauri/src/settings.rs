@@ -20,6 +20,8 @@ pub struct AppSettings {
     pub http_cache_ttl_sec: u64,
     #[serde(default = "default_http_cache_disk_enabled")]
     pub http_cache_disk_enabled: bool,
+    #[serde(default)]
+    pub custom_theme_css_path: Option<String>,
 }
 
 fn default_http_cache_enabled() -> bool {
@@ -55,6 +57,7 @@ impl Default for AppSettings {
             http_cache_enabled: default_http_cache_enabled(),
             http_cache_ttl_sec: default_http_cache_ttl_sec(),
             http_cache_disk_enabled: default_http_cache_disk_enabled(),
+            custom_theme_css_path: None,
         }
     }
 }
@@ -83,18 +86,32 @@ pub fn save_settings(app: &AppHandle, settings: &AppSettings) -> Result<(), Stri
 
 pub fn normalize_theme(theme: &str) -> String {
     match theme {
-        "light" | "dark" | "system" => theme.to_string(),
+        "light"
+        | "dark"
+        | "system"
+        | "ocean"
+        | "forest"
+        | "sunset"
+        | "rose"
+        | "midnight"
+        | "graphite"
+        | "amethyst"
+        | "obsidian" => theme.to_string(),
         _ => "system".to_string(),
+    }
+}
+
+fn native_theme_for(theme: &str) -> Option<Theme> {
+    match theme {
+        "dark" | "midnight" | "graphite" | "amethyst" | "obsidian" => Some(Theme::Dark),
+        "light" | "ocean" | "forest" | "sunset" | "rose" => Some(Theme::Light),
+        _ => None,
     }
 }
 
 pub fn apply_native_theme(app: &AppHandle, theme: &str) -> Result<(), String> {
     let theme = normalize_theme(theme);
-    let native_theme = match theme.as_str() {
-        "dark" => Some(Theme::Dark),
-        "light" => Some(Theme::Light),
-        _ => None,
-    };
+    let native_theme = native_theme_for(&theme);
 
     for (_, window) in app.webview_windows() {
         window.set_theme(native_theme).map_err(|e| e.to_string())?;

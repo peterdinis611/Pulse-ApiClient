@@ -1,13 +1,29 @@
 import { readStorageItem, writeStorageItem } from "./app-config";
+import {
+  getThemeAppearance,
+  isThemeMode,
+  resolveDataTheme,
+  type ThemeMode,
+} from "./themes";
 
-export type ThemeMode = "light" | "dark" | "system";
+export type { ThemeMode } from "./themes";
+export {
+  CLASSIC_THEMES,
+  COLOR_THEMES,
+  cycleThemeMode,
+  getThemeDefinition,
+  getThemeIcon,
+  isThemeMode,
+  THEME_DEFINITIONS,
+  THEME_IDS,
+} from "./themes";
 
 const THEME_SUFFIX = "theme";
 
 export function loadThemeMode(): ThemeMode {
   try {
     const value = readStorageItem(THEME_SUFFIX);
-    if (value === "light" || value === "dark" || value === "system") {
+    if (value && isThemeMode(value)) {
       return value;
     }
   } catch {
@@ -26,18 +42,21 @@ export function getSystemTheme(): "light" | "dark" {
 }
 
 export function resolveTheme(mode: ThemeMode): "light" | "dark" {
-  if (mode === "system") return getSystemTheme();
-  return mode;
+  return getThemeAppearance(mode, getSystemTheme());
 }
 
 export function applyTheme(mode: ThemeMode): "light" | "dark" {
-  const resolved = resolveTheme(mode);
-  document.documentElement.classList.toggle("dark", resolved === "dark");
-  document.documentElement.style.colorScheme = resolved;
-  return resolved;
+  const systemTheme = getSystemTheme();
+  const dataTheme = resolveDataTheme(mode, systemTheme);
+  const appearance = getThemeAppearance(mode, systemTheme);
+
+  document.documentElement.dataset.theme = dataTheme;
+  document.documentElement.classList.toggle("dark", appearance === "dark");
+  document.documentElement.style.colorScheme = appearance;
+  return appearance;
 }
 
 export function toggleThemeMode(current: ThemeMode): ThemeMode {
-  const resolved = resolveTheme(current);
-  return resolved === "dark" ? "light" : "dark";
+  const appearance = resolveTheme(current);
+  return appearance === "dark" ? "light" : "dark";
 }

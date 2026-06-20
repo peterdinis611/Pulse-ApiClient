@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { signOutUser } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 type UserAuthAvatarProps = {
@@ -19,8 +20,16 @@ type UserAuthAvatarProps = {
 };
 
 export function UserAuthAvatar({ size = "sm", showLabel = false, className }: UserAuthAvatarProps) {
-  const { user, signOut } = useApp();
+  const { user, signOut, flushWorkspace } = useApp();
   if (!user) return null;
+
+  const handleSignOut = () => {
+    void (async () => {
+      await flushWorkspace();
+      await signOutUser();
+      signOut();
+    })();
+  };
 
   const avatarSize = size === "lg" ? "size-16" : "size-8";
   const textSize = size === "lg" ? "text-lg" : "text-xs";
@@ -51,7 +60,7 @@ export function UserAuthAvatar({ size = "sm", showLabel = false, className }: Us
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={signOut}>
+        <DropdownMenuItem onClick={handleSignOut}>
           <LogOut />
           Sign out
         </DropdownMenuItem>

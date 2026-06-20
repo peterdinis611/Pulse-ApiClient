@@ -29,7 +29,6 @@ import type { OverviewFilter } from "@/lib/filters";
 import { defaultOverviewFilter } from "@/lib/filters";
 import {
   clearUserSession,
-  saveUserSession,
   type UserSession,
 } from "@/lib/auth";
 import {
@@ -281,9 +280,39 @@ export type AppMachineEvent =
   | { type: "PERSIST_WINDOW_SESSION" }
   | { type: "SET_OVERVIEW_FILTER"; patch: Partial<OverviewFilter> }
   | { type: "RESET_OVERVIEW_FILTER" }
-  | { type: "SIGN_IN"; user: UserSession }
+  | { type: "SIGN_IN"; user: UserSession; persisted: PersistedState }
   | { type: "SIGN_OUT" }
   | { type: "SET_TEST_RESULTS"; results: TestRunResult | null };
+
+function tabsFromPersisted(persisted: PersistedState, windowId: string) {
+  const session = persisted.windowSessions[windowId];
+  if (session?.tabs.length) {
+    return {
+      tabs: session.tabs.map(normalizeTabState),
+      activeTabId: session.activeTabId,
+      mainView: session.mainView,
+      requestTab: session.requestTab,
+      consoleOpen: session.consoleOpen ?? false,
+      responsePanelOpen: session.responsePanelOpen ?? true,
+      sidebarSearch: session.sidebarSearch ?? "",
+      overviewFilter: session.sidebarSearch
+        ? { ...defaultOverviewFilter(), query: session.sidebarSearch }
+        : defaultOverviewFilter(),
+    };
+  }
+
+  const initialTab = createTabState(persisted.lastRequest);
+  return {
+    tabs: [initialTab],
+    activeTabId: initialTab.id,
+    mainView: "overview" as MainView,
+    requestTab: "params" as RequestTab,
+    consoleOpen: false,
+    responsePanelOpen: true,
+    sidebarSearch: "",
+    overviewFilter: defaultOverviewFilter(),
+  };
+}
 
 function createInitialContext(): AppMachineContext {
   const persisted = defaultPersistedState();
@@ -362,6 +391,13 @@ function persistLastRequest(context: AppMachineContext, broadcast = false) {
   void savePersistedState(buildPersistedFromContext(context), {
     sourceWindowId: context.windowId,
     broadcast,
+  });
+}
+
+export async function flushWorkspaceFromContext(context: AppMachineContext): Promise<void> {
+  await savePersistedState(buildPersistedFromContext(context), {
+    sourceWindowId: context.windowId,
+    broadcast: false,
   });
 }
 
@@ -1042,18 +1078,35 @@ export const appMachine = setup({
         },
         SIGN_IN: {
           actions: [
-            assign(({ event }) => ({ user: event.user })),
+            assign(({ context, event }) => ({
+              user: event.user,
+              persisted: event.persisted,
+              ...tabsFromPersisted(event.persisted, context.windowId),
+            })),
             ({ event }) => {
-              void saveUserSession(event.user);
               toast.success(`Welcome, ${event.user.name}`);
             },
           ],
         },
         SIGN_OUT: {
           actions: [
-            assign({ user: null }),
+            assign(() => {
+              const persisted = defaultPersistedState();
+              const initialTab = createTabState(persisted.lastRequest);
+              return {
+                user: null,
+                persisted,
+                tabs: [initialTab],
+                activeTabId: initialTab.id,
+                mainView: "overview" as MainView,
+                requestTab: "params" as RequestTab,
+                consoleOpen: false,
+                responsePanelOpen: true,
+                sidebarSearch: "",
+                overviewFilter: defaultOverviewFilter(),
+              };
+            }),
             () => {
-              void clearUserSession();
               toast.info("Signed out");
             },
           ],
@@ -1251,7 +1304,6 @@ export const appMachine = setup({
                 ...context.persisted,
                 history: [event.historyEntry, ...context.persisted.history].slice(0, 50),
               };
-              saveSharedWorkspace(context, persisted);
 
               return {
                 tabs: mapTabById(context, event.tabId, (current) => ({
@@ -1265,6 +1317,9 @@ export const appMachine = setup({
                 persisted,
               };
             }),
+            ({ context }) => {
+              persistLastRequest(context);
+            },
             ({ event }) => {
               toast.requestResponse(event.response);
             },

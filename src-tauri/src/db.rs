@@ -1,7 +1,7 @@
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
@@ -22,72 +22,65 @@ pub struct DiskCacheEntry {
 }
 
 pub struct DbState {
-    conn: Mutex<Connection>,
+    auth_conn: Mutex<Connection>,
+    user_conn: Mutex<Connection>,
+    active_user_id: Mutex<Option<String>>,
 }
 
 impl DbState {
     pub fn new(app: &AppHandle) -> Result<Self, String> {
-        let path = db_path(app)?;
+        migrate_legacy_database(app)?;
+
+        let auth_path = auth_db_path(app)?;
+        if let Some(parent) = auth_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+
+        let auth_conn = Connection::open(&auth_path).map_err(|e| e.to_string())?;
+        let user_conn = Connection::open_in_memory().map_err(|e| e.to_string())?;
+        let state = Self {
+            auth_conn: Mutex::new(auth_conn),
+            user_conn: Mutex::new(user_conn),
+            active_user_id: Mutex::new(None),
+        };
+        state.migrate_auth()?;
+        state.migrate_user()?;
+
+        if let Some(session) = state.load_session()? {
+            state.switch_to_user(app, &session.id)?;
+        }
+
+        Ok(state)
+    }
+
+    fn migrate_auth(&self) -> Result<(), String> {
+        let conn = self.auth_conn.lock().map_err(|e| e.to_string())?;
+        run_auth_migration(&conn)
+    }
+
+    fn migrate_user(&self) -> Result<(), String> {
+        let conn = self.user_conn.lock().map_err(|e| e.to_string())?;
+        run_user_migration(&conn)
+    }
+
+    pub fn switch_to_user(&self, app: &AppHandle, user_id: &str) -> Result<(), String> {
+        let path = user_db_path(app, user_id)?;
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
 
-        let conn = Connection::open(path).map_err(|e| e.to_string())?;
-        let state = Self {
-            conn: Mutex::new(conn),
-        };
-        state.migrate()?;
-        Ok(state)
+        let conn = Connection::open(&path).map_err(|e| e.to_string())?;
+        self.swap_user_connection(conn)?;
+        self.migrate_user()?;
+        *self.active_user_id.lock().map_err(|e| e.to_string())? = Some(user_id.to_string());
+        Ok(())
     }
 
-    fn migrate(&self) -> Result<(), String> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        conn.execute_batch(
-            "
-            PRAGMA journal_mode = WAL;
-            PRAGMA foreign_keys = ON;
-
-            CREATE TABLE IF NOT EXISTS accounts (
-              id TEXT PRIMARY KEY NOT NULL,
-              name TEXT NOT NULL,
-              email TEXT NOT NULL UNIQUE,
-              password_hash TEXT NOT NULL,
-              created_at TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS sessions (
-              id INTEGER PRIMARY KEY CHECK (id = 1),
-              user_id TEXT NOT NULL,
-              name TEXT NOT NULL,
-              email TEXT NOT NULL,
-              initials TEXT NOT NULL,
-              signed_at TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS workspace (
-              id INTEGER PRIMARY KEY CHECK (id = 1),
-              payload TEXT NOT NULL,
-              updated_at TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS legacy_import (
-              id INTEGER PRIMARY KEY CHECK (id = 1),
-              imported_at TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS http_response_cache (
-              cache_key TEXT PRIMARY KEY NOT NULL,
-              response_json TEXT NOT NULL,
-              cached_at_ms INTEGER NOT NULL,
-              expires_at_ms INTEGER NOT NULL,
-              size_bytes INTEGER NOT NULL
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_http_response_cache_expires
-              ON http_response_cache(expires_at_ms);
-            ",
-        )
-        .map_err(|e| e.to_string())?;
+    pub fn clear_user_database(&self) -> Result<(), String> {
+        let conn = Connection::open_in_memory().map_err(|e| e.to_string())?;
+        self.swap_user_connection(conn)?;
+        self.migrate_user()?;
+        *self.active_user_id.lock().map_err(|e| e.to_string())? = None;
         Ok(())
     }
 
@@ -96,7 +89,7 @@ impl DbState {
         key: &str,
         now_ms: u64,
     ) -> Result<Option<DiskCacheEntry>, String> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let conn = self.user_conn.lock().map_err(|e| e.to_string())?;
         let mut stmt = conn
             .prepare(
                 "SELECT response_json, cached_at_ms, expires_at_ms
@@ -129,7 +122,7 @@ impl DbState {
         size_bytes: usize,
         max_entries: u64,
     ) -> Result<(), String> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let conn = self.user_conn.lock().map_err(|e| e.to_string())?;
         conn.execute(
             "INSERT INTO http_response_cache (cache_key, response_json, cached_at_ms, expires_at_ms, size_bytes)
              VALUES (?1, ?2, ?3, ?4, ?5)
@@ -170,7 +163,7 @@ impl DbState {
     }
 
     pub fn cache_clear(&self) -> Result<u64, String> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let conn = self.user_conn.lock().map_err(|e| e.to_string())?;
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM http_response_cache", [], |row| row.get(0))
             .map_err(|e| e.to_string())?;
@@ -180,7 +173,7 @@ impl DbState {
     }
 
     pub fn cache_count(&self) -> Result<u64, String> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let conn = self.user_conn.lock().map_err(|e| e.to_string())?;
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM http_response_cache", [], |row| row.get(0))
             .map_err(|e| e.to_string())?;
@@ -188,7 +181,7 @@ impl DbState {
     }
 
     pub fn cache_prune_expired(&self, now_ms: u64) -> Result<u64, String> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let conn = self.user_conn.lock().map_err(|e| e.to_string())?;
         let deleted = conn
             .execute(
                 "DELETE FROM http_response_cache WHERE expires_at_ms <= ?1",
@@ -199,7 +192,7 @@ impl DbState {
     }
 
     pub fn load_workspace(&self) -> Result<Option<String>, String> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let conn = self.user_conn.lock().map_err(|e| e.to_string())?;
         let mut stmt = conn
             .prepare("SELECT payload FROM workspace WHERE id = 1")
             .map_err(|e| e.to_string())?;
@@ -211,7 +204,7 @@ impl DbState {
     }
 
     pub fn save_workspace(&self, payload: &str) -> Result<(), String> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let conn = self.user_conn.lock().map_err(|e| e.to_string())?;
         let updated_at = chrono_now();
         conn.execute(
             "INSERT INTO workspace (id, payload, updated_at) VALUES (1, ?1, ?2)
@@ -224,6 +217,7 @@ impl DbState {
 
     pub fn register_account(
         &self,
+        app: &AppHandle,
         name: &str,
         email: &str,
         password: &str,
@@ -244,7 +238,7 @@ impl DbState {
         let password_hash = hash_password(password);
         let created_at = chrono_now();
 
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let conn = self.auth_conn.lock().map_err(|e| e.to_string())?;
         conn.execute(
             "INSERT INTO accounts (id, name, email, password_hash, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
             params![id, name, email, password_hash, created_at],
@@ -256,22 +250,30 @@ impl DbState {
                 error.to_string()
             }
         })?;
+        drop(conn);
+
+        create_user_database(app, &id)?;
 
         account_to_session(&id, name, &email)
     }
 
-    pub fn login_account(&self, email: &str, password: &str) -> Result<DbUserSession, String> {
+    pub fn login_account(
+        &self,
+        app: &AppHandle,
+        email: &str,
+        password: &str,
+    ) -> Result<DbUserSession, String> {
         let email = normalize_email(email);
         if email.is_empty() || password.is_empty() {
             return Err("Enter your email and password.".to_string());
         }
 
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        let mut stmt = conn
-            .prepare("SELECT id, name, email, password_hash FROM accounts WHERE email = ?1")
-            .map_err(|e| e.to_string())?;
-        let account = stmt
-            .query_row(params![email], |row| {
+        let account = {
+            let conn = self.auth_conn.lock().map_err(|e| e.to_string())?;
+            let mut stmt = conn
+                .prepare("SELECT id, name, email, password_hash FROM accounts WHERE email = ?1")
+                .map_err(|e| e.to_string())?;
+            stmt.query_row(params![email], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
@@ -279,17 +281,20 @@ impl DbState {
                     row.get::<_, String>(3)?,
                 ))
             })
-            .map_err(|_| "No account found for this email.".to_string())?;
+            .map_err(|_| "No account found for this email.".to_string())?
+        };
 
         if account.3 != hash_password(password) {
             return Err("Incorrect password.".to_string());
         }
 
+        create_user_database(app, &account.0)?;
+
         account_to_session(&account.0, &account.1, &account.2)
     }
 
     pub fn save_session(&self, session: &DbUserSession) -> Result<(), String> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let conn = self.auth_conn.lock().map_err(|e| e.to_string())?;
         conn.execute(
             "INSERT INTO sessions (id, user_id, name, email, initials, signed_at) VALUES (1, ?1, ?2, ?3, ?4, ?5)
              ON CONFLICT(id) DO UPDATE SET user_id = excluded.user_id, name = excluded.name, email = excluded.email,
@@ -307,7 +312,7 @@ impl DbState {
     }
 
     pub fn load_session(&self) -> Result<Option<DbUserSession>, String> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let conn = self.auth_conn.lock().map_err(|e| e.to_string())?;
         let mut stmt = conn
             .prepare("SELECT user_id, name, email, initials, signed_at FROM sessions WHERE id = 1")
             .map_err(|e| e.to_string())?;
@@ -325,40 +330,338 @@ impl DbState {
     }
 
     pub fn clear_session(&self) -> Result<(), String> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let conn = self.auth_conn.lock().map_err(|e| e.to_string())?;
         conn.execute("DELETE FROM sessions WHERE id = 1", [])
             .map_err(|e| e.to_string())?;
         Ok(())
     }
 
-    pub fn database_path(app: &AppHandle) -> Result<String, String> {
-        db_path(app).map(|path| path.display().to_string())
+    pub fn database_path(&self, app: &AppHandle) -> Result<String, String> {
+        if let Some(user_id) = self
+            .active_user_id
+            .lock()
+            .map_err(|e| e.to_string())?
+            .clone()
+        {
+            return Ok(user_db_path(app, &user_id)?.display().to_string());
+        }
+        Ok(auth_db_path(app)?.display().to_string())
     }
 
     pub fn reset_database(&self, app: &AppHandle) -> Result<(), String> {
-        let path = db_path(app)?;
-        self.swap_connection(Connection::open_in_memory().map_err(|e| e.to_string())?)?;
+        let user_id = self
+            .active_user_id
+            .lock()
+            .map_err(|e| e.to_string())?
+            .clone()
+            .ok_or_else(|| "Sign in to reset your workspace database.".to_string())?;
+
+        let path = user_db_path(app, &user_id)?;
+        self.swap_user_connection(Connection::open_in_memory().map_err(|e| e.to_string())?)?;
         remove_db_files(&path)?;
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
-        self.swap_connection(Connection::open(&path).map_err(|e| e.to_string())?)?;
-        self.migrate()?;
+        self.swap_user_connection(Connection::open(&path).map_err(|e| e.to_string())?)?;
+        self.migrate_user()?;
         Ok(())
     }
 
-    fn swap_connection(&self, conn: Connection) -> Result<(), String> {
-        let mut guard = self.conn.lock().map_err(|e| e.to_string())?;
+    fn swap_user_connection(&self, conn: Connection) -> Result<(), String> {
+        let mut guard = self.user_conn.lock().map_err(|e| e.to_string())?;
         *guard = conn;
         Ok(())
     }
 }
 
-fn remove_db_files(path: &PathBuf) -> Result<(), String> {
+fn run_auth_migration(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch(
+        "
+        PRAGMA journal_mode = WAL;
+        PRAGMA foreign_keys = ON;
+
+        CREATE TABLE IF NOT EXISTS accounts (
+          id TEXT PRIMARY KEY NOT NULL,
+          name TEXT NOT NULL,
+          email TEXT NOT NULL UNIQUE,
+          password_hash TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS sessions (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          user_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          email TEXT NOT NULL,
+          initials TEXT NOT NULL,
+          signed_at TEXT NOT NULL
+        );
+        ",
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn run_user_migration(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch(
+        "
+        PRAGMA journal_mode = WAL;
+        PRAGMA foreign_keys = ON;
+
+        CREATE TABLE IF NOT EXISTS workspace (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          payload TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS legacy_import (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          imported_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS http_response_cache (
+          cache_key TEXT PRIMARY KEY NOT NULL,
+          response_json TEXT NOT NULL,
+          cached_at_ms INTEGER NOT NULL,
+          expires_at_ms INTEGER NOT NULL,
+          size_bytes INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_http_response_cache_expires
+          ON http_response_cache(expires_at_ms);
+        ",
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn create_user_database(app: &AppHandle, user_id: &str) -> Result<(), String> {
+    let path = user_db_path(app, user_id)?;
+    if path.exists() {
+        return Ok(());
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let conn = Connection::open(&path).map_err(|e| e.to_string())?;
+    run_user_migration(&conn)
+}
+
+fn migrate_legacy_database(app: &AppHandle) -> Result<(), String> {
+    let legacy_path = legacy_db_path(app)?;
+    let auth_path = auth_db_path(app)?;
+    if !legacy_path.exists() || auth_path.exists() {
+        return Ok(());
+    }
+
+    let legacy_conn = Connection::open(&legacy_path).map_err(|e| e.to_string())?;
+    if let Some(parent) = auth_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let auth_conn = Connection::open(&auth_path).map_err(|e| e.to_string())?;
+    run_auth_migration(&auth_conn)?;
+
+    let accounts = read_legacy_accounts(&legacy_conn)?;
+    for account in &accounts {
+        auth_conn
+            .execute(
+                "INSERT OR IGNORE INTO accounts (id, name, email, password_hash, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![
+                    account.0, account.1, account.2, account.3, account.4
+                ],
+            )
+            .map_err(|e| e.to_string())?;
+    }
+
+    if let Some(session) = read_legacy_session(&legacy_conn)? {
+        auth_conn
+            .execute(
+                "INSERT INTO sessions (id, user_id, name, email, initials, signed_at) VALUES (1, ?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT(id) DO UPDATE SET user_id = excluded.user_id, name = excluded.name, email = excluded.email,
+                 initials = excluded.initials, signed_at = excluded.signed_at",
+                params![session.0, session.1, session.2, session.3, session.4],
+            )
+            .map_err(|e| e.to_string())?;
+    }
+
+    let workspace = read_legacy_workspace(&legacy_conn)?;
+    let cache_rows = read_legacy_cache(&legacy_conn)?;
+    let primary_user_id = read_legacy_session(&legacy_conn)?
+        .map(|session| session.0)
+        .or_else(|| accounts.first().map(|account| account.0.clone()));
+
+    if let Some(user_id) = primary_user_id {
+        create_user_database(app, &user_id)?;
+        let user_path = user_db_path(app, &user_id)?;
+        let user_conn = Connection::open(&user_path).map_err(|e| e.to_string())?;
+        run_user_migration(&user_conn)?;
+
+        if let Some(payload) = workspace {
+            let updated_at = chrono_now();
+            user_conn
+                .execute(
+                    "INSERT INTO workspace (id, payload, updated_at) VALUES (1, ?1, ?2)
+                     ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at",
+                    params![payload, updated_at],
+                )
+                .map_err(|e| e.to_string())?;
+        }
+
+        for row in cache_rows {
+            user_conn
+                .execute(
+                    "INSERT OR IGNORE INTO http_response_cache (cache_key, response_json, cached_at_ms, expires_at_ms, size_bytes)
+                     VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![row.0, row.1, row.2, row.3, row.4],
+                )
+                .map_err(|e| e.to_string())?;
+        }
+    }
+
+    for account in accounts {
+        create_user_database(app, &account.0)?;
+    }
+
+    archive_legacy_database(&legacy_path)?;
+    Ok(())
+}
+
+fn read_legacy_accounts(
+    conn: &Connection,
+) -> Result<Vec<(String, String, String, String, String)>, String> {
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'accounts'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    if count == 0 {
+        return Ok(Vec::new());
+    }
+
+    let mut stmt = conn
+        .prepare("SELECT id, name, email, password_hash, created_at FROM accounts")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
+}
+
+fn read_legacy_session(
+    conn: &Connection,
+) -> Result<Option<(String, String, String, String, String)>, String> {
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'sessions'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    if count == 0 {
+        return Ok(None);
+    }
+
+    conn.query_row(
+        "SELECT user_id, name, email, initials, signed_at FROM sessions WHERE id = 1",
+        [],
+        |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        },
+    )
+    .optional()
+    .map_err(|e| e.to_string())
+}
+
+fn read_legacy_workspace(conn: &Connection) -> Result<Option<String>, String> {
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'workspace'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    if count == 0 {
+        return Ok(None);
+    }
+
+    conn.query_row("SELECT payload FROM workspace WHERE id = 1", [], |row| row.get(0))
+        .optional()
+        .map_err(|e| e.to_string())
+}
+
+fn read_legacy_cache(
+    conn: &Connection,
+) -> Result<Vec<(String, String, i64, i64, i64)>, String> {
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'http_response_cache'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    if count == 0 {
+        return Ok(Vec::new());
+    }
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT cache_key, response_json, cached_at_ms, expires_at_ms, size_bytes FROM http_response_cache",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
+}
+
+fn archive_legacy_database(path: &Path) -> Result<(), String> {
+    let backup = path.with_extension("db.bak");
+    remove_db_files(&backup)?;
+    std::fs::rename(path, &backup).map_err(|e| e.to_string())?;
+    let base = path.to_string_lossy();
+    for suffix in ["-wal", "-shm"] {
+        let sidecar = PathBuf::from(format!("{base}{suffix}"));
+        if sidecar.exists() {
+            let backup_sidecar = PathBuf::from(format!("{}.bak{suffix}", base.trim_end_matches(".db")));
+            let _ = std::fs::rename(&sidecar, backup_sidecar);
+        }
+    }
+    Ok(())
+}
+
+fn remove_db_files(path: &Path) -> Result<(), String> {
     let base = path.to_string_lossy();
     for suffix in ["", "-wal", "-shm"] {
         let file_path = if suffix.is_empty() {
-            path.clone()
+            path.to_path_buf()
         } else {
             PathBuf::from(format!("{base}{suffix}"))
         };
@@ -369,9 +672,20 @@ fn remove_db_files(path: &PathBuf) -> Result<(), String> {
     Ok(())
 }
 
-fn db_path(app: &AppHandle) -> Result<PathBuf, String> {
-    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    Ok(dir.join("pulse.db"))
+fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path().app_data_dir().map_err(|e| e.to_string())
+}
+
+fn auth_db_path(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(app_data_dir(app)?.join("auth.db"))
+}
+
+fn legacy_db_path(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(app_data_dir(app)?.join("pulse.db"))
+}
+
+fn user_db_path(app: &AppHandle, user_id: &str) -> Result<PathBuf, String> {
+    Ok(app_data_dir(app)?.join("users").join(user_id).join("pulse.db"))
 }
 
 fn normalize_email(email: &str) -> String {

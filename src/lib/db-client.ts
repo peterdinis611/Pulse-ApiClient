@@ -33,6 +33,10 @@ export async function dbLoginAccount(email: string, password: string): Promise<U
   return invoke<UserSession>("db_login_account", { email, password });
 }
 
+export async function dbSwitchUser(userId: string | null): Promise<void> {
+  await invoke("db_switch_user", { userId });
+}
+
 export async function dbGetDatabasePath(): Promise<string> {
   return invoke<string>("db_get_database_path");
 }

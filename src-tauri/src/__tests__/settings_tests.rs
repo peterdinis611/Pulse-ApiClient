@@ -5,6 +5,15 @@ fn normalize_theme_accepts_supported_values() {
     assert_eq!(normalize_theme("dark"), "dark");
     assert_eq!(normalize_theme("light"), "light");
     assert_eq!(normalize_theme("system"), "system");
+    assert_eq!(normalize_theme("ocean"), "ocean");
+    assert_eq!(normalize_theme("obsidian"), "obsidian");
+}
+
+#[test]
+fn native_theme_for_custom_palettes() {
+    assert_eq!(native_theme_for("ocean"), Some(Theme::Light));
+    assert_eq!(native_theme_for("obsidian"), Some(Theme::Dark));
+    assert_eq!(native_theme_for("system"), None);
 }
 
 #[test]
@@ -21,4 +30,5 @@ fn deserializes_partial_settings_with_defaults() {
     assert!(settings.http_cache_enabled);
     assert_eq!(settings.http_cache_ttl_sec, 900);
     assert!(settings.http_cache_disk_enabled);
+    assert_eq!(settings.custom_theme_css_path, None);
 }

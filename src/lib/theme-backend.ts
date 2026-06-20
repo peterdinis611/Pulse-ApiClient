@@ -1,11 +1,6 @@
 import { setTheme as setNativeTheme } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
-import type { ThemeMode } from "./theme";
-import { resolveTheme } from "./theme";
-
-function isThemeMode(value: string): value is ThemeMode {
-  return value === "light" || value === "dark" || value === "system";
-}
+import { isThemeMode, resolveTheme, type ThemeMode } from "./theme";
 
 export async function loadThemeFromBackend(): Promise<ThemeMode | null> {
   try {

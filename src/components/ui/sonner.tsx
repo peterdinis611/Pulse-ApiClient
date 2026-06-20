@@ -1,13 +1,12 @@
 import { Toaster as Sonner, type ToasterProps } from "sonner";
-import { useApp } from "@/machines";
-import { resolveTheme } from "@/lib/theme";
+import { useStandaloneTheme } from "@/hooks/use-standalone-theme";
 
 export function Toaster(props: ToasterProps) {
-  const { theme } = useApp();
+  const theme = useStandaloneTheme();
 
   return (
     <Sonner
-      theme={resolveTheme(theme)}
+      theme={theme}
       className="toaster group"
       closeButton
       richColors

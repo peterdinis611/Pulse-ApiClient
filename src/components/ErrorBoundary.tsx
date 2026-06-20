@@ -1,7 +1,9 @@
 import React from "react";
+import { AppErrorScreen } from "@/components/AppErrorScreen";
 
 type ErrorBoundaryProps = {
   children: React.ReactNode;
+  onRetry?: () => void;
 };
 
 type ErrorBoundaryState = {
@@ -15,14 +17,18 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     return { error };
   }
 
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error("Pulse render error:", error, info.componentStack);
+  }
+
+  private handleRetry = () => {
+    this.setState({ error: null });
+    this.props.onRetry?.();
+  };
+
   render() {
     if (this.state.error) {
-      return (
-        <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background px-6 text-center text-foreground">
-          <p className="text-lg font-semibold">Pulse failed to start</p>
-          <p className="max-w-lg text-sm text-muted-foreground">{this.state.error.message}</p>
-        </div>
-      );
+      return <AppErrorScreen error={this.state.error} onRetry={this.handleRetry} />;
     }
 
     return this.props.children;

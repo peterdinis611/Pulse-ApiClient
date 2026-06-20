@@ -1,8 +1,9 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useState } from "react";
 import { AppProvider, useApp } from "@/machines";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { LoadingScreen } from "./components/LoadingScreen";
 import { ThemeSync } from "./components/ThemeSync";
+import { CustomThemeSync } from "./components/CustomThemeSync";
 import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
 
@@ -23,15 +24,24 @@ function AppContent() {
   );
 }
 
-function App() {
+function AppShell() {
   return (
-    <ErrorBoundary>
-      <AppProvider>
-        <TooltipProvider delayDuration={300}>
-          <ThemeSync />
-          <Toaster position="top-right" />
-          <AppContent />
-        </TooltipProvider>
+    <TooltipProvider delayDuration={300}>
+      <ThemeSync />
+      <CustomThemeSync />
+      <AppContent />
+    </TooltipProvider>
+  );
+}
+
+function App() {
+  const [attempt, setAttempt] = useState(0);
+
+  return (
+    <ErrorBoundary onRetry={() => setAttempt((value) => value + 1)}>
+      <Toaster position="top-right" />
+      <AppProvider key={attempt}>
+        <AppShell />
       </AppProvider>
     </ErrorBoundary>
   );

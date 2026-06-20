@@ -1,28 +1,28 @@
-import { Monitor, Moon, Sun } from "lucide-react";
+import { useState } from "react";
+import { Settings2 } from "lucide-react";
 import { useApp } from "@/machines";
-import type { ThemeMode } from "@/lib/theme";
+import { getThemeIcon } from "@/lib/theme";
+import { ThemePicker } from "@/components/ThemePicker";
 import { TooltipWrap } from "@/components/TooltipIconButton";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
-
-const options: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
-  { mode: "light", label: "Light", icon: Sun },
-  { mode: "dark", label: "Dark", icon: Moon },
-  { mode: "system", label: "System", icon: Monitor },
-];
 
 export function ThemeToggle() {
-  const { theme, setTheme } = useApp();
-  const Icon = theme === "dark" ? Moon : theme === "light" ? Sun : Monitor;
+  const { theme, setTheme, setMainView } = useApp();
+  const [open, setOpen] = useState(false);
+  const Icon = getThemeIcon(theme);
+
+  const handleThemeChange = (mode: typeof theme) => {
+    setTheme(mode);
+    setOpen(false);
+  };
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <TooltipWrap label="Theme">
         <DropdownMenuTrigger asChild>
           <Button
@@ -36,17 +36,23 @@ export function ThemeToggle() {
           </Button>
         </DropdownMenuTrigger>
       </TooltipWrap>
-      <DropdownMenuContent align="end">
-        {options.map(({ mode, label, icon: OptionIcon }) => (
-          <DropdownMenuItem
-            key={mode}
-            onClick={() => setTheme(mode)}
-            className={cn(theme === mode && "bg-accent text-accent-foreground")}
+      <DropdownMenuContent align="end" className="w-auto p-0">
+        <ThemePicker value={theme} onChange={handleThemeChange} variant="menu" />
+        <div className="border-t border-border/70 p-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 w-full justify-start gap-2 text-xs text-muted-foreground"
+            onClick={() => {
+              setOpen(false);
+              setMainView("settings");
+            }}
           >
-            <OptionIcon className="size-4" />
-            {label}
-          </DropdownMenuItem>
-        ))}
+            <Settings2 className="size-3.5" />
+            Custom CSS & appearance
+          </Button>
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );

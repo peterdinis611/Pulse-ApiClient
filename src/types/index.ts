@@ -131,6 +131,7 @@ export type HttpSettings = {
 
 export type AppSettings = HttpSettings & {
   theme: string;
+  customThemeCssPath?: string | null;
 };
 
 export type CollectionGroup = {

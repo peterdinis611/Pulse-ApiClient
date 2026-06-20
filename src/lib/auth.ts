@@ -4,6 +4,7 @@ import {
   dbLoginAccount,
   dbRegisterAccount,
   dbSaveSession,
+  dbSwitchUser,
 } from "./db-client";
 
 export type UserSession = {
@@ -42,6 +43,20 @@ export async function saveUserSession(user: UserSession): Promise<void> {
 
 export async function clearUserSession(): Promise<void> {
   await dbClearSession();
+}
+
+export async function switchUserDatabase(userId: string | null): Promise<void> {
+  await dbSwitchUser(userId);
+}
+
+export async function activateUserSession(user: UserSession): Promise<void> {
+  await switchUserDatabase(user.id);
+  await saveUserSession(user);
+}
+
+export async function signOutUser(): Promise<void> {
+  await clearUserSession();
+  await switchUserDatabase(null);
 }
 
 export async function registerAccount(

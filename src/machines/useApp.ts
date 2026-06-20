@@ -13,13 +13,14 @@ import type { WebSocketSession } from "@/types";
 import { createRequest } from "@/lib/helpers";
 import type { UserSession } from "@/lib/auth";
 import type { TestRunResult } from "@/types";
-import { exportCollectionJson, exportEnvironmentsJson } from "@/lib/storage";
+import { exportCollectionJson, exportEnvironmentsJson, type PersistedState } from "@/lib/storage";
 import type { ThemeMode } from "@/lib/theme";
 import { AppMachineContext } from "@/machines/AppProvider";
 import {
   selectActiveEnvironment,
   selectActiveTab,
   selectWorkspaceEnvironment,
+  flushWorkspaceFromContext,
 } from "@/machines/appMachine";
 
 export function useApp() {
@@ -81,8 +82,12 @@ export function useApp() {
       send({ type: "SET_SIDEBAR_COLLAPSED", collapsed }),
     toggleSidebarCollapsed: () => send({ type: "TOGGLE_SIDEBAR_COLLAPSED" }),
     setSidebarWidth: (width: number) => send({ type: "SET_SIDEBAR_WIDTH", width }),
-    signIn: (user: UserSession) => send({ type: "SIGN_IN", user }),
+    signIn: (user: UserSession, persisted: PersistedState) =>
+      send({ type: "SIGN_IN", user, persisted }),
     signOut: () => send({ type: "SIGN_OUT" }),
+    flushWorkspace: async () => {
+      await flushWorkspaceFromContext(actorRef.getSnapshot().context);
+    },
     setTestResults: (results: TestRunResult | null) =>
       send({ type: "SET_TEST_RESULTS", results }),
     updateRequest: (patch: Partial<ApiRequest>) => send({ type: "UPDATE_REQUEST", patch }),
