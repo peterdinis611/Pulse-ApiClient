@@ -6,13 +6,15 @@ fn normalize_theme_accepts_supported_values() {
     assert_eq!(normalize_theme("light"), "light");
     assert_eq!(normalize_theme("system"), "system");
     assert_eq!(normalize_theme("ocean"), "ocean");
-    assert_eq!(normalize_theme("obsidian"), "obsidian");
+    assert_eq!(normalize_theme("aurora"), "aurora");
+    assert_eq!(normalize_theme("ember"), "ember");
 }
 
 #[test]
 fn native_theme_for_custom_palettes() {
     assert_eq!(native_theme_for("ocean"), Some(Theme::Light));
-    assert_eq!(native_theme_for("obsidian"), Some(Theme::Dark));
+    assert_eq!(native_theme_for("aurora"), Some(Theme::Dark));
+    assert_eq!(native_theme_for("lavender"), Some(Theme::Light));
     assert_eq!(native_theme_for("system"), None);
 }
 

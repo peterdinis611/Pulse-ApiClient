@@ -4,7 +4,8 @@ import { getThemeAppearance, getThemeDefinition, isThemeMode, resolveDataTheme }
 describe("themes", () => {
   it("recognizes built-in and custom theme ids", () => {
     expect(isThemeMode("ocean")).toBe(true);
-    expect(isThemeMode("obsidian")).toBe(true);
+    expect(isThemeMode("aurora")).toBe(true);
+    expect(isThemeMode("sand")).toBe(true);
     expect(isThemeMode("invalid")).toBe(false);
   });
 

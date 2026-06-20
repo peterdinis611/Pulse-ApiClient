@@ -12,7 +12,16 @@
             localStorage.getItem("pulse-api-client/theme") ||
             localStorage.getItem("relay-api-client/theme") ||
             "system";
-          var darkThemes = ["dark", "midnight", "graphite", "amethyst", "obsidian"];
+          var darkThemes = [
+            "dark",
+            "midnight",
+            "graphite",
+            "amethyst",
+            "obsidian",
+            "ember",
+            "slate",
+            "aurora",
+          ];
           var resolved =
             theme === "system"
               ? window.matchMedia("(prefers-color-scheme: dark)").matches
