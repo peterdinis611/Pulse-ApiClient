@@ -1,15 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
-  Cookie,
-  Database,
   Download,
   FolderPlus,
-  Gauge,
   History,
-  PanelLeft,
-  PanelRight,
-  Sun,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -46,37 +40,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
 function SettingsSection({
-  icon: Icon,
   title,
   description,
   children,
   action,
 }: {
-  icon: typeof Sun;
   title: string;
   description: string;
   children: ReactNode;
   action?: ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-      <div className="flex items-start justify-between gap-4 border-b border-border/70 bg-muted/20 px-5 py-4">
-        <div className="flex gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <Icon className="size-4" />
-          </div>
-          <div>
-            <h2 className="text-sm font-semibold">{title}</h2>
-            <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
-          </div>
+    <section className="space-y-4 border-b border-border pb-8 last:border-b-0 last:pb-0">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="text-[13px] font-medium">{title}</h2>
+          <p className="mt-1 text-[13px] text-muted-foreground">{description}</p>
         </div>
         {action}
       </div>
-      <div className="space-y-4 p-5">{children}</div>
+      <div className="space-y-3">{children}</div>
     </section>
   );
 }
@@ -95,8 +81,8 @@ function SettingRow({
   return (
     <div
       className={cn(
-        "flex flex-col gap-3 rounded-lg border border-border/70 p-4 sm:flex-row sm:items-center sm:justify-between",
-        danger && "border-destructive/30 bg-destructive/5",
+        "flex flex-col gap-3 border-b border-border/60 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between",
+        danger && "rounded-md border border-destructive/30 bg-destructive/5 px-3 py-3",
       )}
     >
       <div className="min-w-0 flex-1">
@@ -110,9 +96,9 @@ function SettingRow({
 
 function StatPill({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
-      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-0.5 text-sm font-semibold tabular-nums">{value}</p>
+    <div className="rounded-md border border-border/60 px-2.5 py-1.5">
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-0.5 text-[13px] font-medium tabular-nums">{value}</p>
     </div>
   );
 }
@@ -121,10 +107,8 @@ export function SettingsView() {
   const {
     theme,
     setTheme,
-    sidebarPosition,
-    sidebarCollapsed,
-    setSidebarPosition,
-    setSidebarCollapsed,
+    explorerCollapsed,
+    setExplorerCollapsed,
     mainView,
     windowId,
     collectionGroups,
@@ -342,17 +326,16 @@ export function SettingsView() {
   };
 
   return (
-    <ScrollAreaWithTop className="h-full" resetKey={mainView}>
-      <div className="mx-auto max-w-4xl space-y-6 p-6 sm:p-8">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-          <p className="text-sm text-muted-foreground">
+    <ScrollAreaWithTop className="h-full min-h-0" resetKey={mainView}>
+      <div className="mx-auto w-full max-w-2xl space-y-8 px-4 py-6 sm:px-6">
+        <header className="space-y-1">
+          <h1 className="text-lg font-semibold tracking-tight">Settings</h1>
+          <p className="text-[13px] text-muted-foreground">
             Appearance, workspace data, collections, and HTTP engine preferences.
           </p>
-        </div>
+        </header>
 
         <SettingsSection
-          icon={Sun}
           title="Appearance"
           description={`Choose how ${APP_NAME} looks on this device.`}
         >
@@ -361,7 +344,6 @@ export function SettingsView() {
         </SettingsSection>
 
         <SettingsSection
-          icon={Database}
           title="Data & storage"
           description="Local SQLite database, cache, and request history."
         >
@@ -451,7 +433,6 @@ export function SettingsView() {
         </SettingsSection>
 
         <SettingsSection
-          icon={Gauge}
           title="HTTP engine"
           description="Concurrency, timeouts, and response caching."
         >
@@ -538,56 +519,24 @@ export function SettingsView() {
         </SettingsSection>
 
         <SettingsSection
-          icon={PanelLeft}
           title="Layout"
-          description="Sidebar position, width, and collapse behavior."
+          description="Explorer panel visibility and keyboard shortcuts."
         >
-          <div className="grid gap-3 sm:grid-cols-2">
-            <button
-              type="button"
-              onClick={() => setSidebarPosition("left")}
-              className={cn(
-                "rounded-lg border p-4 text-left transition-colors",
-                sidebarPosition === "left"
-                  ? "border-primary bg-primary/5 ring-1 ring-primary/20"
-                  : "border-border hover:border-primary/30 hover:bg-muted/30",
-              )}
-            >
-              <PanelLeft className="size-4 text-primary" />
-              <p className="mt-3 text-sm font-medium">Sidebar on left</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">Default explorer layout</p>
-            </button>
-            <button
-              type="button"
-              onClick={() => setSidebarPosition("right")}
-              className={cn(
-                "rounded-lg border p-4 text-left transition-colors",
-                sidebarPosition === "right"
-                  ? "border-primary bg-primary/5 ring-1 ring-primary/20"
-                  : "border-border hover:border-primary/30 hover:bg-muted/30",
-              )}
-            >
-              <PanelRight className="size-4 text-primary" />
-              <p className="mt-3 text-sm font-medium">Sidebar on right</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">More room for request editor</p>
-            </button>
-          </div>
-          <label className="flex items-center gap-3 rounded-lg border border-border/70 p-4 text-sm">
+          <label className="flex items-center gap-3 rounded-md border border-border p-3 text-sm">
             <Checkbox
-              checked={sidebarCollapsed}
-              onCheckedChange={(checked) => setSidebarCollapsed(checked === true)}
+              checked={explorerCollapsed}
+              onCheckedChange={(checked) => setExplorerCollapsed(checked === true)}
             />
             <div>
-              <p className="font-medium">Start with collapsed sidebar</p>
+              <p className="font-medium">Start with explorer hidden</p>
               <p className="text-xs text-muted-foreground">
-                Show icon rail only. Toggle anytime with ⌘B or the layout menu.
+                Show icon rail only in request view. Toggle with ⌘B or the panel button in the rail.
               </p>
             </div>
           </label>
         </SettingsSection>
 
         <SettingsSection
-          icon={Cookie}
           title="Cookie jar"
           description="Cookies received from HTTP responses are stored automatically and sent on matching requests."
           action={
@@ -623,7 +572,6 @@ export function SettingsView() {
         </SettingsSection>
 
         <SettingsSection
-          icon={FolderPlus}
           title="Collections"
           description="Organize saved requests and import from Postman or OpenAPI."
           action={
@@ -761,7 +709,6 @@ export function SettingsView() {
         </SettingsSection>
 
         <SettingsSection
-          icon={FolderPlus}
           title="Folders"
           description="Manage folders inside the active collection."
         >
@@ -831,7 +778,6 @@ export function SettingsView() {
           )}
         </SettingsSection>
 
-        <Separator />
       </div>
     </ScrollAreaWithTop>
   );

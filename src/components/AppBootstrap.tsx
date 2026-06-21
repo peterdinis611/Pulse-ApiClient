@@ -2,7 +2,13 @@ import { useEffect, useState, type ReactNode } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { LoadingScreen } from "@/components/LoadingScreen";
-import { loadUserSession } from "@/lib/auth";
+import { loadUserSession, type UserSession } from "@/lib/auth";
+import {
+  getScreenshotDemoPersisted,
+  getScreenshotMainView,
+  isScreenshotMode,
+  SCREENSHOT_DEMO_USER,
+} from "@/lib/screenshot-demo";
 import { loadPersistedState } from "@/lib/storage";
 import { canUseTauriIpc, waitForTauriIpc } from "@/lib/tauri-runtime";
 import { listenWorkspaceReset, listenWorkspaceUpdated } from "@/lib/workspace-sync";
@@ -21,9 +27,14 @@ export function AppBootstrap({ children }: { children: ReactNode }) {
     void (async () => {
       try {
         await waitForTauriIpc(1500);
+        const useScreenshotDemo = isScreenshotMode() && !canUseTauriIpc();
+        const screenshotMainView = useScreenshotDemo ? getScreenshotMainView() : null;
+
         const [persisted, user, windowContext] = await Promise.all([
-          loadPersistedState(),
-          loadUserSession(),
+          useScreenshotDemo
+            ? Promise.resolve(getScreenshotDemoPersisted(screenshotMainView ?? "request"))
+            : loadPersistedState(),
+          useScreenshotDemo ? Promise.resolve<UserSession | null>(SCREENSHOT_DEMO_USER) : loadUserSession(),
           (async () => {
             if (!canUseTauriIpc()) {
               return { windowId: "main", pendingInit: null };

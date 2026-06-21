@@ -96,7 +96,7 @@ async function main() {
 
     const shots = [
       ["overview.png", "overview", "text=Welcome back"],
-      ["request.png", "request", "text=Response"],
+      ["request.png", "request", "text=GitHub User"],
       ["settings.png", "settings", "text=Appearance"],
     ];
 

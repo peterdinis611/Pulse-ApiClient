@@ -47,8 +47,8 @@ export function ResponsePanel() {
 
   return (
     <section className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-2">
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-1.5">
+        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           Response
         </span>
 
@@ -84,7 +84,7 @@ export function ResponsePanel() {
                   "font-mono",
                   testResults.failed > 0
                     ? "border-destructive/30 bg-destructive/10 text-destructive"
-                    : "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+                    : "status-badge-success",
                 )}
               >
                 Tests {testResults.passed}/{testResults.total}

@@ -47,7 +47,6 @@ import { getCurrentWindowLabel } from "@/lib/window-manager";
 import {
   loadLayoutPreferences,
   saveLayoutPreferences,
-  type SidebarPosition,
 } from "@/lib/layout-preferences";
 import { loadThemeMode, saveThemeMode, type ThemeMode } from "@/lib/theme";
 import { defaultWebSocketSession, inferProtocolFromUrl } from "@/lib/protocol";
@@ -79,9 +78,8 @@ export type AppMachineContext = {
   consoleOpen: boolean;
   responsePanelOpen: boolean;
   theme: ThemeMode;
-  sidebarPosition: SidebarPosition;
-  sidebarCollapsed: boolean;
-  sidebarWidth: number;
+  explorerCollapsed: boolean;
+  explorerWidth: number;
   user: UserSession | null;
   overviewFilter: OverviewFilter;
 };
@@ -282,10 +280,9 @@ export type AppMachineEvent =
   | { type: "LOAD_HISTORY_ENTRY"; entry: HistoryEntry }
   | { type: "CLEAR_HISTORY" }
   | { type: "SET_THEME"; theme: ThemeMode }
-  | { type: "SET_SIDEBAR_POSITION"; position: SidebarPosition }
-  | { type: "SET_SIDEBAR_COLLAPSED"; collapsed: boolean }
-  | { type: "TOGGLE_SIDEBAR_COLLAPSED" }
-  | { type: "SET_SIDEBAR_WIDTH"; width: number }
+  | { type: "SET_EXPLORER_COLLAPSED"; collapsed: boolean }
+  | { type: "TOGGLE_EXPLORER_COLLAPSED" }
+  | { type: "SET_EXPLORER_WIDTH"; width: number }
   | { type: "HYDRATE_APP"; persisted: PersistedState; user: UserSession | null; windowId: string; pendingInit?: PendingWindowInit | null }
   | { type: "SYNC_WORKSPACE"; persisted: PersistedState }
   | { type: "RESET_WORKSPACE" }
@@ -472,7 +469,25 @@ export const appMachine = setup({
           actions: assign({ requestTab: ({ event }) => event.tab }),
         },
         SET_MAIN_VIEW: {
-          actions: assign({ mainView: ({ event }) => event.view }),
+          actions: assign(({ context, event }) => {
+            const enteringRequest =
+              event.view === "request" && context.mainView !== "request";
+            const leavingRequest =
+              event.view !== "request" && context.mainView === "request";
+
+            let explorerCollapsed = context.explorerCollapsed;
+            if (enteringRequest) {
+              explorerCollapsed = false;
+            } else if (leavingRequest || event.view !== "request") {
+              explorerCollapsed = true;
+            }
+
+            saveLayoutPreferences({
+              explorerCollapsed,
+              explorerWidth: context.explorerWidth,
+            });
+            return { mainView: event.view, explorerCollapsed };
+          }),
         },
         SET_SIDEBAR_SEARCH: {
           actions: assign({
@@ -948,48 +963,36 @@ export const appMachine = setup({
             return { theme: event.theme };
           }),
         },
-        SET_SIDEBAR_POSITION: {
+        SET_EXPLORER_COLLAPSED: {
           actions: assign(({ context, event }) => {
-            const next = { ...context, sidebarPosition: event.position };
             saveLayoutPreferences({
-              sidebarPosition: next.sidebarPosition,
-              sidebarCollapsed: next.sidebarCollapsed,
-              sidebarWidth: next.sidebarWidth,
+              explorerCollapsed: event.collapsed,
+              explorerWidth: context.explorerWidth,
             });
-            return { sidebarPosition: event.position };
+            return { explorerCollapsed: event.collapsed };
           }),
         },
-        SET_SIDEBAR_COLLAPSED: {
-          actions: assign(({ context, event }) => {
-            const next = { ...context, sidebarCollapsed: event.collapsed };
-            saveLayoutPreferences({
-              sidebarPosition: next.sidebarPosition,
-              sidebarCollapsed: next.sidebarCollapsed,
-              sidebarWidth: next.sidebarWidth,
-            });
-            return { sidebarCollapsed: event.collapsed };
-          }),
-        },
-        TOGGLE_SIDEBAR_COLLAPSED: {
+        TOGGLE_EXPLORER_COLLAPSED: {
           actions: assign(({ context }) => {
-            const sidebarCollapsed = !context.sidebarCollapsed;
+            const explorerCollapsed = !context.explorerCollapsed;
+            const mainView =
+              !explorerCollapsed && context.mainView !== "request"
+                ? ("request" as const)
+                : context.mainView;
             saveLayoutPreferences({
-              sidebarPosition: context.sidebarPosition,
-              sidebarCollapsed,
-              sidebarWidth: context.sidebarWidth,
+              explorerCollapsed,
+              explorerWidth: context.explorerWidth,
             });
-            return { sidebarCollapsed };
+            return { explorerCollapsed, mainView };
           }),
         },
-        SET_SIDEBAR_WIDTH: {
+        SET_EXPLORER_WIDTH: {
           actions: assign(({ context, event }) => {
-            const sidebarWidth = event.width;
             saveLayoutPreferences({
-              sidebarPosition: context.sidebarPosition,
-              sidebarCollapsed: context.sidebarCollapsed,
-              sidebarWidth,
+              explorerCollapsed: context.explorerCollapsed,
+              explorerWidth: event.width,
             });
-            return { sidebarWidth };
+            return { explorerWidth: event.width };
           }),
         },
         HYDRATE_APP: {
@@ -1018,6 +1021,8 @@ export const appMachine = setup({
               mainView = pending?.mainView ?? "overview";
             }
 
+            const explorerCollapsed = mainView !== "request";
+
             return {
               windowId,
               persisted: event.persisted,
@@ -1032,6 +1037,7 @@ export const appMachine = setup({
                 ? { ...defaultOverviewFilter(), query: session.sidebarSearch }
                 : defaultOverviewFilter(),
               user: event.user,
+              explorerCollapsed,
             };
           }),
         },

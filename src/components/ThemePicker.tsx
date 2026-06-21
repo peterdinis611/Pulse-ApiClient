@@ -25,108 +25,6 @@ function getThemePreviewBackground(theme: ThemeDefinition): string {
   return theme.preview.background;
 }
 
-function ThemePalettePreview({ theme }: { theme: ThemeDefinition }) {
-  if (theme.id === "system") {
-    const light = getThemeDefinition("light").preview;
-    const dark = getThemeDefinition("dark").preview;
-
-    return (
-      <div className="grid h-20 grid-cols-2 overflow-hidden">
-        <div className="flex flex-col justify-between p-2.5" style={{ background: light.background }}>
-          <div className="flex gap-1">
-            <span className="size-2 rounded-full" style={{ background: light.primary }} />
-            <span className="size-2 rounded-full opacity-70" style={{ background: light.accent }} />
-          </div>
-          <div className="h-5 rounded-sm" style={{ background: light.accent }} />
-        </div>
-        <div className="flex flex-col justify-between p-2.5" style={{ background: dark.background }}>
-          <div className="flex gap-1">
-            <span className="size-2 rounded-full" style={{ background: dark.primary }} />
-            <span className="size-2 rounded-full opacity-70" style={{ background: dark.accent }} />
-          </div>
-          <div className="h-5 rounded-sm" style={{ background: dark.accent }} />
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className="flex h-20 flex-col justify-between p-2.5"
-      style={{ background: theme.preview.background }}
-    >
-      <div className="flex gap-1">
-        <span className="size-2 rounded-full" style={{ background: theme.preview.primary }} />
-        <span className="size-2 rounded-full opacity-70" style={{ background: theme.preview.accent }} />
-        <span
-          className="ml-auto h-2 w-8 rounded-full"
-          style={{ background: theme.preview.primary, opacity: 0.85 }}
-        />
-      </div>
-      <div className="grid grid-cols-3 gap-1">
-        <div className="h-5 rounded-sm" style={{ background: theme.preview.accent }} />
-        <div className="h-5 rounded-sm border border-black/5" style={{ background: theme.preview.background }} />
-        <div className="h-5 rounded-sm" style={{ background: theme.preview.primary, opacity: 0.35 }} />
-      </div>
-    </div>
-  );
-}
-
-function ThemeCard({
-  theme,
-  active,
-  onSelect,
-}: {
-  theme: ThemeDefinition;
-  active: boolean;
-  onSelect: (mode: ThemeMode) => void;
-}) {
-  const Icon = theme.icon;
-
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(theme.id)}
-      className={cn(
-        "overflow-hidden rounded-lg border text-left transition-all",
-        active
-          ? "border-primary ring-2 ring-primary/30"
-          : "border-border hover:border-primary/40 hover:shadow-sm",
-      )}
-    >
-      <ThemePalettePreview theme={theme} />
-      <div
-        className={cn(
-          "border-t p-3",
-          active ? "border-primary/20 bg-primary/5" : "border-border/70 bg-card",
-        )}
-      >
-        <div className="flex items-start gap-2">
-          <Icon className={cn("mt-0.5 size-4 shrink-0", active ? "text-primary" : "text-muted-foreground")} />
-          <div className="min-w-0">
-            <p className="text-sm font-medium">{theme.label}</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">{theme.description}</p>
-          </div>
-        </div>
-        <div className="mt-2.5 flex items-center gap-1.5">
-          <span
-            className="size-3 rounded-full border border-black/10"
-            style={{ background: theme.id === "system" ? getThemePreviewBackground(theme) : theme.preview.background }}
-          />
-          <span
-            className="size-3 rounded-full border border-black/10"
-            style={{ background: theme.preview.primary }}
-          />
-          <span
-            className="size-3 rounded-full border border-black/10"
-            style={{ background: theme.preview.accent }}
-          />
-        </div>
-      </div>
-    </button>
-  );
-}
-
 function ClassicThemeTile({
   theme,
   active,
@@ -274,14 +172,14 @@ export function ThemePicker({ value, onChange, variant = "grid" }: ThemePickerPr
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div>
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           Classic
         </p>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-3 gap-2">
           {CLASSIC_THEMES.map((theme) => (
-            <ThemeCard
+            <ClassicThemeTile
               key={theme.id}
               theme={theme}
               active={value === theme.id}
@@ -291,12 +189,12 @@ export function ThemePicker({ value, onChange, variant = "grid" }: ThemePickerPr
         </div>
       </div>
       <div>
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           Color themes
         </p>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
           {COLOR_THEMES.map((theme) => (
-            <ThemeCard
+            <ColorThemeTile
               key={theme.id}
               theme={theme}
               active={value === theme.id}
@@ -305,7 +203,7 @@ export function ThemePicker({ value, onChange, variant = "grid" }: ThemePickerPr
           ))}
         </div>
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-[12px] text-muted-foreground">
         Active theme: <span className="font-medium text-foreground">{activeTheme.label}</span>
         {systemAppearance && (
           <>

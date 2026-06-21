@@ -35,7 +35,7 @@ export function CollectionRunResultsPanel({ result, onClose }: CollectionRunResu
                   "font-mono",
                   result.failed > 0
                     ? "border-destructive/30 bg-destructive/10 text-destructive"
-                    : "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+                    : "status-badge-success",
                 )}
               >
                 {result.passed}/{result.totalTests} passed
@@ -69,7 +69,7 @@ export function CollectionRunResultsPanel({ result, onClose }: CollectionRunResu
                       <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
                     )}
                     {passed ? (
-                      <CheckCircle2 className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                      <CheckCircle2 className="size-4 shrink-0 text-success" />
                     ) : (
                       <XCircle className="size-4 shrink-0 text-destructive" />
                     )}

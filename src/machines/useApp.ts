@@ -50,9 +50,8 @@ export function useApp() {
     consoleOpen: context.consoleOpen,
     responsePanelOpen: context.responsePanelOpen,
     theme: context.theme,
-    sidebarPosition: context.sidebarPosition,
-    sidebarCollapsed: context.sidebarCollapsed,
-    sidebarWidth: context.sidebarWidth,
+    explorerCollapsed: context.explorerCollapsed,
+    explorerWidth: context.explorerWidth,
     user: context.user,
     overviewFilter: context.overviewFilter,
     collectionGroups: context.persisted.collectionGroups,
@@ -75,12 +74,10 @@ export function useApp() {
       send({ type: "SET_OVERVIEW_FILTER", patch }),
     resetOverviewFilter: () => send({ type: "RESET_OVERVIEW_FILTER" }),
     setTheme: (theme: ThemeMode) => send({ type: "SET_THEME", theme }),
-    setSidebarPosition: (position: "left" | "right") =>
-      send({ type: "SET_SIDEBAR_POSITION", position }),
-    setSidebarCollapsed: (collapsed: boolean) =>
-      send({ type: "SET_SIDEBAR_COLLAPSED", collapsed }),
-    toggleSidebarCollapsed: () => send({ type: "TOGGLE_SIDEBAR_COLLAPSED" }),
-    setSidebarWidth: (width: number) => send({ type: "SET_SIDEBAR_WIDTH", width }),
+    setExplorerCollapsed: (collapsed: boolean) =>
+      send({ type: "SET_EXPLORER_COLLAPSED", collapsed }),
+    toggleExplorerCollapsed: () => send({ type: "TOGGLE_EXPLORER_COLLAPSED" }),
+    setExplorerWidth: (width: number) => send({ type: "SET_EXPLORER_WIDTH", width }),
     signIn: (user: UserSession, persisted: PersistedState) =>
       send({ type: "SIGN_IN", user, persisted }),
     signOut: () => send({ type: "SIGN_OUT" }),

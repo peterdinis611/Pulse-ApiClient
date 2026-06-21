@@ -20,7 +20,7 @@ export function TestResultsList({
   return (
     <div className={cn("space-y-3", compact && "space-y-2")}>
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+        <span className="inline-flex items-center gap-1 text-success">
           <CheckCircle2 className="size-4" />
           {results.passed} passed
         </span>
@@ -40,13 +40,13 @@ export function TestResultsList({
             className={cn(
               "rounded-md border px-3 py-2",
               item.passed
-                ? "border-emerald-500/20 bg-emerald-500/5"
+                ? "border-success/20 bg-success/5"
                 : "border-destructive/30 bg-destructive/10",
             )}
           >
             <div className="flex items-start gap-2">
               {item.passed ? (
-                <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
               ) : (
                 <XCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
               )}

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  SIDEBAR_WIDTH_MAX,
-  SIDEBAR_WIDTH_MIN,
+  EXPLORER_WIDTH_MAX,
+  EXPLORER_WIDTH_MIN,
   defaultLayoutPreferences,
   loadLayoutPreferences,
   saveLayoutPreferences,
@@ -29,24 +29,21 @@ describe("layout-preferences", () => {
     expect(loadLayoutPreferences()).toEqual(defaultLayoutPreferences());
   });
 
-  it("clamps sidebar width on save", () => {
+  it("clamps explorer width on save", () => {
     saveLayoutPreferences({
-      sidebarPosition: "right",
-      sidebarCollapsed: true,
-      sidebarWidth: 999,
+      explorerCollapsed: true,
+      explorerWidth: 999,
     });
     const loaded = loadLayoutPreferences();
-    expect(loaded.sidebarPosition).toBe("right");
-    expect(loaded.sidebarCollapsed).toBe(true);
-    expect(loaded.sidebarWidth).toBe(SIDEBAR_WIDTH_MAX);
+    expect(loaded.explorerCollapsed).toBe(true);
+    expect(loaded.explorerWidth).toBe(EXPLORER_WIDTH_MAX);
   });
 
   it("restores valid saved preferences", () => {
     saveLayoutPreferences({
-      sidebarPosition: "left",
-      sidebarCollapsed: false,
-      sidebarWidth: SIDEBAR_WIDTH_MIN,
+      explorerCollapsed: false,
+      explorerWidth: EXPLORER_WIDTH_MIN,
     });
-    expect(loadLayoutPreferences().sidebarWidth).toBe(SIDEBAR_WIDTH_MIN);
+    expect(loadLayoutPreferences().explorerWidth).toBe(EXPLORER_WIDTH_MIN);
   });
 });

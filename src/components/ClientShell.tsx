@@ -1,12 +1,11 @@
 import { Suspense, lazy, useEffect } from "react";
 import { useApp } from "@/machines";
-import { LayoutControls } from "./LayoutControls";
+import { AppRail } from "./AppRail";
+import { ExplorerPanel } from "./ExplorerPanel";
 import { LoadingScreen } from "./LoadingScreen";
-import { RequestTabBar } from "./RequestTabBar";
-import { ResizableSidebar } from "./ResizableSidebar";
-import { Sidebar } from "./Sidebar";
+import { ResizableExplorer } from "./ResizableExplorer";
 import { StatusBar } from "./StatusBar";
-import { TopBar } from "./TopBar";
+import { WorkspaceHeader } from "./WorkspaceHeader";
 import { APP_NAME } from "@/lib/app-config";
 import {
   createAppWindow,
@@ -32,15 +31,14 @@ const SettingsView = lazy(() =>
 );
 
 export function ClientShell() {
-  const { mainView, consoleOpen, tabs, activeTabId, sidebarPosition, toggleSidebarCollapsed } =
-    useApp();
+  const { mainView, consoleOpen, tabs, activeTabId, toggleExplorerCollapsed } = useApp();
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey) {
         if (event.key.toLowerCase() === "b" && !event.shiftKey) {
           event.preventDefault();
-          toggleSidebarCollapsed();
+          toggleExplorerCollapsed();
           return;
         }
 
@@ -61,7 +59,7 @@ export function ClientShell() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [toggleSidebarCollapsed]);
+  }, [toggleExplorerCollapsed]);
 
   useEffect(() => {
     void (async () => {
@@ -86,52 +84,32 @@ export function ClientShell() {
     })();
   }, [tabs, activeTabId, mainView]);
 
-  const sidebar = (
-    <ResizableSidebar position={sidebarPosition}>
-      <Sidebar />
-    </ResizableSidebar>
-  );
-
-  const workspace = (
-    <div className="workspace-surface flex min-w-0 flex-1 flex-col">
-      <div className="flex items-center justify-between border-b border-border/60 bg-card/50 px-2 backdrop-blur-md">
-        <RequestTabBar />
-        <div className="hidden shrink-0 pr-2 lg:flex">
-          <LayoutControls />
-        </div>
-      </div>
-      <main className="flex min-h-0 flex-1 flex-col">
-        <Suspense fallback={<LoadingScreen variant="inline" label="Loading view" />}>
-          {mainView === "overview" && <OverviewView />}
-          {mainView === "environments" && <EnvironmentsView />}
-          {mainView === "settings" && <SettingsView />}
-          {mainView === "request" && <RequestWorkspace />}
-        </Suspense>
-      </main>
-      {consoleOpen && (
-        <Suspense fallback={<LoadingScreen variant="inline" label="Loading console" />}>
-          <ConsolePanel />
-        </Suspense>
-      )}
-      <StatusBar />
-    </div>
-  );
+  const showExplorer = mainView === "request";
 
   return (
-    <div className="flex h-screen flex-col bg-background">
-      <TopBar />
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        {sidebarPosition === "left" ? (
-          <>
-            {sidebar}
-            {workspace}
-          </>
-        ) : (
-          <>
-            {workspace}
-            {sidebar}
-          </>
+    <div className="flex h-screen bg-background">
+      <AppRail />
+      {showExplorer && (
+        <ResizableExplorer>
+          <ExplorerPanel />
+        </ResizableExplorer>
+      )}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <WorkspaceHeader />
+        <main className="flex min-h-0 flex-1 flex-col bg-background">
+          <Suspense fallback={<LoadingScreen variant="inline" label="Loading view" />}>
+            {mainView === "overview" && <OverviewView />}
+            {mainView === "environments" && <EnvironmentsView />}
+            {mainView === "settings" && <SettingsView />}
+            {mainView === "request" && <RequestWorkspace />}
+          </Suspense>
+        </main>
+        {consoleOpen && (
+          <Suspense fallback={<LoadingScreen variant="inline" label="Loading console" />}>
+            <ConsolePanel />
+          </Suspense>
         )}
+        <StatusBar />
       </div>
     </div>
   );

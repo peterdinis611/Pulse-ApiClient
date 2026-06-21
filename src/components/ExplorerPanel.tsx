@@ -7,15 +7,12 @@ import {
   FolderInput,
   FolderPlus,
   Folder,
-  Globe2,
   History,
-  LayoutGrid,
   LoaderCircle,
-  PanelLeftOpen,
+  PanelLeftClose,
   Play,
   Plus,
   Search,
-  Settings,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -36,7 +33,6 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Input } from "@/components/ui/input";
 import { EnvironmentSwitcher } from "@/components/EnvironmentSwitcher";
 import { ScrollAreaWithTop } from "@/components/ui/scroll-area-with-top";
-import { Separator } from "@/components/ui/separator";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,15 +41,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
-import type { MainView, SavedRequest } from "@/types";
+import type { SavedRequest } from "@/types";
 
-export function Sidebar() {
+export function ExplorerPanel() {
   const {
     sidebarSearch,
     setSidebarSearch,
-    mainView,
     setMainView,
+    toggleExplorerCollapsed,
     collectionGroups,
     collections,
     environments,
@@ -71,8 +66,6 @@ export function Sidebar() {
     addEnvironment,
     deleteFolder,
     activeEnvironment,
-    sidebarCollapsed,
-    toggleSidebarCollapsed,
   } = useApp();
 
   const {
@@ -171,33 +164,25 @@ export function Sidebar() {
     }
   };
 
-  if (sidebarCollapsed) {
-    return (
-      <SidebarRail
-        mainView={mainView}
-        setMainView={setMainView}
-        onExpand={toggleSidebarCollapsed}
-      />
-    );
-  }
-
   return (
     <aside className="flex min-h-0 flex-1 flex-col">
-      <div className="space-y-3 border-b border-sidebar-border/80 bg-sidebar/80 p-3 backdrop-blur-sm">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Explorer
-          </p>
+      <div className="shrink-0 space-y-2 border-b border-sidebar-border/80 px-2.5 pb-2.5 pt-2">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold leading-none text-foreground">Explorer</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">Collections & history</p>
+          </div>
           <TooltipIconButton
             variant="ghost"
             size="icon"
-            className="size-7 text-muted-foreground"
-            label="Collapse sidebar (⌘B)"
-            onClick={toggleSidebarCollapsed}
+            className="size-7 shrink-0 text-muted-foreground"
+            label="Hide explorer (⌘B)"
+            onClick={toggleExplorerCollapsed}
           >
-            <PanelLeftOpen className="size-4" />
+            <PanelLeftClose className="size-3.5" />
           </TooltipIconButton>
         </div>
+
         <EnvironmentSwitcher
           mode="workspace"
           environments={environments}
@@ -212,49 +197,22 @@ export function Sidebar() {
         />
 
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={sidebarSearch}
             onChange={(event) => setSidebarSearch(event.target.value)}
-            className="h-9 border-sidebar-border/80 bg-background/80 pl-9 pr-12"
-            placeholder="Fuzzy search collections & history"
+            className="h-8 border-sidebar-border/80 bg-background/60 pl-8 text-[13px] shadow-none focus-visible:bg-background"
+            placeholder="Search…"
           />
-          <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-            ⌘K
-          </kbd>
         </div>
       </div>
 
       <ScrollAreaWithTop className="min-h-0 flex-1" resetKey={sidebarSearch}>
-        <div className="space-y-1 p-2">
-          <SidebarNavItem
-            active={mainView === "overview"}
-            icon={LayoutGrid}
-            label="Overview"
-            onClick={() => setMainView("overview")}
-          />
-          <SidebarNavItem
-            active={mainView === "environments"}
-            icon={Globe2}
-            label="Environments"
-            onClick={() => setMainView("environments")}
-          />
-          <SidebarNavItem
-            active={mainView === "settings"}
-            icon={Settings}
-            label="Settings"
-            onClick={() => setMainView("settings")}
-          />
-
-          <Separator className="my-2" />
-
+        <div className="space-y-0.5 p-1.5">
           <Collapsible open={collectionsOpen} onOpenChange={setCollectionsOpen}>
-            <div className="flex items-center justify-between px-2 py-1">
+            <div className="flex items-center justify-between pr-0.5">
               <CollapsibleTrigger asChild>
-                <button
-                  type="button"
-                  className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                >
+                <button type="button" className="explorer-section-label rounded-sm hover:bg-sidebar-accent/70">
                   {collectionsOpen ? (
                     <ChevronDown className="size-3.5" />
                   ) : (
@@ -320,17 +278,16 @@ export function Sidebar() {
                   >
                     <div className="flex items-center gap-1 pr-1">
                       <CollapsibleTrigger asChild>
-                        <button
-                          type="button"
-                          className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-2 text-left hover:bg-sidebar-accent"
-                        >
+                        <button type="button" className="explorer-tree-row min-w-0 flex-1 font-medium">
                           {open ? (
-                            <ChevronDown className="size-3.5 shrink-0" />
+                            <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
                           ) : (
-                            <ChevronRight className="size-3.5 shrink-0" />
+                            <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
                           )}
-                          <span className="min-w-0 flex-1 truncate text-sm font-medium">{group.name}</span>
-                          <span className="text-xs text-muted-foreground">{items.length}</span>
+                          <span className="min-w-0 flex-1 truncate">{group.name}</span>
+                          <span className="rounded bg-muted/80 px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground">
+                            {items.length}
+                          </span>
                         </button>
                       </CollapsibleTrigger>
                       <AddFolderMenu
@@ -405,13 +362,12 @@ export function Sidebar() {
             </CollapsibleContent>
           </Collapsible>
 
+          <div className="mx-2 my-1.5 h-px bg-border/50" />
+
           <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
-            <div className="flex items-center justify-between pr-1">
+            <div className="flex items-center justify-between pr-0.5">
               <CollapsibleTrigger asChild>
-                <button
-                  type="button"
-                  className="flex min-w-0 flex-1 items-center gap-1 px-2 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                >
+                <button type="button" className="explorer-section-label min-w-0 flex-1 rounded-sm hover:bg-sidebar-accent/70">
                   {historyOpen ? (
                     <ChevronDown className="size-3.5 shrink-0" />
                   ) : (
@@ -445,13 +401,11 @@ export function Sidebar() {
                 <button
                   key={entry.id}
                   type="button"
-                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left hover:bg-sidebar-accent"
+                  className="explorer-tree-row w-full"
                   onClick={() => loadHistoryEntry(entry)}
                 >
                   <MethodBadge method={entry.request.method} />
-                  <span className="min-w-0 flex-1 truncate text-sm">
-                    {entry.request.name || entry.request.url}
-                  </span>
+                  <span className="min-w-0 flex-1 truncate">{entry.request.name || entry.request.url}</span>
                 </button>
               ))}
               {historyEntries.length === 0 && (
@@ -478,7 +432,7 @@ export function Sidebar() {
         <div className="border-t border-sidebar-border px-3 py-2 text-xs text-muted-foreground">
           {runProgress && <p>{runProgress}</p>}
           {collectionRun && collectionRun.totalTests > 0 && (
-            <p className={collectionRun.failed > 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}>
+            <p className={collectionRun.failed > 0 ? "text-destructive" : "text-success"}>
               Collection tests: {collectionRun.passed}/{collectionRun.totalTests} passed
             </p>
           )}
@@ -501,9 +455,14 @@ export function Sidebar() {
         />
       )}
 
-      <div className="border-t border-sidebar-border p-2">
-        <Button variant="outline" size="sm" className="w-full" onClick={addEnvironment}>
-          <Plus />
+      <div className="shrink-0 border-t border-sidebar-border/80 p-1.5">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 w-full justify-start gap-1.5 px-2 text-[13px] text-muted-foreground hover:text-foreground"
+          onClick={addEnvironment}
+        >
+          <Plus className="size-3.5" />
           New environment
         </Button>
       </div>
@@ -542,17 +501,17 @@ function FolderBranch({
 
   return (
     <div className="space-y-0.5">
-      <div className="group/folder flex items-center gap-0.5 rounded-md pr-1 hover:bg-sidebar-accent">
+      <div className="group/folder flex items-center gap-0.5 rounded-sm pr-0.5 hover:bg-sidebar-accent/70">
         <button
           type="button"
-          className="flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5 text-left text-sm text-muted-foreground"
+          className="explorer-tree-row min-w-0 flex-1 text-muted-foreground"
           onClick={() => setOpen((value) => !value)}
         >
-          {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-          <Folder className="size-3.5 shrink-0" />
+          {open ? <ChevronDown className="size-3.5 shrink-0" /> : <ChevronRight className="size-3.5 shrink-0" />}
+          <Folder className="size-3.5 shrink-0 opacity-70" />
           <span className="truncate">{folder.name}</span>
           {isEmpty && (
-            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
+            <span className="rounded bg-muted/80 px-1 py-0.5 text-[9px] uppercase tracking-wide text-muted-foreground">
               Empty
             </span>
           )}
@@ -624,83 +583,6 @@ function FolderBranch({
   );
 }
 
-function SidebarRail({
-  mainView,
-  setMainView,
-  onExpand,
-}: {
-  mainView: MainView;
-  setMainView: (view: MainView) => void;
-  onExpand: () => void;
-}) {
-  const items = [
-    { view: "overview" as const, icon: LayoutGrid, label: "Overview" },
-    { view: "environments" as const, icon: Globe2, label: "Environments" },
-    { view: "settings" as const, icon: Settings, label: "Settings" },
-  ];
-
-  return (
-    <aside className="flex min-h-0 flex-1 flex-col items-center py-3">
-      <div className="flex flex-col items-center gap-1">
-        {items.map(({ view, icon: Icon, label }) => (
-          <TooltipWrap key={view} label={label}>
-            <button
-              type="button"
-              aria-label={label}
-              onClick={() => setMainView(view)}
-              className={cn(
-                "flex size-9 items-center justify-center rounded-lg transition-colors",
-                mainView === view
-                  ? "bg-primary/15 text-primary"
-                  : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
-              )}
-            >
-              <Icon className="size-4" />
-            </button>
-          </TooltipWrap>
-        ))}
-      </div>
-      <TooltipIconButton
-        variant="ghost"
-        size="icon"
-        className="mt-auto size-9 text-muted-foreground"
-        label="Expand sidebar (⌘B)"
-        onClick={onExpand}
-      >
-        <PanelLeftOpen className="size-4" />
-      </TooltipIconButton>
-    </aside>
-  );
-}
-
-function SidebarNavItem({
-  active,
-  icon: Icon,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  icon: typeof LayoutGrid;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
-        active
-          ? "bg-primary/10 font-medium text-primary"
-          : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
-      )}
-    >
-      <Icon className="size-4 shrink-0" />
-      {label}
-    </button>
-  );
-}
-
 function CollectionItem({
   item,
   folders,
@@ -717,14 +599,10 @@ function CollectionItem({
   onMove: (folder?: string) => void;
 }) {
   return (
-    <div className="group flex items-center gap-1 rounded-md pr-1 hover:bg-sidebar-accent">
-      <button
-        type="button"
-        className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left"
-        onClick={onOpen}
-      >
+    <div className="group flex items-center gap-0.5 rounded-sm pr-0.5 hover:bg-sidebar-accent/70">
+      <button type="button" className="explorer-tree-row min-w-0 flex-1" onClick={onOpen}>
         <MethodBadge method={item.request.method} />
-        <span className="truncate text-sm">{item.name}</span>
+        <span className="truncate text-foreground/90">{item.name}</span>
       </button>
       <DropdownMenu>
         <TooltipWrap label="Move to folder">

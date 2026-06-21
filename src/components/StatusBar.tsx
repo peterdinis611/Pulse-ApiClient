@@ -53,10 +53,10 @@ export function StatusBar() {
   }, [pendingRequestCount]);
 
   return (
-    <footer className="flex h-9 items-center justify-between border-t border-border/80 bg-card/90 px-3 text-xs text-muted-foreground backdrop-blur-sm">
+    <footer className="flex h-7 items-center justify-between border-t border-border bg-background px-3 text-[11px] text-muted-foreground">
       <div className="flex min-w-0 items-center gap-3">
         <span className="inline-flex items-center gap-1.5">
-          <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+          <CheckCircle2 className="size-3 text-success" />
           Online
         </span>
         {pendingRequestCount > 0 && (

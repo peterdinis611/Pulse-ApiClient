@@ -101,7 +101,7 @@ export function RequestBar() {
   }, [canConnect, canSend, connectWebSocket, isWebSocket, sendCurrentRequest]);
 
   return (
-    <div className="space-y-3 border-b border-border/80 bg-card/40 px-4 py-4 backdrop-blur-sm">
+    <div className="space-y-2 border-b border-border bg-background px-3 py-2">
       <div className="flex flex-wrap items-center gap-2">
         <TooltipIconButton
           variant="outline"

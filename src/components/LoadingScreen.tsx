@@ -26,7 +26,7 @@ export function LoadingScreen({
       )}
     >
       <LoaderCircle className={cn("animate-spin", isFullscreen ? "size-6" : "size-5")} />
-      <span className="text-sm text-muted-foreground">{label}</span>
+      <span className="text-[13px] text-muted-foreground">{label}</span>
     </div>
   );
 }

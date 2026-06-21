@@ -131,12 +131,12 @@ export function OverviewView() {
 
   return (
     <ScrollAreaWithTop className="h-full min-h-0" resetKey="overview">
-      <div className="mx-auto max-w-5xl space-y-6 p-6 md:p-8">
-        <div className="rounded-2xl border border-border/70 bg-card/80 p-6 shadow-sm backdrop-blur-sm">
-          <h1 className="text-2xl font-semibold tracking-tight">
+      <div className="mx-auto max-w-5xl space-y-4 p-4 md:p-6">
+        <div className="border-b border-border pb-4">
+          <h1 className="text-lg font-semibold tracking-tight">
             Welcome back, {(user?.name ?? "there").split(" ")[0]}
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-0.5 text-[13px] text-muted-foreground">
             Recent requests and saved endpoints across your workspace.
           </p>
         </div>
@@ -172,8 +172,8 @@ export function OverviewView() {
           )}
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-          <div className="grid grid-cols-[1fr_120px_160px_40px] gap-4 border-b border-border/80 bg-muted/30 px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <div className="overflow-hidden rounded-md border border-border bg-card">
+          <div className="grid grid-cols-[1fr_120px_160px_40px] gap-4 border-b border-border bg-muted/40 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             <span>Name</span>
             <span>Method</span>
             <span>Details</span>
