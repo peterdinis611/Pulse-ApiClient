@@ -35,11 +35,11 @@ export function EnvironmentsView() {
 
   return (
     <ScrollAreaWithTop className="h-full" resetKey="environments">
-      <div className="mx-auto max-w-5xl space-y-6 p-6 md:p-8">
+      <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Environments</h1>
-            <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+            <h1 className="text-lg font-semibold tracking-tight">Environments</h1>
+            <p className="mt-0.5 max-w-xl text-[13px] text-muted-foreground">
               Define variables per environment. Use {"{{variableName}}"} in URLs, headers, auth, and
               bodies. Set a workspace default or override per request tab.
             </p>

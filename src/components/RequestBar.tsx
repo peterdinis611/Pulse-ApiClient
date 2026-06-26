@@ -1,7 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Braces, ClipboardCopy, LoaderCircle, Plug, Plus, Save, Send, Square, Terminal, Unplug } from "lucide-react";
+import {
+  Braces,
+  ClipboardCopy,
+  LoaderCircle,
+  MoreHorizontal,
+  Plug,
+  Save,
+  Send,
+  Square,
+  Unplug,
+} from "lucide-react";
 import { useApp } from "@/machines";
-import { getCollectionName } from "@/lib/collections";
 import { validateGraphqlRequest } from "@/lib/graphql";
 import { isWebSocketProtocol } from "@/lib/protocol";
 import { containsVariables, substituteVariables } from "@/lib/env";
@@ -9,7 +18,6 @@ import { methodTextClass } from "@/lib/method-colors";
 import { VariableField } from "@/components/VariableField";
 import { cn } from "@/lib/utils";
 import { HTTP_METHODS } from "@/types";
-import { TooltipIconButton } from "@/components/TooltipIconButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,7 +28,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { EnvironmentSwitcher } from "@/components/EnvironmentSwitcher";
 import { FolderSelect } from "@/components/FolderSelect";
 import { requestToCurl, curlToRequest } from "@/lib/curl";
@@ -44,7 +51,6 @@ export function RequestBar() {
     disconnectWebSocket,
     saveCurrentToCollection,
     openRequestTab,
-    newRequestTab,
     activeCollectionId,
     collectionGroups,
     setActiveCollectionId,
@@ -101,27 +107,120 @@ export function RequestBar() {
   }, [canConnect, canSend, connectWebSocket, isWebSocket, sendCurrentRequest]);
 
   return (
-    <div className="space-y-2 border-b border-border bg-background px-3 py-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <TooltipIconButton
-          variant="outline"
-          size="icon"
-          label="New request tab"
-          onClick={newRequestTab}
-        >
-          <Plus />
-        </TooltipIconButton>
+    <div className="shrink-0 border-b border-border bg-background">
+      <div className="flex items-stretch gap-2 px-3 py-2">
+        <div className="flex min-w-0 flex-1 overflow-hidden rounded-md border border-border bg-card shadow-sm">
+          {isWebSocket ? (
+            <div className="flex h-10 w-20 shrink-0 items-center justify-center border-r border-border bg-muted/30">
+              <Badge variant="secondary" className="font-mono text-[10px] uppercase">
+                WS
+              </Badge>
+            </div>
+          ) : (
+            <Select
+              value={request.method}
+              onValueChange={(value) =>
+                updateRequest({ method: value as typeof request.method })
+              }
+            >
+              <SelectTrigger
+                className={cn(
+                  "h-10 w-24 shrink-0 rounded-none border-0 border-r bg-muted/30 font-mono text-xs font-bold shadow-none focus:ring-0",
+                  methodTextClass(request.method),
+                )}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {HTTP_METHODS.map((method) => (
+                  <SelectItem key={method} value={method} className={methodTextClass(method)}>
+                    {method}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <VariableField
+            embedded
+            environment={activeEnvironment}
+            className="min-w-0 flex-1"
+            inputClassName="h-10 rounded-none border-0 bg-transparent font-mono text-[13px] shadow-none focus-visible:ring-0"
+            value={request.url}
+            onChange={(url) => updateRequest({ url })}
+            placeholder={
+              isWebSocket
+                ? "wss://{{baseUrl}}/ws"
+                : request.bodyKind === "graphql"
+                  ? "{{baseUrl}}/graphql"
+                  : "{{baseUrl}}/users"
+            }
+          />
+        </div>
+
+        {isWebSocket ? (
+          ws.status === "open" || ws.status === "connecting" ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 shrink-0 px-4"
+              disabled={ws.status === "connecting"}
+              onClick={() => disconnectWebSocket()}
+            >
+              {ws.status === "connecting" ? (
+                <LoaderCircle className="animate-spin" />
+              ) : (
+                <Unplug />
+              )}
+              {ws.status === "connecting" ? "Connecting…" : "Disconnect"}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              className="h-10 shrink-0 px-5"
+              disabled={!canConnect}
+              onClick={() => connectWebSocket()}
+            >
+              <Plug />
+              Connect
+            </Button>
+          )
+        ) : (
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Button
+              type="button"
+              className="h-10 px-5"
+              disabled={loading || !canSend}
+              onClick={() => void sendCurrentRequest()}
+            >
+              {loading ? <LoaderCircle className="animate-spin" /> : <Send />}
+              {loading ? "Sending…" : "Send"}
+            </Button>
+            {loading && (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 px-3"
+                onClick={cancelCurrentRequest}
+              >
+                <Square />
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 border-t border-border/60 px-3 py-1.5">
         <Input
-          className="h-9 max-w-md border-transparent bg-transparent px-2 font-medium shadow-none focus-visible:ring-0"
+          className="h-8 max-w-[200px] border-transparent bg-transparent px-2 text-[13px] shadow-none focus-visible:ring-0"
           value={request.name}
           onChange={(event) => updateRequest({ name: event.target.value })}
-          placeholder="Untitled request"
+          placeholder="Request name"
         />
         <Select
           value={activeCollectionId ?? undefined}
           onValueChange={(value) => setActiveCollectionId(value)}
         >
-          <SelectTrigger className="h-9 w-[180px]">
+          <SelectTrigger className="h-8 w-[148px] text-xs">
             <SelectValue placeholder="Collection" />
           </SelectTrigger>
           <SelectContent>
@@ -137,7 +236,7 @@ export function RequestBar() {
           collectionGroups={collectionGroups}
           value={saveFolder}
           onChange={setSaveFolder}
-          className="h-9 w-[160px]"
+          className="h-8 w-[132px] text-xs"
         />
         <EnvironmentSwitcher
           mode="request"
@@ -156,16 +255,16 @@ export function RequestBar() {
           type="button"
           variant="outline"
           size="sm"
+          className="h-8"
           onClick={() => saveCurrentToCollection(saveFolder)}
         >
-          <Save />
-          Save to {getCollectionName(collectionGroups, activeCollectionId ?? "")}
+          <Save className="size-3.5" />
+          Save
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button type="button" variant="outline" size="sm">
-              <Terminal />
-              cURL
+            <Button type="button" variant="ghost" size="icon" className="size-8">
+              <MoreHorizontal className="size-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -206,109 +305,9 @@ export function RequestBar() {
         />
       </div>
 
-      <div className="flex overflow-hidden rounded-lg border border-border/80 bg-background shadow-sm ring-1 ring-black/[0.02] dark:ring-white/[0.04]">
-        {isWebSocket ? (
-          <div className="flex h-11 w-[108px] items-center justify-center border-r bg-muted/30 px-3">
-            <Badge variant="secondary" className="font-mono text-[10px] uppercase">
-              WS
-            </Badge>
-          </div>
-        ) : (
-          <Select
-            value={request.method}
-            onValueChange={(value) =>
-              updateRequest({ method: value as typeof request.method })
-            }
-          >
-            <SelectTrigger
-              className={cn(
-                "h-11 w-[108px] rounded-none border-0 border-r bg-muted/30 font-mono text-xs font-bold shadow-none focus:ring-0",
-                methodTextClass(request.method),
-              )}
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {HTTP_METHODS.map((method) => (
-                <SelectItem key={method} value={method} className={methodTextClass(method)}>
-                  {method}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-        <VariableField
-          embedded
-          environment={activeEnvironment}
-          className="min-w-0 flex-1"
-          inputClassName="h-11 rounded-none border-0 shadow-none focus-visible:ring-0"
-          value={request.url}
-          onChange={(url) => updateRequest({ url })}
-          placeholder={
-            isWebSocket
-              ? "wss://{{baseUrl}}/ws"
-              : request.bodyKind === "graphql"
-                ? "{{baseUrl}}/graphql"
-                : "{{baseUrl}}/users"
-          }
-        />
-        <Separator orientation="vertical" className="h-11" />
-        {isWebSocket ? (
-          ws.status === "open" || ws.status === "connecting" ? (
-            <Button
-              type="button"
-              variant="outline"
-              className="h-11 rounded-none px-6"
-              disabled={ws.status === "connecting"}
-              onClick={() => disconnectWebSocket()}
-            >
-              {ws.status === "connecting" ? (
-                <LoaderCircle className="animate-spin" />
-              ) : (
-                <Unplug />
-              )}
-              {ws.status === "connecting" ? "Connecting…" : "Disconnect"}
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              className="h-11 rounded-none px-6"
-              disabled={!canConnect}
-              onClick={() => connectWebSocket()}
-            >
-              <Plug />
-              Connect
-            </Button>
-          )
-        ) : (
-          <>
-            <Button
-              type="button"
-              className="h-11 rounded-none px-6"
-              disabled={loading || !canSend}
-              onClick={() => void sendCurrentRequest()}
-            >
-              {loading ? <LoaderCircle className="animate-spin" /> : <Send />}
-              {loading ? "Sending…" : "Send"}
-            </Button>
-            {loading && (
-              <Button
-                type="button"
-                variant="outline"
-                className="h-11 rounded-none px-4"
-                onClick={cancelCurrentRequest}
-              >
-                <Square />
-                Cancel
-              </Button>
-            )}
-          </>
-        )}
-      </div>
-
       {containsVariables(request.url) && (
-        <p className="truncate px-1 font-mono text-xs text-muted-foreground" title={resolvedUrl}>
-          <span className="text-foreground/70">Resolved URL: </span>
+        <p className="truncate border-t border-border/50 px-3 py-1 font-mono text-[11px] text-muted-foreground">
+          <span className="text-foreground/60">Resolved · </span>
           {resolvedUrl}
         </p>
       )}

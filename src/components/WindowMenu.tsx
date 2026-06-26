@@ -22,7 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-export function WindowMenu() {
+export function WindowMenu({ compact = false }: { compact?: boolean }) {
   const { request } = useApp();
   const [windows, setWindows] = useState<AppWindowInfo[]>([]);
   const [currentLabel, setCurrentLabel] = useState("main");
@@ -77,14 +77,19 @@ export function WindowMenu() {
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
-            className="h-8 gap-1.5 px-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+            size={compact ? "icon" : "default"}
+            className={
+              compact
+                ? "size-7 text-muted-foreground"
+                : "h-8 gap-1.5 px-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+            }
           >
-            <AppWindow className="size-4" />
-            Windows
+            <AppWindow className="size-3.5" />
+            {!compact && "Windows"}
           </Button>
         </DropdownMenuTrigger>
       </TooltipWrap>
-      <DropdownMenuContent align="start" className="w-72">
+      <DropdownMenuContent align="end" className="w-72">
         <DropdownMenuLabel>Open windows</DropdownMenuLabel>
         {windows.length === 0 ? (
           <DropdownMenuItem disabled>No windows found</DropdownMenuItem>

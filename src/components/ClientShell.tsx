@@ -96,7 +96,7 @@ export function ClientShell() {
       )}
       <div className="flex min-w-0 flex-1 flex-col">
         <WorkspaceHeader />
-        <main className="flex min-h-0 flex-1 flex-col bg-background">
+        <main className="workspace-content flex min-h-0 flex-1 flex-col">
           <Suspense fallback={<LoadingScreen variant="inline" label="Loading view" />}>
             {mainView === "overview" && <OverviewView />}
             {mainView === "environments" && <EnvironmentsView />}

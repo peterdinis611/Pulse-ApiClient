@@ -166,12 +166,9 @@ export function ExplorerPanel() {
 
   return (
     <aside className="flex min-h-0 flex-1 flex-col">
-      <div className="shrink-0 space-y-2 border-b border-sidebar-border/80 px-2.5 pb-2.5 pt-2">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="text-[13px] font-semibold leading-none text-foreground">Explorer</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">Collections & history</p>
-          </div>
+      <div className="shrink-0 border-b border-sidebar-border/80 px-2.5 py-2">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[12px] font-medium text-foreground">Explorer</p>
           <TooltipIconButton
             variant="ghost"
             size="icon"
@@ -183,6 +180,7 @@ export function ExplorerPanel() {
           </TooltipIconButton>
         </div>
 
+        <div className="mt-2 space-y-2">
         <EnvironmentSwitcher
           mode="workspace"
           environments={environments}
@@ -204,6 +202,7 @@ export function ExplorerPanel() {
             className="h-8 border-sidebar-border/80 bg-background/60 pl-8 text-[13px] shadow-none focus-visible:bg-background"
             placeholder="Search…"
           />
+        </div>
         </div>
       </div>
 

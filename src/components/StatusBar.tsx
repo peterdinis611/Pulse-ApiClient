@@ -11,6 +11,7 @@ import { useApp } from "@/machines";
 import { clearHttpCache, getHttpEngineStats } from "@/lib/http-client";
 import { toast } from "@/lib/toast";
 import type { HttpEngineStats } from "@/types";
+import { WindowMenu } from "@/components/WindowMenu";
 import { TooltipIconButton } from "@/components/TooltipIconButton";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -103,6 +104,7 @@ export function StatusBar() {
       </div>
 
       <div className="flex items-center gap-1">
+        <WindowMenu compact />
         <TooltipIconButton
           variant="ghost"
           size="icon"

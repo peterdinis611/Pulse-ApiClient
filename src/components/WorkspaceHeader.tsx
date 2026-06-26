@@ -1,10 +1,8 @@
 import { useState } from "react";
 import { AppWindow, Globe2, LoaderCircle, PanelLeft, Plus, X } from "lucide-react";
-import { EnvironmentSwitcher } from "@/components/EnvironmentSwitcher";
 import { RequestTabsMenu } from "@/components/RequestTabsMenu";
 import { TabScrollStrip } from "@/components/TabScrollStrip";
 import { TooltipIconButton, TooltipWrap } from "@/components/TooltipIconButton";
-import { WindowMenu } from "@/components/WindowMenu";
 import { MethodBadge } from "@/components/MethodBadge";
 import { useApp } from "@/machines";
 import { openRequestInNewWindow } from "@/lib/window-manager";
@@ -19,18 +17,15 @@ export function WorkspaceHeader() {
     closeTab,
     newRequestTab,
     mainView,
-    setMainView,
     explorerCollapsed,
     toggleExplorerCollapsed,
     activeEnvironmentId,
     environments,
-    workspaceEnvironment,
-    activeEnvironment,
-    setActiveEnvironmentId,
-    addEnvironment,
   } = useApp();
 
   const [tabsOverflowing, setTabsOverflowing] = useState(false);
+
+  if (mainView !== "request") return null;
 
   const handlePopOut = async (tabId: string) => {
     const tab = tabs.find((item) => item.id === tabId);
@@ -47,26 +42,14 @@ export function WorkspaceHeader() {
   const showTabsMenu = tabs.length > 1 || tabsOverflowing;
 
   return (
-    <header className="flex h-9 shrink-0 overflow-hidden border-b border-border bg-background">
-      <button
-        type="button"
-        onClick={() => setMainView("overview")}
-        className={cn(
-          "relative shrink-0 border-r border-border/60 px-3 text-[13px] font-medium transition-colors",
-          mainView === "overview"
-            ? "text-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-primary"
-            : "text-muted-foreground hover:text-foreground",
-        )}
-      >
-        Overview
-      </button>
-
+    <header className="flex h-9 shrink-0 items-stretch overflow-hidden border-b border-border bg-background">
       <TabScrollStrip
-        activeItemId={mainView === "request" ? activeTabId : null}
+        activeItemId={activeTabId}
         onOverflowChange={setTabsOverflowing}
+        className="min-w-0"
       >
         {tabs.map((tab) => {
-          const active = mainView === "request" && tab.id === activeTabId;
+          const active = tab.id === activeTabId;
           const pending = tab.loading;
           const tabEnvId = tab.environmentId ?? activeEnvironmentId;
           const tabEnv = environments.find((env) => env.id === tabEnvId);
@@ -78,15 +61,15 @@ export function WorkspaceHeader() {
               key={tab.id}
               data-tab-id={tab.id}
               className={cn(
-                "group relative flex max-w-[180px] min-w-[96px] shrink-0 items-stretch border-r border-border/40",
+                "group relative flex h-9 max-w-[200px] min-w-[88px] shrink-0 items-stretch",
                 active
-                  ? "bg-background text-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-primary"
-                  : "bg-muted/20 text-muted-foreground hover:bg-muted/35 hover:text-foreground",
+                  ? "text-foreground after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary"
+                  : "text-muted-foreground hover:bg-accent/40 hover:text-foreground",
               )}
             >
               <button
                 type="button"
-                className="flex min-w-0 flex-1 items-center gap-1.5 px-2 text-left text-[13px]"
+                className="flex min-w-0 flex-1 items-center gap-1.5 px-2.5 text-left text-[13px]"
                 onClick={() => setActiveTab(tab.id)}
               >
                 <MethodBadge method={tab.request.method} />
@@ -103,7 +86,7 @@ export function WorkspaceHeader() {
                 size="icon"
                 className={cn(
                   "size-6 shrink-0",
-                  active ? "opacity-70 hover:opacity-100" : "opacity-0 group-hover:opacity-100",
+                  active ? "opacity-60 hover:opacity-100" : "opacity-0 group-hover:opacity-100",
                 )}
                 label="Open in new window"
                 onClick={(event) => {
@@ -117,8 +100,8 @@ export function WorkspaceHeader() {
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  "mr-0.5 size-6 shrink-0",
-                  active ? "opacity-70 hover:opacity-100" : "opacity-0 group-hover:opacity-100",
+                  "mr-1 size-6 shrink-0",
+                  active ? "opacity-60 hover:opacity-100" : "opacity-0 group-hover:opacity-100",
                 )}
                 label="Close tab"
                 onClick={(event) => {
@@ -133,8 +116,8 @@ export function WorkspaceHeader() {
         })}
       </TabScrollStrip>
 
-      {showTabsMenu && (
-        <div className="flex shrink-0 items-center border-l border-border/60 px-1.5">
+      <div className="flex shrink-0 items-center gap-0.5 border-l border-border/70 px-1.5">
+        {showTabsMenu && (
           <RequestTabsMenu
             tabs={tabs}
             activeTabId={activeTabId}
@@ -142,41 +125,24 @@ export function WorkspaceHeader() {
             onClose={closeTab}
             onNewTab={newRequestTab}
           />
-        </div>
-      )}
-
-      <div className="flex shrink-0 items-center gap-0.5 border-l border-border px-2">
-        {mainView === "request" && (
-          <TooltipIconButton
-            variant="ghost"
-            size="icon"
-            className={cn("size-7", !explorerCollapsed && "bg-accent text-accent-foreground")}
-            label={explorerCollapsed ? "Show explorer (⌘B)" : "Hide explorer (⌘B)"}
-            onClick={toggleExplorerCollapsed}
-          >
-            <PanelLeft className="size-3.5" />
-          </TooltipIconButton>
         )}
-        <EnvironmentSwitcher
-          mode="workspace"
-          environments={environments}
-          workspaceEnvironmentId={activeEnvironmentId}
-          workspaceEnvironment={workspaceEnvironment}
-          requestEnvironment={activeEnvironment}
-          onSetWorkspace={setActiveEnvironmentId}
-          onAddEnvironment={addEnvironment}
-          onManageEnvironments={() => setMainView("environments")}
-          compact
-        />
-        <WindowMenu />
         <TooltipIconButton
           variant="ghost"
           size="icon"
           className="size-7"
-          label="New request"
+          label="New request tab"
           onClick={newRequestTab}
         >
           <Plus className="size-3.5" />
+        </TooltipIconButton>
+        <TooltipIconButton
+          variant="ghost"
+          size="icon"
+          className={cn("size-7", !explorerCollapsed && "bg-accent text-accent-foreground")}
+          label={explorerCollapsed ? "Show explorer (⌘B)" : "Hide explorer (⌘B)"}
+          onClick={toggleExplorerCollapsed}
+        >
+          <PanelLeft className="size-3.5" />
         </TooltipIconButton>
       </div>
     </header>

@@ -255,6 +255,10 @@ html[data-theme="dark"] {
     background: var(--background);
   }
 
+  .workspace-content {
+    background: var(--surface-0);
+  }
+
   .text-method-get { color: var(--method-get); }
   .text-method-post { color: var(--method-post); }
   .text-method-put { color: var(--method-put); }

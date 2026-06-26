@@ -86,17 +86,14 @@ export function RequestTabs() {
   };
 
   return (
-    <section className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex items-center gap-3 border-b border-border px-4 py-2">
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Request
-        </span>
+    <section className="flex h-full min-h-0 flex-col bg-surface-0">
+      <div className="border-b border-border px-4">
         <Tabs
           value={requestTab}
           onValueChange={(value) => setRequestTab(value as typeof requestTab)}
-          className="min-w-0 flex-1"
+          className="min-w-0"
         >
-          <TabsList className="h-8 bg-muted">
+          <TabsList className="h-9 bg-transparent">
             <TabsTrigger value="params" className="text-xs">
               Params
               {paramCount > 0 && (

@@ -1,7 +1,6 @@
 import {
   Globe2,
   LayoutGrid,
-  PanelLeft,
   Send,
   Settings,
   Zap,
@@ -28,11 +27,20 @@ const NAV_ITEMS: Array<{
 export function AppRail() {
   const { mainView, setMainView, explorerCollapsed, toggleExplorerCollapsed } = useApp();
 
+  const goToRequest = () => {
+    if (mainView !== "request") {
+      setMainView("request");
+      if (explorerCollapsed) toggleExplorerCollapsed();
+      return;
+    }
+    setMainView("request");
+  };
+
   return (
-    <aside className="flex w-12 shrink-0 flex-col items-center border-r border-rail-border bg-rail py-2">
+    <aside className="flex w-11 shrink-0 flex-col items-center border-r border-rail-border bg-rail py-2">
       <TooltipWrap label={APP_NAME}>
-        <div className="mb-3 flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-          <Zap className="size-4" />
+        <div className="mb-2 flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
+          <Zap className="size-3.5" />
         </div>
       </TooltipWrap>
 
@@ -47,8 +55,8 @@ export function AppRail() {
                 aria-label={label}
                 aria-current={active ? "page" : undefined}
                 onClick={() => {
-                  if (view === "request" && mainView === "request") {
-                    toggleExplorerCollapsed();
+                  if (view === "request") {
+                    goToRequest();
                     return;
                   }
                   setMainView(view);
@@ -57,7 +65,7 @@ export function AppRail() {
                   "relative flex size-8 items-center justify-center rounded-md transition-colors",
                   active
                     ? "bg-accent text-foreground rail-active-indicator"
-                    : "text-rail-foreground hover:bg-accent hover:text-foreground",
+                    : "text-rail-foreground hover:bg-accent/70 hover:text-foreground",
                 )}
               >
                 <Icon className="size-4" />
@@ -68,26 +76,6 @@ export function AppRail() {
       </nav>
 
       <div className="mt-auto flex flex-col items-center gap-1 pb-1">
-        <TooltipWrap label={explorerCollapsed ? "Show explorer (⌘B)" : "Hide explorer (⌘B)"}>
-          <button
-            type="button"
-            aria-label={explorerCollapsed ? "Show explorer" : "Hide explorer"}
-            aria-pressed={!explorerCollapsed}
-            onClick={() => {
-              if (mainView !== "request" && explorerCollapsed) {
-                setMainView("request");
-                return;
-              }
-              toggleExplorerCollapsed();
-            }}
-            className={cn(
-              "flex size-8 items-center justify-center rounded-md text-rail-foreground transition-all duration-200 hover:bg-accent hover:text-foreground",
-              mainView === "request" && !explorerCollapsed && "bg-accent text-foreground",
-            )}
-          >
-            <PanelLeft className="size-4" />
-          </button>
-        </TooltipWrap>
         <ThemeToggle />
         <UserAuthAvatar />
       </div>
