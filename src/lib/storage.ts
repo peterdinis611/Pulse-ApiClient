@@ -22,6 +22,7 @@ import {
 } from "./helpers";
 import { defaultCollectionGroup } from "./collections";
 import { importPostmanCollection, isPostmanCollection } from "./postman-import";
+import { exportPulseCollection, importPulseCollection, isPulseCollection } from "./pulse-collection";
 import { isOpenApiSpec, importOpenApiIntoState } from "./openapi-import";
 import { emitWorkspaceUpdated } from "./workspace-sync";
 
@@ -229,6 +230,17 @@ export function exportCollectionJson(state: Pick<PersistedState, "collectionGrou
   );
 }
 
+export function exportSingleCollectionJson(
+  collectionId: string,
+  state: Pick<PersistedState, "collectionGroups" | "collections">,
+): string | null {
+  const group = state.collectionGroups.find((item) => item.id === collectionId);
+  if (!group) return null;
+
+  const requests = state.collections.filter((item) => item.collectionId === collectionId);
+  return exportPulseCollection(group, requests);
+}
+
 export function exportEnvironmentsJson(environments: Environment[]): string {
   return JSON.stringify({ version: 1, environments }, null, 2);
 }
@@ -304,6 +316,15 @@ export function importCollectionJson(
 
   if (isPostmanCollection(raw)) {
     const imported = importPostmanCollection(raw);
+    return {
+      collectionGroups: [...state.collectionGroups, imported.collection],
+      collections: [...imported.requests, ...state.collections],
+      activeCollectionId: imported.collection.id,
+    };
+  }
+
+  if (isPulseCollection(raw)) {
+    const imported = importPulseCollection(raw);
     return {
       collectionGroups: [...state.collectionGroups, imported.collection],
       collections: [...imported.requests, ...state.collections],

@@ -21,10 +21,12 @@ import { useHistory } from "@/hooks/useHistory";
 import { groupRequestsByFolder, requestsForCollection } from "@/lib/collections";
 import { runCollectionParallel, type CollectionRunResult } from "@/lib/collection-runner";
 import { filterSavedRequests, filterSavedRequestsAsync } from "@/lib/filters";
+import { downloadJson } from "@/lib/download";
 import { useDebouncedValue } from "@/lib/use-debounced-search";
 import { toast } from "@/lib/toast";
 import type { FolderTreeNode } from "@/lib/collections";
 import { AddFolderMenu } from "@/components/AddFolderMenu";
+import { CollectionExportMenu } from "@/components/CollectionExportMenu";
 import { CollectionRunResultsPanel } from "@/components/CollectionRunResultsPanel";
 import { MethodBadge } from "@/components/MethodBadge";
 import { TooltipIconButton, TooltipWrap } from "@/components/TooltipIconButton";
@@ -62,6 +64,7 @@ export function ExplorerPanel() {
     loadHistoryEntry,
     clearHistory,
     exportCollections,
+    exportCollection,
     importCollections,
     addEnvironment,
     deleteFolder,
@@ -234,15 +237,9 @@ export function ExplorerPanel() {
                   variant="ghost"
                   size="icon"
                   className="size-7"
-                  label="Export collections"
+                  label="Export all collections"
                   onClick={() => {
-                    const blob = new Blob([exportCollections()], { type: "application/json" });
-                    const url = URL.createObjectURL(blob);
-                    const anchor = document.createElement("a");
-                    anchor.href = url;
-                    anchor.download = "pulse-collections.json";
-                    anchor.click();
-                    URL.revokeObjectURL(url);
+                    downloadJson(exportCollections(), "pulse-collections.json");
                   }}
                 >
                   <Download className="size-3.5" />
@@ -306,6 +303,11 @@ export function ExplorerPanel() {
                             <FolderPlus className="size-3.5" />
                           </Button>
                         }
+                      />
+                      <CollectionExportMenu
+                        collectionId={group.id}
+                        collectionName={group.name}
+                        exportCollection={exportCollection}
                       />
                       <TooltipIconButton
                         variant="ghost"

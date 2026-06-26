@@ -23,8 +23,10 @@ import { canUseTauriIpc } from "@/lib/tauri-runtime";
 import { clearLegacyPersistedState, defaultPersistedState, savePersistedState } from "@/lib/storage";
 import { toast } from "@/lib/toast";
 import { requestsForCollection } from "@/lib/collections";
+import { downloadJson } from "@/lib/download";
 import { ThemePicker } from "@/components/ThemePicker";
 import { CustomThemeSettings } from "@/components/CustomThemeSettings";
+import { CollectionExportMenu } from "@/components/CollectionExportMenu";
 import { useHistory } from "@/hooks/useHistory";
 import { emitWorkspaceReset } from "@/lib/workspace-sync";
 import { TooltipIconButton } from "@/components/TooltipIconButton";
@@ -121,6 +123,7 @@ export function SettingsView() {
     addFolder,
     deleteFolder,
     exportCollections,
+    exportCollection,
     importCollections,
     importPostmanCollection,
     importOpenApiCollection,
@@ -593,18 +596,12 @@ export function SettingsView() {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  const blob = new Blob([exportCollections()], { type: "application/json" });
-                  const url = URL.createObjectURL(blob);
-                  const anchor = document.createElement("a");
-                  anchor.href = url;
-                  anchor.download = "pulse-collections.json";
-                  anchor.click();
-                  URL.revokeObjectURL(url);
-                  toast.success("Collections exported");
+                  downloadJson(exportCollections(), "pulse-collections.json");
+                  toast.success("All collections exported");
                 }}
               >
                 <Download className="size-4" />
-                Export
+                Export all
               </Button>
             </div>
           }
@@ -691,6 +688,12 @@ export function SettingsView() {
                         renameCollectionGroup(group.id, next);
                       }
                     }}
+                  />
+                  <CollectionExportMenu
+                    collectionId={group.id}
+                    collectionName={group.name}
+                    exportCollection={exportCollection}
+                    className="size-8 shrink-0"
                   />
                   <TooltipIconButton
                     variant="ghost"

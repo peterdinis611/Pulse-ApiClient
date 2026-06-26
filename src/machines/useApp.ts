@@ -14,6 +14,8 @@ import { createRequest } from "@/lib/helpers";
 import type { UserSession } from "@/lib/auth";
 import type { TestRunResult } from "@/types";
 import { exportCollectionJson, exportEnvironmentsJson, type PersistedState } from "@/lib/storage";
+import { exportPostmanCollection } from "@/lib/postman-export";
+import { exportPulseCollection } from "@/lib/pulse-collection";
 import type { ThemeMode } from "@/lib/theme";
 import { AppMachineContext } from "@/machines/AppProvider";
 import {
@@ -107,6 +109,17 @@ export function useApp() {
         collectionGroups: context.persisted.collectionGroups,
         collections: context.persisted.collections,
       }),
+    exportCollection: (collectionId: string, format: "pulse" | "postman") => {
+      const group = context.persisted.collectionGroups.find((item) => item.id === collectionId);
+      if (!group) return null;
+
+      const items = context.persisted.collections.filter((item) => item.collectionId === collectionId);
+      if (format === "postman") {
+        return exportPostmanCollection(group, items);
+      }
+
+      return exportPulseCollection(group, items);
+    },
     importCollections: (raw: string) => send({ type: "IMPORT_COLLECTIONS", raw }),
     importPostmanCollection: (raw: string) => send({ type: "IMPORT_POSTMAN", raw }),
     importOpenApiCollection: (raw: string) => send({ type: "IMPORT_OPENAPI", raw }),
