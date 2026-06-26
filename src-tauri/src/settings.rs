@@ -96,23 +96,33 @@ pub fn normalize_theme(theme: &str) -> String {
         | "sand"
         | "lavender"
         | "citrus"
+        | "nord"
+        | "paper"
+        | "sky"
+        | "blossom"
         | "midnight"
         | "graphite"
         | "amethyst"
         | "obsidian"
         | "ember"
         | "slate"
-        | "aurora" => theme.to_string(),
+        | "aurora"
+        | "polar"
+        | "dracula"
+        | "coffee"
+        | "neon" => theme.to_string(),
         _ => "system".to_string(),
     }
 }
 
 fn native_theme_for(theme: &str) -> Option<Theme> {
     match theme {
-        "dark" | "midnight" | "graphite" | "amethyst" | "obsidian" | "ember" | "slate" | "aurora" => {
+        "dark" | "midnight" | "graphite" | "amethyst" | "obsidian" | "ember" | "slate" | "aurora"
+        | "polar" | "dracula" | "coffee" | "neon" => {
             Some(Theme::Dark)
         }
-        "light" | "ocean" | "forest" | "sunset" | "rose" | "sand" | "lavender" | "citrus" => {
+        "light" | "ocean" | "forest" | "sunset" | "rose" | "sand" | "lavender" | "citrus" | "nord"
+        | "paper" | "sky" | "blossom" => {
             Some(Theme::Light)
         }
         _ => None,
