@@ -1,7 +1,9 @@
-import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { AppSettings } from "@/types";
 import { readStorageItem, writeStorageItem } from "./app-config";
+import { invokeEffect } from "./effect/tauri";
+import { runEffect } from "./effect/run";
+import { getAppSettingsEffect } from "./http-ipc";
 import { canUseTauriIpc } from "./tauri-runtime";
 
 export const CUSTOM_THEME_STYLE_ID = "pulse-custom-theme";
@@ -28,11 +30,11 @@ export function clearBrowserCustomThemeCss(): void {
 }
 
 export async function readCustomThemeCss(path: string): Promise<string> {
-  return invoke<string>("read_custom_theme_css", { path });
+  return runEffect(invokeEffect<string>("read_custom_theme_css", { path }));
 }
 
 export async function setCustomThemeCssPath(path: string | null): Promise<AppSettings> {
-  return invoke<AppSettings>("set_custom_theme_css", { path });
+  return runEffect(invokeEffect<AppSettings>("set_custom_theme_css", { path }));
 }
 
 export async function pickCustomThemeCssFile(): Promise<string | null> {
@@ -48,7 +50,7 @@ export async function pickCustomThemeCssFile(): Promise<string | null> {
 
 export async function loadAndApplyCustomThemeCss(): Promise<string | null> {
   if (canUseTauriIpc()) {
-    const settings = await invoke<AppSettings>("get_app_settings");
+    const settings = await runEffect(getAppSettingsEffect());
     const path = settings.customThemeCssPath?.trim() || null;
     if (!path) {
       applyCustomThemeCss(null);

@@ -14,8 +14,7 @@ async function main() {
   }
 
   try {
-    await bootstrapTheme();
-    await loadAndApplyCustomThemeCss();
+    await Promise.all([bootstrapTheme(), loadAndApplyCustomThemeCss()]);
     ReactDOM.createRoot(root).render(
       <React.StrictMode>
         <App />

@@ -1,6 +1,10 @@
+import { Effect } from "effect";
 import type { Environment, SavedRequest, TestRunResult } from "@/types";
 import { createId } from "@/lib/helpers";
-import { prepareRequest, runHttpTests, sendRequest, sendRequestsBatch } from "@/lib/http-client";
+import { runEffectsParallel } from "@/lib/effect/tauri";
+import { runEffect } from "@/lib/effect/run";
+import { runHttpTestsEffect } from "@/lib/http-ipc";
+import { prepareRequest, sendRequest, sendRequestsBatch } from "@/lib/http-client";
 
 export type CollectionRunStep = {
   saved: SavedRequest;
@@ -18,32 +22,53 @@ export type CollectionRunResult = {
   steps: CollectionRunStep[];
 };
 
-async function evaluateStep(
+function failureTestResults(name: string, message: string): TestRunResult {
+  return {
+    passed: 0,
+    failed: 1,
+    total: 1,
+    results: [{ name, passed: false, message }],
+  };
+}
+
+function evaluateStepEffect(
   saved: SavedRequest,
   environment: Environment | null,
   response?: Awaited<ReturnType<typeof sendRequest>>,
   error?: string,
-): Promise<CollectionRunStep> {
-  const step: CollectionRunStep = { saved, response, error };
-
+): Effect.Effect<CollectionRunStep, never> {
   if (error) {
-    step.testResults = {
-      passed: 0,
-      failed: 1,
-      total: 1,
-      results: [{ name: saved.name, passed: false, message: error }],
-    };
-    return step;
+    return Effect.succeed({
+      saved,
+      response,
+      error,
+      testResults: failureTestResults(saved.name, error),
+    });
   }
 
-  if (!response) return step;
+  if (!response) {
+    return Effect.succeed({ saved, response, error });
+  }
 
   const prepared = prepareRequest(saved.request, environment);
-  if (prepared.tests.trim()) {
-    step.testResults = await runHttpTests(prepared.tests, response);
+  if (!prepared.tests.trim()) {
+    return Effect.succeed({ saved, response, error });
   }
 
-  return step;
+  return runHttpTestsEffect(prepared.tests, response).pipe(
+    Effect.map((testResults) => ({ saved, response, error, testResults })),
+    Effect.catchAll((cause) =>
+      Effect.succeed({
+        saved,
+        response,
+        error,
+        testResults: failureTestResults(
+          saved.name,
+          cause instanceof Error ? cause.message : String(cause),
+        ),
+      }),
+    ),
+  );
 }
 
 function tallyTests(result: CollectionRunResult, step: CollectionRunStep) {
@@ -51,6 +76,22 @@ function tallyTests(result: CollectionRunResult, step: CollectionRunStep) {
   result.passed += step.testResults.passed;
   result.failed += step.testResults.failed;
   result.totalTests += step.testResults.total;
+}
+
+async function evaluateStepsParallel(
+  requests: SavedRequest[],
+  environment: Environment | null,
+  batch: Array<{ response?: Awaited<ReturnType<typeof sendRequest>>; error?: string }>,
+): Promise<CollectionRunStep[]> {
+  return runEffect(
+    runEffectsParallel(
+      requests.map((saved, index) => {
+        const item = batch[index];
+        return evaluateStepEffect(saved, environment, item?.response, item?.error);
+      }),
+      "unbounded",
+    ),
+  );
 }
 
 export async function runCollection(
@@ -78,10 +119,10 @@ export async function runCollection(
       const response = await sendRequest(prepared, environment, {
         requestId: createId("collection"),
       });
-      step = await evaluateStep(saved, environment, response);
+      [step] = await evaluateStepsParallel([saved], environment, [{ response }]);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      step = await evaluateStep(saved, environment, undefined, message);
+      [step] = await evaluateStepsParallel([saved], environment, [{ error: message }]);
       result.failed += 1;
       result.totalTests += 1;
     }
@@ -118,11 +159,11 @@ export async function runCollectionParallel(
     })),
   );
 
-  for (let index = 0; index < requests.length; index += 1) {
-    const saved = requests[index];
-    const item = batch[index];
-    const step = await evaluateStep(saved, environment, item?.response, item?.error);
-    if (item?.error) {
+  const steps = await evaluateStepsParallel(requests, environment, batch);
+
+  for (let index = 0; index < steps.length; index += 1) {
+    const step = steps[index]!;
+    if (step.error) {
       result.failed += 1;
       result.totalTests += 1;
     }

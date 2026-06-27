@@ -1,5 +1,6 @@
-import { invoke } from "@tauri-apps/api/core";
 import type { HistoryEntry } from "@/types";
+import { invokeEffect, invokeEffectVoid } from "./effect/tauri";
+import { runEffect } from "./effect/run";
 import { canUseTauriIpc } from "./tauri-runtime";
 
 export const HISTORY_PAGE_SIZE = 50;
@@ -28,12 +29,12 @@ function mapHistoryPage(payload: HistoryPagePayload): HistoryPage {
 
 export async function appendHistoryEntry(entry: HistoryEntry): Promise<void> {
   if (!canUseTauriIpc()) return;
-  await invoke("db_append_history", { entry });
+  await runEffect(invokeEffectVoid("db_append_history", { entry }));
 }
 
 export async function importHistoryEntries(entries: HistoryEntry[]): Promise<number> {
   if (!canUseTauriIpc() || entries.length === 0) return 0;
-  return invoke<number>("db_import_history", { entries });
+  return runEffect(invokeEffect<number>("db_import_history", { entries }));
 }
 
 export async function listHistoryPage(
@@ -44,7 +45,9 @@ export async function listHistoryPage(
     return { items: [], total: 0, hasMore: false };
   }
 
-  const payload = await invoke<HistoryPagePayload>("db_list_history", { limit, offset });
+  const payload = await runEffect(
+    invokeEffect<HistoryPagePayload>("db_list_history", { limit, offset }),
+  );
   return mapHistoryPage(payload);
 }
 
@@ -56,15 +59,19 @@ export async function searchHistoryEntries(
   const trimmed = query.trim();
   if (!trimmed) return [];
 
-  return invoke<HistoryEntry[]>("db_search_history", { query: trimmed, limit });
+  return runEffect(invokeEffect<HistoryEntry[]>("db_search_history", { query: trimmed, limit }));
 }
 
 export async function getHistoryCount(): Promise<number> {
   if (!canUseTauriIpc()) return 0;
-  return invoke<number>("db_history_count");
+  return runEffect(invokeEffect<number>("db_history_count"));
 }
 
 export async function clearHistoryStore(): Promise<void> {
   if (!canUseTauriIpc()) return;
-  await invoke("db_clear_history");
+  await runEffect(invokeEffectVoid("db_clear_history"));
+}
+
+export function importHistoryEntriesEffect(entries: HistoryEntry[]) {
+  return invokeEffect<number>("db_import_history", { entries });
 }

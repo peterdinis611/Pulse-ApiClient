@@ -197,8 +197,10 @@ async function migrateEmbeddedHistory(
 
   await importHistoryEntries(embeddedHistory);
   const windowId = await getCurrentWindowLabel().catch(() => undefined);
-  await emitHistoryUpdated(windowId);
-  await dbSaveWorkspace(JSON.stringify(state));
+  await Promise.all([
+    emitHistoryUpdated(windowId),
+    dbSaveWorkspace(JSON.stringify(state)),
+  ]);
   return state;
 }
 

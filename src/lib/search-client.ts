@@ -1,6 +1,7 @@
-import { invoke } from "@tauri-apps/api/core";
 import type { SearchDocument } from "./fuzzy-search";
 import { fuzzyRankIds } from "./fuzzy-search";
+import { invokeEffect } from "./effect/tauri";
+import { runEffect } from "./effect/run";
 
 export type FuzzySearchMatch = {
   id: string;
@@ -12,11 +13,13 @@ export async function fuzzySearchBackend(
   documents: SearchDocument[],
   limit?: number,
 ): Promise<FuzzySearchMatch[]> {
-  return invoke<FuzzySearchMatch[]>("fuzzy_search_documents", {
-    query,
-    documents,
-    limit: limit ?? null,
-  });
+  return runEffect(
+    invokeEffect<FuzzySearchMatch[]>("fuzzy_search_documents", {
+      query,
+      documents,
+      limit: limit ?? null,
+    }),
+  );
 }
 
 export async function fuzzyRankIdsHybrid(

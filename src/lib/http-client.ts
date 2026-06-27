@@ -1,9 +1,37 @@
-import { invoke } from "@tauri-apps/api/core";
-import type { ApiRequest, AppSettings, HttpEngineStats, HttpResponse, TestRunResult } from "../types";
+import type { ApiRequest, Environment, HttpResponse } from "../types";
 import { substituteVariables } from "./env";
-import type { Environment } from "../types";
 import { buildGraphqlBody } from "./graphql";
 import { normalizeRequest } from "./helpers";
+import { runEffect } from "./effect/run";
+import {
+  cancelAllHttpRequests,
+  cancelHttpRequest,
+  clearHttpCache,
+  clearHttpCookies,
+  getAppSettings,
+  getHttpCookies,
+  getHttpEngineStats,
+  loadHttpSettingsDashboard,
+  runHttpTests,
+  sendRequestEffect,
+  sendRequestsBatchEffect,
+  setHttpSettings,
+  type StoredCookie,
+} from "./http-ipc";
+
+export {
+  cancelAllHttpRequests,
+  cancelHttpRequest,
+  clearHttpCache,
+  clearHttpCookies,
+  getAppSettings,
+  getHttpCookies,
+  getHttpEngineStats,
+  loadHttpSettingsDashboard,
+  runHttpTests,
+  setHttpSettings,
+  type StoredCookie,
+};
 
 function enabledPairs(items: Array<{ key: string; value: string; enabled: boolean }>) {
   return items
@@ -100,9 +128,7 @@ export async function sendRequest(
   options?: { requestId?: string; timeoutMs?: number },
 ): Promise<HttpResponse> {
   const prepared = prepareRequest(request, environment);
-  return invoke<HttpResponse>("send_http_request", {
-    payload: buildPayload(prepared, options),
-  });
+  return runEffect(sendRequestEffect(buildPayload(prepared, options)));
 }
 
 export async function sendRequestsBatch(
@@ -112,66 +138,5 @@ export async function sendRequestsBatch(
     buildPayload(prepareRequest(request, environment), { requestId }),
   );
 
-  const results = await invoke<Array<{ response?: HttpResponse; error?: string }>>(
-    "send_http_requests_batch",
-    { payloads },
-  );
-
-  return results;
-}
-
-export async function cancelHttpRequest(requestId: string): Promise<boolean> {
-  return invoke<boolean>("cancel_http_request", { requestId });
-}
-
-export async function cancelAllHttpRequests(): Promise<number> {
-  return invoke<number>("cancel_all_http_requests");
-}
-
-export async function getHttpEngineStats(): Promise<HttpEngineStats> {
-  return invoke<HttpEngineStats>("get_http_engine_stats");
-}
-
-export async function runHttpTests(script: string, response: HttpResponse): Promise<TestRunResult> {
-  return invoke<TestRunResult>("run_http_tests", { script, response });
-}
-
-export async function getAppSettings(): Promise<AppSettings> {
-  return invoke<AppSettings>("get_app_settings");
-}
-
-export async function setHttpSettings(
-  httpMaxConcurrent: number,
-  httpTimeoutMs: number,
-  httpCacheEnabled: boolean,
-  httpCacheTtlSec: number,
-  httpCacheDiskEnabled: boolean,
-): Promise<AppSettings> {
-  return invoke<AppSettings>("set_http_settings", {
-    httpMaxConcurrent,
-    httpTimeoutMs,
-    httpCacheEnabled,
-    httpCacheTtlSec,
-    httpCacheDiskEnabled,
-  });
-}
-
-export async function clearHttpCache(): Promise<number> {
-  return invoke<number>("clear_http_cache");
-}
-
-export type StoredCookie = {
-  name: string;
-  value: string;
-  domain?: string | null;
-  path?: string | null;
-  url: string;
-};
-
-export async function getHttpCookies(): Promise<StoredCookie[]> {
-  return invoke<StoredCookie[]>("get_http_cookies");
-}
-
-export async function clearHttpCookies(): Promise<void> {
-  await invoke("clear_http_cookies");
+  return runEffect(sendRequestsBatchEffect(payloads));
 }

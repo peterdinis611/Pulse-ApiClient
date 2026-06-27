@@ -2,18 +2,12 @@ import { useEffect, useState, type ReactNode } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { LoadingScreen } from "@/components/LoadingScreen";
-import { loadUserSession, type UserSession } from "@/lib/auth";
-import {
-  getScreenshotDemoPersisted,
-  getScreenshotMainView,
-  isScreenshotMode,
-  SCREENSHOT_DEMO_USER,
-} from "@/lib/screenshot-demo";
+import { loadAppBootstrapData } from "@/lib/app-bootstrap-data";
 import { loadPersistedState } from "@/lib/storage";
 import { canUseTauriIpc, waitForTauriIpc } from "@/lib/tauri-runtime";
 import { listenWorkspaceReset, listenWorkspaceUpdated } from "@/lib/workspace-sync";
 import { listenWsClose, listenWsError, listenWsMessage } from "@/lib/ws-client";
-import { getCurrentWindowLabel, takePendingWindowInit } from "@/lib/window-manager";
+import { getCurrentWindowLabel } from "@/lib/window-manager";
 import { AppMachineContext } from "@/machines/AppProvider";
 import { flushWorkspaceFromContext } from "@/machines/appMachine";
 
@@ -27,34 +21,14 @@ export function AppBootstrap({ children }: { children: ReactNode }) {
     void (async () => {
       try {
         await waitForTauriIpc(1500);
-        const useScreenshotDemo = isScreenshotMode() && !canUseTauriIpc();
-        const screenshotMainView = useScreenshotDemo ? getScreenshotMainView() : null;
-
-        const [persisted, user, windowContext] = await Promise.all([
-          useScreenshotDemo
-            ? Promise.resolve(getScreenshotDemoPersisted(screenshotMainView ?? "request"))
-            : loadPersistedState(),
-          useScreenshotDemo ? Promise.resolve<UserSession | null>(SCREENSHOT_DEMO_USER) : loadUserSession(),
-          (async () => {
-            if (!canUseTauriIpc()) {
-              return { windowId: "main", pendingInit: null };
-            }
-            try {
-              const label = await getCurrentWindowLabel();
-              const pendingInit = await takePendingWindowInit(label);
-              return { windowId: label, pendingInit };
-            } catch {
-              return { windowId: "main", pendingInit: null };
-            }
-          })(),
-        ]);
+        const bootstrap = await loadAppBootstrapData();
         if (cancelled) return;
         actorRef.send({
           type: "HYDRATE_APP",
-          persisted,
-          user,
-          windowId: windowContext.windowId,
-          pendingInit: windowContext.pendingInit,
+          persisted: bootstrap.persisted,
+          user: bootstrap.user,
+          windowId: bootstrap.windowId,
+          pendingInit: bootstrap.pendingInit,
         });
       } finally {
         if (!cancelled) setReady(true);
@@ -115,24 +89,22 @@ export function AppBootstrap({ children }: { children: ReactNode }) {
     const unlisteners: Array<() => void> = [];
 
     void (async () => {
-      unlisteners.push(
-        await listenWsMessage((payload) => {
+      const [messageUnlisten, closeUnlisten, errorUnlisten] = await Promise.all([
+        listenWsMessage((payload) => {
           if (cancelled) return;
           actorRef.send({ type: "WS_MESSAGE_RECEIVED", ...payload });
         }),
-      );
-      unlisteners.push(
-        await listenWsClose((payload) => {
+        listenWsClose((payload) => {
           if (cancelled) return;
           actorRef.send({ type: "WS_CLOSED", ...payload });
         }),
-      );
-      unlisteners.push(
-        await listenWsError((payload) => {
+        listenWsError((payload) => {
           if (cancelled) return;
           actorRef.send({ type: "WS_ERROR", ...payload });
         }),
-      );
+      ]);
+
+      unlisteners.push(messageUnlisten, closeUnlisten, errorUnlisten);
     })();
 
     return () => {

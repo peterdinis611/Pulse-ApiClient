@@ -13,9 +13,8 @@ import { dbGetDatabasePath, dbResetDatabase } from "@/lib/db-client";
 import {
   clearHttpCache,
   clearHttpCookies,
-  getAppSettings,
-  getHttpCookies,
   getHttpEngineStats,
+  loadHttpSettingsDashboard,
   setHttpSettings,
   type StoredCookie,
 } from "@/lib/http-client";
@@ -158,32 +157,21 @@ export function SettingsView() {
 
     const load = async () => {
       try {
-        const tasks: Promise<void>[] = [
-          getAppSettings().then((settings) => {
-            if (cancelled) return;
-            setHttpMaxConcurrent(String(settings.httpMaxConcurrent));
-            setHttpTimeoutSec(String(Math.round(settings.httpTimeoutMs / 1000)));
-            setHttpCacheEnabled(settings.httpCacheEnabled);
-            setHttpCacheTtlMin(String(Math.round(settings.httpCacheTtlSec / 60)));
-            setHttpCacheDiskEnabled(settings.httpCacheDiskEnabled);
-          }),
-          getHttpEngineStats().then((stats) => {
-            if (!cancelled) setEngineStats(stats);
-          }),
-          getHttpCookies().then((items) => {
-            if (!cancelled) setCookies(items);
-          }),
-        ];
+        const [{ settings, stats, cookies }, databasePath] = await Promise.all([
+          loadHttpSettingsDashboard(),
+          canUseTauriIpc() ? dbGetDatabasePath() : Promise.resolve(null),
+        ]);
 
-        if (canUseTauriIpc()) {
-          tasks.push(
-            dbGetDatabasePath().then((path) => {
-              if (!cancelled) setDatabasePath(path);
-            }),
-          );
-        }
+        if (cancelled) return;
 
-        await Promise.all(tasks);
+        setHttpMaxConcurrent(String(settings.httpMaxConcurrent));
+        setHttpTimeoutSec(String(Math.round(settings.httpTimeoutMs / 1000)));
+        setHttpCacheEnabled(settings.httpCacheEnabled);
+        setHttpCacheTtlMin(String(Math.round(settings.httpCacheTtlSec / 60)));
+        setHttpCacheDiskEnabled(settings.httpCacheDiskEnabled);
+        setEngineStats(stats);
+        setCookies(cookies);
+        setDatabasePath(databasePath);
       } catch {
         toast.error("Could not load settings");
       }
