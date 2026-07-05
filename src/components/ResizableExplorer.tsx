@@ -65,7 +65,7 @@ export function ResizableExplorer({ children }: ResizableExplorerProps) {
     <div
       aria-hidden={!open}
       className={cn(
-        "explorer-shell relative shrink-0 overflow-hidden border-r border-border bg-sidebar",
+        "explorer-shell relative shrink-0 overflow-hidden border-r border-sidebar-border bg-sidebar",
         open ? "explorer-shell--open" : "explorer-shell--closed pointer-events-none",
         isDragging && "explorer-shell--dragging",
       )}

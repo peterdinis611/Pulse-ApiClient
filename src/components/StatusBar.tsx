@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  CheckCircle2,
   Globe2,
   LayoutPanelTop,
   LoaderCircle,
@@ -54,14 +53,10 @@ export function StatusBar() {
   }, [pendingRequestCount]);
 
   return (
-    <footer className="flex h-7 items-center justify-between border-t border-border bg-background px-3 text-[11px] text-muted-foreground">
-      <div className="flex min-w-0 items-center gap-3">
-        <span className="inline-flex items-center gap-1.5">
-          <CheckCircle2 className="size-3 text-success" />
-          Online
-        </span>
+    <footer className="flex h-7 shrink-0 items-center justify-between border-t border-topbar-border bg-topbar px-3 text-[11px] text-topbar-muted">
+      <div className="flex min-w-0 items-center gap-2.5">
         {pendingRequestCount > 0 && (
-          <span className="inline-flex items-center gap-1.5">
+          <span className="inline-flex items-center gap-1.5 text-topbar-foreground">
             <LoaderCircle className="size-3.5 animate-spin" />
             {pendingRequestCount} active
             {engineStats ? ` / ${engineStats.maxConcurrent} max` : ""}
@@ -69,14 +64,14 @@ export function StatusBar() {
         )}
         {engineStats && pendingRequestCount === 0 && (
           <span className="hidden sm:inline">
-            Engine {engineStats.totalCompleted} ok · {engineStats.totalFailed} failed
+            {engineStats.totalCompleted} ok · {engineStats.totalFailed} failed
           </span>
         )}
-        {mainView === "request" && activeEnvironment && (
+        {activeEnvironment && (
           <button
             type="button"
             className={cn(
-              "inline-flex max-w-[180px] items-center gap-1.5 truncate rounded-md px-1.5 py-0.5 transition-colors hover:bg-accent hover:text-accent-foreground",
+              "inline-flex max-w-[200px] items-center gap-1.5 truncate rounded-md px-1.5 py-0.5 transition-colors hover:bg-topbar-foreground/8 hover:text-topbar-foreground",
               hasTabOverride && "text-primary",
             )}
             onClick={() => setMainView("environments")}
@@ -95,7 +90,10 @@ export function StatusBar() {
           type="button"
           variant="ghost"
           size="sm"
-          className={cn("h-7 gap-1.5 px-2", consoleOpen && "bg-accent text-accent-foreground")}
+          className={cn(
+            "h-6 gap-1.5 px-2 text-topbar-muted hover:text-topbar-foreground",
+            consoleOpen && "bg-topbar-foreground/10 text-topbar-foreground",
+          )}
           onClick={() => setConsoleOpen(!consoleOpen)}
         >
           <TerminalSquare className="size-3.5" />
@@ -103,12 +101,12 @@ export function StatusBar() {
         </Button>
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-0.5">
         <WindowMenu compact />
         <TooltipIconButton
           variant="ghost"
           size="icon"
-          className="size-7"
+          className="size-7 text-topbar-muted hover:text-topbar-foreground"
           label="Clear HTTP cache"
           onClick={() =>
             void clearHttpCache()
@@ -118,15 +116,20 @@ export function StatusBar() {
         >
           <Trash2 className="size-3.5" />
         </TooltipIconButton>
-        <TooltipIconButton
-          variant="ghost"
-          size="icon"
-          className={cn("size-7", responsePanelOpen && "bg-accent text-accent-foreground")}
-          label={responsePanelOpen ? "Hide response panel" : "Show response panel"}
-          onClick={() => setResponsePanelOpen(!responsePanelOpen)}
-        >
-          <LayoutPanelTop className="size-3.5" />
-        </TooltipIconButton>
+        {mainView === "request" && (
+          <TooltipIconButton
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "size-7 text-topbar-muted hover:text-topbar-foreground",
+              responsePanelOpen && "bg-topbar-foreground/10 text-topbar-foreground",
+            )}
+            label={responsePanelOpen ? "Hide response panel" : "Show response panel"}
+            onClick={() => setResponsePanelOpen(!responsePanelOpen)}
+          >
+            <LayoutPanelTop className="size-3.5" />
+          </TooltipIconButton>
+        )}
       </div>
     </footer>
   );

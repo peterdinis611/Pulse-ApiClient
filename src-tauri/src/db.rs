@@ -273,6 +273,10 @@ impl DbState {
             return Err("Enter your email and password.".to_string());
         }
 
+        if !email.contains('@') || !email.contains('.') {
+            return Err("Enter a valid email address.".to_string());
+        }
+
         let account = {
             let conn = self.auth_conn.lock().map_err(|e| e.to_string())?;
             let mut stmt = conn

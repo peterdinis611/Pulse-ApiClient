@@ -1,6 +1,11 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useCallback } from "react";
 import { useApp } from "@/machines";
 import { isWebSocketProtocol } from "@/lib/protocol";
+import {
+  loadLayoutPreferences,
+  saveLayoutPreferences,
+  WORKSPACE_SPLIT_RATIO_DEFAULT,
+} from "@/lib/layout-preferences";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { RequestBar } from "@/components/RequestBar";
 import { ResizableSplit } from "@/components/ResizableSplit";
@@ -18,6 +23,13 @@ const WebSocketPanel = lazy(() =>
 export function RequestWorkspace() {
   const { responsePanelOpen, request } = useApp();
   const isWebSocket = isWebSocketProtocol(request.protocol);
+  const splitRatio =
+    loadLayoutPreferences().workspaceSplitRatio ?? WORKSPACE_SPLIT_RATIO_DEFAULT;
+
+  const handleSplitRatioChange = useCallback((ratio: number) => {
+    const prefs = loadLayoutPreferences();
+    saveLayoutPreferences({ ...prefs, workspaceSplitRatio: ratio });
+  }, []);
 
   const requestTabs = (
     <Suspense fallback={<LoadingScreen variant="inline" label="Loading request" />}>
@@ -32,10 +44,15 @@ export function RequestWorkspace() {
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col bg-background">
+    <div className="flex h-full min-h-0 flex-1 flex-col">
       <RequestBar />
       {responsePanelOpen ? (
-        <ResizableSplit top={requestTabs} bottom={responsePanel} />
+        <ResizableSplit
+          top={requestTabs}
+          bottom={responsePanel}
+          initialRatio={splitRatio}
+          onRatioChange={handleSplitRatioChange}
+        />
       ) : (
         requestTabs
       )}

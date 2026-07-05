@@ -28,7 +28,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { EnvironmentSwitcher } from "@/components/EnvironmentSwitcher";
 import { FolderSelect } from "@/components/FolderSelect";
 import { requestToCurl, curlToRequest } from "@/lib/curl";
 import { toast } from "@/lib/toast";
@@ -55,14 +54,6 @@ export function RequestBar() {
     collectionGroups,
     setActiveCollectionId,
     activeEnvironment,
-    workspaceEnvironment,
-    activeEnvironmentId,
-    tabEnvironmentOverrideId,
-    environments,
-    setActiveEnvironmentId,
-    setTabEnvironmentOverrideId,
-    setMainView,
-    addEnvironment,
   } = useApp();
 
   const [saveFolder, setSaveFolder] = useState<string | undefined>();
@@ -107,11 +98,11 @@ export function RequestBar() {
   }, [canConnect, canSend, connectWebSocket, isWebSocket, sendCurrentRequest]);
 
   return (
-    <div className="shrink-0 border-b border-border bg-background">
+    <div className="shrink-0 border-b border-border bg-topbar">
       <div className="flex items-stretch gap-2 px-3 py-2">
-        <div className="flex min-w-0 flex-1 overflow-hidden rounded-md border border-border bg-card shadow-sm">
+        <div className="flex min-w-0 flex-1 overflow-hidden rounded-md border border-topbar-border bg-background shadow-sm">
           {isWebSocket ? (
-            <div className="flex h-10 w-20 shrink-0 items-center justify-center border-r border-border bg-muted/30">
+            <div className="flex h-9 w-20 shrink-0 items-center justify-center border-r border-border bg-muted/30">
               <Badge variant="secondary" className="font-mono text-[10px] uppercase">
                 WS
               </Badge>
@@ -125,7 +116,7 @@ export function RequestBar() {
             >
               <SelectTrigger
                 className={cn(
-                  "h-10 w-24 shrink-0 rounded-none border-0 border-r bg-muted/30 font-mono text-xs font-bold shadow-none focus:ring-0",
+                  "h-9 w-24 shrink-0 rounded-none border-0 border-r bg-muted/30 font-mono text-xs font-bold shadow-none focus:ring-0",
                   methodTextClass(request.method),
                 )}
               >
@@ -144,7 +135,7 @@ export function RequestBar() {
             embedded
             environment={activeEnvironment}
             className="min-w-0 flex-1"
-            inputClassName="h-10 rounded-none border-0 bg-transparent font-mono text-[13px] shadow-none focus-visible:ring-0"
+            inputClassName="h-9 rounded-none border-0 bg-transparent font-mono text-[13px] shadow-none focus-visible:ring-0"
             value={request.url}
             onChange={(url) => updateRequest({ url })}
             placeholder={
@@ -162,7 +153,7 @@ export function RequestBar() {
             <Button
               type="button"
               variant="outline"
-              className="h-10 shrink-0 px-4"
+              className="h-9 shrink-0 px-4"
               disabled={ws.status === "connecting"}
               onClick={() => disconnectWebSocket()}
             >
@@ -176,7 +167,7 @@ export function RequestBar() {
           ) : (
             <Button
               type="button"
-              className="h-10 shrink-0 px-5"
+              className="h-9 shrink-0 px-5"
               disabled={!canConnect}
               onClick={() => connectWebSocket()}
             >
@@ -188,7 +179,7 @@ export function RequestBar() {
           <div className="flex shrink-0 items-center gap-1.5">
             <Button
               type="button"
-              className="h-10 px-5"
+              className="h-9 px-5"
               disabled={loading || !canSend}
               onClick={() => void sendCurrentRequest()}
             >
@@ -199,7 +190,7 @@ export function RequestBar() {
               <Button
                 type="button"
                 variant="outline"
-                className="h-10 px-3"
+                className="h-9 px-3"
                 onClick={cancelCurrentRequest}
               >
                 <Square />
@@ -209,9 +200,9 @@ export function RequestBar() {
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 border-t border-border/60 px-3 py-1.5">
+      <div className="flex items-center gap-2 border-t border-topbar-border/70 px-3 py-1">
         <Input
-          className="h-8 max-w-[200px] border-transparent bg-transparent px-2 text-[13px] shadow-none focus-visible:ring-0"
+          className="h-7 min-w-0 flex-1 border-transparent bg-transparent px-2 text-[13px] shadow-none focus-visible:ring-0"
           value={request.name}
           onChange={(event) => updateRequest({ name: event.target.value })}
           placeholder="Request name"
@@ -220,7 +211,7 @@ export function RequestBar() {
           value={activeCollectionId ?? undefined}
           onValueChange={(value) => setActiveCollectionId(value)}
         >
-          <SelectTrigger className="h-8 w-[148px] text-xs">
+          <SelectTrigger className="h-7 w-[132px] border-topbar-border/60 bg-background/60 text-xs">
             <SelectValue placeholder="Collection" />
           </SelectTrigger>
           <SelectContent>
@@ -236,26 +227,13 @@ export function RequestBar() {
           collectionGroups={collectionGroups}
           value={saveFolder}
           onChange={setSaveFolder}
-          className="h-8 w-[132px] text-xs"
-        />
-        <EnvironmentSwitcher
-          mode="request"
-          environments={environments}
-          workspaceEnvironmentId={activeEnvironmentId}
-          workspaceEnvironment={workspaceEnvironment}
-          requestEnvironment={activeEnvironment}
-          tabOverrideId={tabEnvironmentOverrideId}
-          onSetWorkspace={setActiveEnvironmentId}
-          onSetTabOverride={setTabEnvironmentOverrideId}
-          onAddEnvironment={addEnvironment}
-          onManageEnvironments={() => setMainView("environments")}
-          compact
+          className="h-7 w-[120px] border-topbar-border/60 bg-background/60 text-xs"
         />
         <Button
           type="button"
-          variant="outline"
+          variant="secondary"
           size="sm"
-          className="h-8"
+          className="h-7"
           onClick={() => saveCurrentToCollection(saveFolder)}
         >
           <Save className="size-3.5" />
@@ -263,7 +241,7 @@ export function RequestBar() {
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button type="button" variant="ghost" size="icon" className="size-8">
+            <Button type="button" variant="ghost" size="icon" className="size-7 shrink-0">
               <MoreHorizontal className="size-4" />
             </Button>
           </DropdownMenuTrigger>
@@ -306,8 +284,8 @@ export function RequestBar() {
       </div>
 
       {containsVariables(request.url) && (
-        <p className="truncate border-t border-border/50 px-3 py-1 font-mono text-[11px] text-muted-foreground">
-          <span className="text-foreground/60">Resolved · </span>
+        <p className="truncate border-t border-topbar-border/50 px-3 py-0.5 font-mono text-[11px] text-topbar-muted">
+          <span className="text-topbar-foreground/60">Resolved · </span>
           {resolvedUrl}
         </p>
       )}

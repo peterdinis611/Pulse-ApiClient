@@ -16,6 +16,7 @@ import {
 import { useDebouncedValue } from "@/lib/use-debounced-search";
 import type { HistoryEntry } from "@/types";
 import { MethodBadge } from "@/components/MethodBadge";
+import { PageShell, PageToolbar } from "@/components/PageShell";
 import {
   ActiveOverviewFilters,
   OverviewFilterMenu,
@@ -23,7 +24,7 @@ import {
 import { TooltipIconButton } from "@/components/TooltipIconButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollAreaWithTop } from "@/components/ui/scroll-area-with-top";
+import { Panel, StatCard } from "@/components/ui/panel";
 import { Separator } from "@/components/ui/separator";
 
 export function OverviewView() {
@@ -126,118 +127,100 @@ export function OverviewView() {
   }, [allItems, activeFilter, debouncedQuery]);
 
   const filteredItems = asyncFilteredItems ?? filteredItemsSync;
-
   const recentItems = useMemo(() => filteredItems.slice(0, 20), [filteredItems]);
+  const firstName = (user?.name ?? "there").split(" ")[0];
 
   return (
-    <ScrollAreaWithTop className="h-full min-h-0" resetKey="overview">
-      <div className="mx-auto max-w-5xl space-y-4 p-4 md:p-6">
-        <div className="border-b border-border pb-4">
-          <h1 className="text-lg font-semibold tracking-tight">
-            Welcome back, {(user?.name ?? "there").split(" ")[0]}
-          </h1>
-          <p className="mt-0.5 text-[13px] text-muted-foreground">
-            Recent requests and saved endpoints across your workspace.
-          </p>
-        </div>
+    <PageShell resetKey="overview">
+      <p className="text-body text-muted-foreground">
+        Welcome back, <span className="font-medium text-foreground">{firstName}</span>
+      </p>
 
-        <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <div className="relative max-w-sm flex-1">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                className="pl-9"
-                placeholder="Fuzzy search requests, URLs, methods…"
-                value={overviewFilter.query}
-                onChange={(event) => setOverviewFilter({ query: event.target.value })}
-              />
-            </div>
-            <OverviewFilterMenu totalCount={allItems.length} filteredCount={filteredItems.length} />
-            <Button variant="secondary" onClick={newRequestTab}>
-              New request
-            </Button>
-          </div>
-
-          <ActiveOverviewFilters
-            filter={overviewFilter}
-            onChange={setOverviewFilter}
-            onReset={resetOverviewFilter}
+      <PageToolbar>
+        <div className="relative min-w-[200px] flex-1 sm:max-w-sm">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="h-9 pl-9"
+            placeholder="Search requests, URLs, methods…"
+            value={overviewFilter.query}
+            onChange={(event) => setOverviewFilter({ query: event.target.value })}
           />
+        </div>
+        <OverviewFilterMenu totalCount={allItems.length} filteredCount={filteredItems.length} />
+        <Button className="h-9" onClick={newRequestTab}>
+          New request
+        </Button>
+      </PageToolbar>
 
-          {!isOverviewFilterDefault(overviewFilter) && (
-            <p className="text-xs text-muted-foreground">
-              Showing {filteredItems.length} of {allItems.length} items
-              {debouncedQuery.trim() ? " · ranked by relevance" : ""}
-            </p>
-          )}
+      <ActiveOverviewFilters
+        filter={overviewFilter}
+        onChange={setOverviewFilter}
+        onReset={resetOverviewFilter}
+      />
+
+      {!isOverviewFilterDefault(overviewFilter) && (
+        <p className="text-body text-muted-foreground">
+          Showing {filteredItems.length} of {allItems.length} items
+          {debouncedQuery.trim() ? " · ranked by relevance" : ""}
+        </p>
+      )}
+
+      <Panel>
+        <div className="ui-data-table-header grid-cols-[1fr_120px_160px_40px]">
+          <span>Name</span>
+          <span>Method</span>
+          <span>Details</span>
+          <span />
         </div>
 
-        <div className="overflow-hidden rounded-md border border-border bg-card">
-          <div className="grid grid-cols-[1fr_120px_160px_40px] gap-4 border-b border-border bg-muted/40 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            <span>Name</span>
-            <span>Method</span>
-            <span>Details</span>
-            <span />
+        {recentItems.length === 0 ? (
+          <div className="space-y-2 px-4 py-12 text-center text-body text-muted-foreground">
+            <p>No items match your search or filters.</p>
+            {!isOverviewFilterDefault(overviewFilter) && (
+              <Button type="button" variant="link" className="h-auto p-0" onClick={resetOverviewFilter}>
+                Clear filters
+              </Button>
+            )}
           </div>
-
-          {recentItems.length === 0 ? (
-            <div className="space-y-2 px-4 py-12 text-center text-sm text-muted-foreground">
-              <p>No items match your search or filters.</p>
-              {!isOverviewFilterDefault(overviewFilter) && (
-                <Button type="button" variant="link" className="h-auto p-0" onClick={resetOverviewFilter}>
-                  Clear filters
-                </Button>
-              )}
-            </div>
-          ) : (
-            recentItems.map((item, index) => (
-              <div key={item.id}>
-                <div className="grid w-full grid-cols-[1fr_120px_160px_40px] items-center gap-4 px-4 py-4 hover:bg-muted/30">
-                  <button type="button" className="min-w-0 text-left" onClick={item.onOpen}>
-                    <p className="truncate text-sm font-medium">{item.title}</p>
-                    <p className="truncate text-xs text-muted-foreground">{item.subtitle}</p>
-                  </button>
-                  <button type="button" className="text-left" onClick={item.onOpen}>
-                    <MethodBadge method={item.method} />
-                  </button>
-                  <button
-                    type="button"
-                    className="flex items-center gap-2 text-left text-xs text-muted-foreground"
-                    onClick={item.onOpen}
-                  >
-                    <Clock3 className="size-3.5" />
-                    {item.meta}
-                  </button>
-                  <TooltipIconButton
-                    variant="ghost"
-                    size="icon"
-                    className="size-8"
-                    label="More actions"
-                  >
-                    <MoreHorizontal className="size-4" />
-                  </TooltipIconButton>
-                </div>
-                {index < recentItems.length - 1 && <Separator />}
+        ) : (
+          recentItems.map((item, index) => (
+            <div key={item.id}>
+              <div className="ui-data-table-row grid-cols-[1fr_120px_160px_40px]">
+                <button type="button" className="min-w-0 text-left" onClick={item.onOpen}>
+                  <p className="truncate text-body font-medium">{item.title}</p>
+                  <p className="truncate text-[12px] text-muted-foreground">{item.subtitle}</p>
+                </button>
+                <button type="button" className="text-left" onClick={item.onOpen}>
+                  <MethodBadge method={item.method} />
+                </button>
+                <button
+                  type="button"
+                  className="flex items-center gap-2 text-left text-[12px] text-muted-foreground"
+                  onClick={item.onOpen}
+                >
+                  <Clock3 className="size-3.5" />
+                  {item.meta}
+                </button>
+                <TooltipIconButton
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
+                  label="More actions"
+                >
+                  <MoreHorizontal className="size-4" />
+                </TooltipIconButton>
               </div>
-            ))
-          )}
-        </div>
+              {index < recentItems.length - 1 && <Separator />}
+            </div>
+          ))
+        )}
+      </Panel>
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Collections</p>
-            <p className="mt-2 text-2xl font-semibold">{collectionGroups.length}</p>
-          </div>
-          <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">History</p>
-            <p className="mt-2 text-2xl font-semibold">{historyCount}</p>
-          </div>
-          <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Open tabs</p>
-            <p className="mt-2 text-2xl font-semibold">{tabs.length}</p>
-          </div>
-        </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <StatCard label="Collections" value={collectionGroups.length} />
+        <StatCard label="History" value={historyCount} />
+        <StatCard label="Open tabs" value={tabs.length} />
       </div>
-    </ScrollAreaWithTop>
+    </PageShell>
   );
 }

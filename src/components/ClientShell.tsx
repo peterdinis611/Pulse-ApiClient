@@ -3,9 +3,10 @@ import { useApp } from "@/machines";
 import { AppRail } from "./AppRail";
 import { ExplorerPanel } from "./ExplorerPanel";
 import { LoadingScreen } from "./LoadingScreen";
+import { ResizableConsole } from "./ResizableConsole";
 import { ResizableExplorer } from "./ResizableExplorer";
 import { StatusBar } from "./StatusBar";
-import { WorkspaceHeader } from "./WorkspaceHeader";
+import { ViewHeader } from "./ViewHeader";
 import { APP_NAME } from "@/lib/app-config";
 import {
   createAppWindow,
@@ -94,9 +95,9 @@ export function ClientShell() {
           <ExplorerPanel />
         </ResizableExplorer>
       )}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <WorkspaceHeader />
-        <main className="workspace-content flex min-h-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col bg-surface-0">
+        <ViewHeader />
+        <main className="workspace-content flex min-h-0 flex-1 flex-col overflow-hidden">
           <Suspense fallback={<LoadingScreen variant="inline" label="Loading view" />}>
             {mainView === "overview" && <OverviewView />}
             {mainView === "environments" && <EnvironmentsView />}
@@ -106,7 +107,9 @@ export function ClientShell() {
         </main>
         {consoleOpen && (
           <Suspense fallback={<LoadingScreen variant="inline" label="Loading console" />}>
-            <ConsolePanel />
+            <ResizableConsole>
+              <ConsolePanel />
+            </ResizableConsole>
           </Suspense>
         )}
         <StatusBar />

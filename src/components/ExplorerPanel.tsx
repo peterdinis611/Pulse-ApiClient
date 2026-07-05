@@ -4,11 +4,11 @@ import {
   ChevronRight,
   Copy,
   Download,
-  FolderInput,
   FolderPlus,
   Folder,
   History,
   LoaderCircle,
+  MoreHorizontal,
   PanelLeftClose,
   Play,
   Plus,
@@ -21,15 +21,14 @@ import { useHistory } from "@/hooks/useHistory";
 import { groupRequestsByFolder, requestsForCollection } from "@/lib/collections";
 import { runCollectionParallel, type CollectionRunResult } from "@/lib/collection-runner";
 import { filterSavedRequests, filterSavedRequestsAsync } from "@/lib/filters";
-import { downloadJson } from "@/lib/download";
+import { downloadJson, collectionExportFilename } from "@/lib/download";
 import { useDebouncedValue } from "@/lib/use-debounced-search";
 import { toast } from "@/lib/toast";
 import type { FolderTreeNode } from "@/lib/collections";
 import { AddFolderMenu } from "@/components/AddFolderMenu";
-import { CollectionExportMenu } from "@/components/CollectionExportMenu";
 import { CollectionRunResultsPanel } from "@/components/CollectionRunResultsPanel";
 import { MethodBadge } from "@/components/MethodBadge";
-import { TooltipIconButton, TooltipWrap } from "@/components/TooltipIconButton";
+import { TooltipIconButton } from "@/components/TooltipIconButton";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
@@ -43,7 +42,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { SavedRequest } from "@/types";
+import type { ApiRequest, SavedRequest } from "@/types";
+import { cn } from "@/lib/utils";
+
+function requestSignature(request: ApiRequest): string {
+  return `${request.method}\0${request.url}\0${request.name.trim()}`;
+}
 
 export function ExplorerPanel() {
   const {
@@ -69,6 +73,8 @@ export function ExplorerPanel() {
     addEnvironment,
     deleteFolder,
     activeEnvironment,
+    request,
+    newRequestTab,
   } = useApp();
 
   const {
@@ -121,6 +127,7 @@ export function ExplorerPanel() {
   }, [collections, debouncedSidebarSearch]);
 
   const filteredCollections = asyncFilteredCollections ?? filteredCollectionsSync;
+  const activeSignature = requestSignature(request);
 
   const handleRunCollection = async (collectionId: string, collectionName: string) => {
     const items = requestsForCollection(collections, collectionId);
@@ -169,82 +176,97 @@ export function ExplorerPanel() {
 
   return (
     <aside className="flex min-h-0 flex-1 flex-col">
-      <div className="shrink-0 border-b border-sidebar-border/80 px-2.5 py-2">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-[12px] font-medium text-foreground">Explorer</p>
-          <TooltipIconButton
-            variant="ghost"
-            size="icon"
-            className="size-7 shrink-0 text-muted-foreground"
-            label="Hide explorer (⌘B)"
-            onClick={toggleExplorerCollapsed}
-          >
-            <PanelLeftClose className="size-3.5" />
-          </TooltipIconButton>
+      <div className="explorer-header">
+        <div className="explorer-header__title">
+          <p className="text-title text-sm">Explorer</p>
+          <div className="flex items-center gap-0.5">
+            <TooltipIconButton
+              variant="ghost"
+              size="icon"
+              className="size-7 text-muted-foreground hover:text-foreground"
+              label="New request"
+              onClick={newRequestTab}
+            >
+              <Plus className="size-3.5" />
+            </TooltipIconButton>
+            <TooltipIconButton
+              variant="ghost"
+              size="icon"
+              className="size-7 text-muted-foreground hover:text-foreground"
+              label="Hide explorer (⌘B)"
+              onClick={toggleExplorerCollapsed}
+            >
+              <PanelLeftClose className="size-3.5" />
+            </TooltipIconButton>
+          </div>
         </div>
 
-        <div className="mt-2 space-y-2">
-        <EnvironmentSwitcher
-          mode="workspace"
-          environments={environments}
-          workspaceEnvironmentId={activeEnvironmentId}
-          workspaceEnvironment={workspaceEnvironment}
-          requestEnvironment={activeEnvironment}
-          onSetWorkspace={setActiveEnvironmentId}
-          onAddEnvironment={addEnvironment}
-          onManageEnvironments={() => setMainView("environments")}
-          compact
-          className="w-full max-w-none"
-        />
+        <div className="explorer-env-card">
+          <EnvironmentSwitcher
+            mode="workspace"
+            environments={environments}
+            workspaceEnvironmentId={activeEnvironmentId}
+            workspaceEnvironment={workspaceEnvironment}
+            requestEnvironment={activeEnvironment}
+            onSetWorkspace={setActiveEnvironmentId}
+            onAddEnvironment={addEnvironment}
+            onManageEnvironments={() => setMainView("environments")}
+            compact
+            className="w-full max-w-none border-0 bg-transparent shadow-none"
+          />
+        </div>
 
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={sidebarSearch}
             onChange={(event) => setSidebarSearch(event.target.value)}
-            className="h-8 border-sidebar-border/80 bg-background/60 pl-8 text-[13px] shadow-none focus-visible:bg-background"
-            placeholder="Search…"
+            className="h-8 border-sidebar-border/80 bg-background/70 pl-8 text-[13px] shadow-none focus-visible:bg-background"
+            placeholder="Search collections & history…"
           />
-        </div>
         </div>
       </div>
 
       <ScrollAreaWithTop className="min-h-0 flex-1" resetKey={sidebarSearch}>
-        <div className="space-y-0.5 p-1.5">
+        <div className="space-y-1 p-2">
           <Collapsible open={collectionsOpen} onOpenChange={setCollectionsOpen}>
-            <div className="flex items-center justify-between pr-0.5">
+            <div className="explorer-section-header">
               <CollapsibleTrigger asChild>
-                <button type="button" className="explorer-section-label rounded-sm hover:bg-sidebar-accent/70">
+                <button type="button" className="explorer-section-trigger">
                   {collectionsOpen ? (
-                    <ChevronDown className="size-3.5" />
+                    <ChevronDown className="size-3.5 shrink-0" />
                   ) : (
-                    <ChevronRight className="size-3.5" />
+                    <ChevronRight className="size-3.5 shrink-0" />
                   )}
                   Collections
+                  <span className="explorer-count-badge">{collectionGroups.length}</span>
                 </button>
               </CollapsibleTrigger>
-              <div className="flex items-center gap-0.5">
-                <TooltipIconButton
-                  variant="ghost"
-                  size="icon"
-                  className="size-7"
-                  label="Import collection"
-                  onClick={() => importRef.current?.click()}
-                >
-                  <Upload className="size-3.5" />
-                </TooltipIconButton>
-                <TooltipIconButton
-                  variant="ghost"
-                  size="icon"
-                  className="size-7"
-                  label="Export all collections"
-                  onClick={() => {
-                    downloadJson(exportCollections(), "pulse-collections.json");
-                  }}
-                >
-                  <Download className="size-3.5" />
-                </TooltipIconButton>
-              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 shrink-0 text-muted-foreground"
+                    aria-label="Collection actions"
+                  >
+                    <MoreHorizontal className="size-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuItem onClick={() => importRef.current?.click()}>
+                    <Upload className="size-3.5" />
+                    Import
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => downloadJson(exportCollections(), "pulse-collections.json")}
+                  >
+                    <Download className="size-3.5" />
+                    Export all
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <input
                 ref={importRef}
                 type="file"
@@ -258,7 +280,7 @@ export function ExplorerPanel() {
                 }}
               />
             </div>
-            <CollapsibleContent className="space-y-1">
+            <CollapsibleContent className="explorer-tree-nested space-y-0.5">
               {collectionGroups.map((group) => {
                 const items = requestsForCollection(filteredCollections, group.id);
                 const grouped = groupRequestsByFolder(items, group.folders);
@@ -272,7 +294,7 @@ export function ExplorerPanel() {
                       setOpenCollections((current) => ({ ...current, [group.id]: value }))
                     }
                   >
-                    <div className="flex items-center gap-1 pr-1">
+                    <div className="explorer-collection-row group/collection">
                       <CollapsibleTrigger asChild>
                         <button type="button" className="explorer-tree-row min-w-0 flex-1 font-medium">
                           {open ? (
@@ -280,39 +302,14 @@ export function ExplorerPanel() {
                           ) : (
                             <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
                           )}
-                          <span className="min-w-0 flex-1 truncate">{group.name}</span>
-                          <span className="rounded bg-muted/80 px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground">
-                            {items.length}
-                          </span>
+                          <span className="min-w-0 flex-1 truncate text-left">{group.name}</span>
+                          <span className="explorer-count-badge">{items.length}</span>
                         </button>
                       </CollapsibleTrigger>
-                      <AddFolderMenu
-                        collectionId={group.id}
-                        collectionName={group.name}
-                        folders={group.folders}
-                        trigger={
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="size-7 shrink-0"
-                            title="Add folder"
-                            aria-label="Add folder"
-                            onClick={(event) => event.stopPropagation()}
-                          >
-                            <FolderPlus className="size-3.5" />
-                          </Button>
-                        }
-                      />
-                      <CollectionExportMenu
-                        collectionId={group.id}
-                        collectionName={group.name}
-                        exportCollection={exportCollection}
-                      />
                       <TooltipIconButton
                         variant="ghost"
                         size="icon"
-                        className="size-7 shrink-0"
+                        className="explorer-action-btn"
                         label="Run collection"
                         disabled={items.length === 0 || runningCollectionId !== null}
                         onClick={() => void handleRunCollection(group.id, group.name)}
@@ -323,8 +320,31 @@ export function ExplorerPanel() {
                           <Play className="size-3.5" />
                         )}
                       </TooltipIconButton>
+                      <AddFolderMenu
+                        collectionId={group.id}
+                        collectionName={group.name}
+                        folders={group.folders}
+                        trigger={
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="explorer-action-btn"
+                            title="Add folder"
+                            aria-label="Add folder"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <FolderPlus className="size-3.5" />
+                          </Button>
+                        }
+                      />
+                      <CollectionActionsMenu
+                        collectionId={group.id}
+                        collectionName={group.name}
+                        exportCollection={exportCollection}
+                      />
                     </div>
-                    <CollapsibleContent className="space-y-0.5 pl-2">
+                    <CollapsibleContent className="explorer-tree-nested space-y-0.5">
                       {grouped.folders.map((folder) => (
                         <FolderBranch
                           key={folder.path}
@@ -337,6 +357,7 @@ export function ExplorerPanel() {
                           onDelete={deleteSavedRequest}
                           onDeleteFolder={(folderPath) => deleteFolder(group.id, folderPath)}
                           onMove={(id, targetFolder) => moveSavedRequest(id, group.id, targetFolder)}
+                          activeSignature={activeSignature}
                         />
                       ))}
                       {grouped.root.map((item) => (
@@ -344,6 +365,7 @@ export function ExplorerPanel() {
                           key={item.id}
                           item={item}
                           folders={group.folders}
+                          selected={requestSignature(item.request) === activeSignature}
                           onOpen={() => loadSavedRequest(item)}
                           onDuplicate={() => duplicateSavedRequest(item.id)}
                           onDelete={() => deleteSavedRequest(item.id)}
@@ -366,9 +388,9 @@ export function ExplorerPanel() {
           <div className="mx-2 my-1.5 h-px bg-border/50" />
 
           <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
-            <div className="flex items-center justify-between pr-0.5">
+            <div className="explorer-section-header">
               <CollapsibleTrigger asChild>
-                <button type="button" className="explorer-section-label min-w-0 flex-1 rounded-sm hover:bg-sidebar-accent/70">
+                <button type="button" className="explorer-section-trigger min-w-0 flex-1">
                   {historyOpen ? (
                     <ChevronDown className="size-3.5 shrink-0" />
                   ) : (
@@ -376,11 +398,7 @@ export function ExplorerPanel() {
                   )}
                   <History className="size-3.5 shrink-0" />
                   <span>History</span>
-                  {historyCount > 0 && (
-                    <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium normal-case tracking-normal text-muted-foreground">
-                      {historyCount}
-                    </span>
-                  )}
+                  {historyCount > 0 && <span className="explorer-count-badge">{historyCount}</span>}
                 </button>
               </CollapsibleTrigger>
               <TooltipIconButton
@@ -397,16 +415,21 @@ export function ExplorerPanel() {
                 <Trash2 className="size-3.5" />
               </TooltipIconButton>
             </div>
-            <CollapsibleContent className="space-y-0.5">
+            <CollapsibleContent className="explorer-tree-nested space-y-0.5">
               {historyEntries.map((entry) => (
                 <button
                   key={entry.id}
                   type="button"
-                  className="explorer-tree-row w-full"
+                  className={cn(
+                    "explorer-tree-row group/item w-full",
+                    requestSignature(entry.request) === activeSignature && "explorer-tree-row--active",
+                  )}
                   onClick={() => loadHistoryEntry(entry)}
                 >
                   <MethodBadge method={entry.request.method} />
-                  <span className="min-w-0 flex-1 truncate">{entry.request.name || entry.request.url}</span>
+                  <span className="min-w-0 flex-1 truncate text-left">
+                    {entry.request.name || entry.request.url}
+                  </span>
                 </button>
               ))}
               {historyEntries.length === 0 && (
@@ -430,7 +453,7 @@ export function ExplorerPanel() {
       </ScrollAreaWithTop>
 
       {(runProgress || collectionRun) && (
-        <div className="border-t border-sidebar-border px-3 py-2 text-xs text-muted-foreground">
+        <div className="shrink-0 border-t border-sidebar-border bg-sidebar/90 px-3 py-2 text-[12px] text-muted-foreground">
           {runProgress && <p>{runProgress}</p>}
           {collectionRun && collectionRun.totalTests > 0 && (
             <p className={collectionRun.failed > 0 ? "text-destructive" : "text-success"}>
@@ -456,18 +479,58 @@ export function ExplorerPanel() {
         />
       )}
 
-      <div className="shrink-0 border-t border-sidebar-border/80 p-1.5">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 w-full justify-start gap-1.5 px-2 text-[13px] text-muted-foreground hover:text-foreground"
-          onClick={addEnvironment}
-        >
-          <Plus className="size-3.5" />
-          New environment
-        </Button>
-      </div>
     </aside>
+  );
+}
+
+function CollectionActionsMenu({
+  collectionId,
+  collectionName,
+  exportCollection,
+}: {
+  collectionId: string;
+  collectionName: string;
+  exportCollection: (collectionId: string, format: "pulse" | "postman") => string | null;
+}) {
+  const exportAs = (format: "pulse" | "postman") => {
+    const content = exportCollection(collectionId, format);
+    if (!content) {
+      toast.error("Export failed", "Collection not found");
+      return;
+    }
+    const suffix = format === "postman" ? "postman_collection.json" : "pulse_collection.json";
+    downloadJson(content, collectionExportFilename(collectionName, suffix));
+    toast.success(
+      "Collection exported",
+      format === "postman" ? `${collectionName} (Postman)` : `${collectionName} (Pulse)`,
+    );
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="explorer-action-btn mr-0.5"
+          aria-label="Collection options"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <MoreHorizontal className="size-3.5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuItem onClick={() => exportAs("pulse")}>
+          <Download className="size-3.5" />
+          Export Pulse
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => exportAs("postman")}>
+          <Download className="size-3.5" />
+          Export Postman
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -481,6 +544,7 @@ function FolderBranch({
   collectionId,
   collectionName,
   folders,
+  activeSignature,
   onOpen,
   onDuplicate,
   onDelete,
@@ -491,6 +555,7 @@ function FolderBranch({
   collectionId: string;
   collectionName: string;
   folders: string[];
+  activeSignature: string;
   onOpen: (item: SavedRequest) => void;
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
@@ -502,20 +567,16 @@ function FolderBranch({
 
   return (
     <div className="space-y-0.5">
-      <div className="group/folder flex items-center gap-0.5 rounded-sm pr-0.5 hover:bg-sidebar-accent/70">
+      <div className="group/folder flex items-center gap-0.5 rounded-md pr-0.5 hover:bg-sidebar-accent/50">
         <button
           type="button"
           className="explorer-tree-row min-w-0 flex-1 text-muted-foreground"
           onClick={() => setOpen((value) => !value)}
         >
           {open ? <ChevronDown className="size-3.5 shrink-0" /> : <ChevronRight className="size-3.5 shrink-0" />}
-          <Folder className="size-3.5 shrink-0 opacity-70" />
+          <Folder className="size-3.5 shrink-0 text-primary/70" />
           <span className="truncate">{folder.name}</span>
-          {isEmpty && (
-            <span className="rounded bg-muted/80 px-1 py-0.5 text-[9px] uppercase tracking-wide text-muted-foreground">
-              Empty
-            </span>
-          )}
+          {isEmpty && <span className="explorer-count-badge">Empty</span>}
         </button>
         <AddFolderMenu
           collectionId={collectionId}
@@ -527,7 +588,7 @@ function FolderBranch({
               type="button"
               variant="ghost"
               size="icon"
-              className="size-6 shrink-0 opacity-0 group-hover/folder:opacity-100"
+              className="explorer-action-btn"
               title="Add subfolder"
               aria-label="Add subfolder"
               onClick={(event) => event.stopPropagation()}
@@ -540,7 +601,7 @@ function FolderBranch({
           <TooltipIconButton
             variant="ghost"
             size="icon"
-            className="size-6 shrink-0 text-destructive opacity-0 group-hover/folder:opacity-100"
+            className="explorer-action-btn text-destructive"
             label="Delete folder"
             onClick={(event) => {
               event.stopPropagation();
@@ -552,12 +613,13 @@ function FolderBranch({
         )}
       </div>
       {open && (
-        <div className="space-y-0.5 pl-4">
+        <div className="explorer-tree-nested space-y-0.5">
           {folder.requests.map((item) => (
             <CollectionItem
               key={item.id}
               item={item}
               folders={folders}
+              selected={requestSignature(item.request) === activeSignature}
               onOpen={() => onOpen(item)}
               onDuplicate={() => onDuplicate(item.id)}
               onDelete={() => onDelete(item.id)}
@@ -571,6 +633,7 @@ function FolderBranch({
               collectionId={collectionId}
               collectionName={collectionName}
               folders={folders}
+              activeSignature={activeSignature}
               onOpen={onOpen}
               onDuplicate={onDuplicate}
               onDelete={onDelete}
@@ -587,6 +650,7 @@ function FolderBranch({
 function CollectionItem({
   item,
   folders,
+  selected,
   onOpen,
   onDuplicate,
   onDelete,
@@ -594,32 +658,35 @@ function CollectionItem({
 }: {
   item: SavedRequest;
   folders: string[];
+  selected?: boolean;
   onOpen: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
   onMove: (folder?: string) => void;
 }) {
   return (
-    <div className="group flex items-center gap-0.5 rounded-sm pr-0.5 hover:bg-sidebar-accent/70">
-      <button type="button" className="explorer-tree-row min-w-0 flex-1" onClick={onOpen}>
+    <div className="group/item flex items-center gap-0.5 rounded-md pr-0.5 hover:bg-sidebar-accent/50">
+      <button
+        type="button"
+        className={cn("explorer-tree-row min-w-0 flex-1", selected && "explorer-tree-row--active")}
+        onClick={onOpen}
+      >
         <MethodBadge method={item.request.method} />
         <span className="truncate text-foreground/90">{item.name}</span>
       </button>
       <DropdownMenu>
-        <TooltipWrap label="Move to folder">
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-7 opacity-0 group-hover:opacity-100"
-              aria-label="Move to folder"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <FolderInput className="size-3.5" />
-            </Button>
-          </DropdownMenuTrigger>
-        </TooltipWrap>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="explorer-action-btn"
+            aria-label="Request actions"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <MoreHorizontal className="size-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
           <DropdownMenuLabel>Move to folder</DropdownMenuLabel>
           <DropdownMenuItem onClick={() => onMove(undefined)}>No folder</DropdownMenuItem>
@@ -629,32 +696,17 @@ function CollectionItem({
               {folder}
             </DropdownMenuItem>
           ))}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={onDuplicate}>
+            <Copy className="size-3.5" />
+            Duplicate
+          </DropdownMenuItem>
+          <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onDelete}>
+            <Trash2 className="size-3.5" />
+            Delete
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <TooltipIconButton
-        variant="ghost"
-        size="icon"
-        className="size-7 opacity-0 group-hover:opacity-100"
-        label="Duplicate request"
-        onClick={(event) => {
-          event.stopPropagation();
-          onDuplicate();
-        }}
-      >
-        <Copy className="size-3.5" />
-      </TooltipIconButton>
-      <TooltipIconButton
-        variant="ghost"
-        size="icon"
-        className="size-7 text-destructive opacity-0 group-hover:opacity-100"
-        label="Delete request"
-        onClick={(event) => {
-          event.stopPropagation();
-          onDelete();
-        }}
-      >
-        <Trash2 className="size-3.5" />
-      </TooltipIconButton>
     </div>
   );
 }

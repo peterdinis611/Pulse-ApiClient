@@ -87,14 +87,14 @@ export function RequestTabs() {
 
   return (
     <section className="flex h-full min-h-0 flex-col bg-surface-0">
-      <div className="border-b border-border px-4">
+      <div className="border-b border-border/60 bg-surface-1/50 px-4">
         <Tabs
           value={requestTab}
           onValueChange={(value) => setRequestTab(value as typeof requestTab)}
           className="min-w-0"
         >
-          <TabsList className="h-9 bg-transparent">
-            <TabsTrigger value="params" className="text-xs">
+          <TabsList className="h-9 border-0 bg-transparent">
+            <TabsTrigger value="params">
               Params
               {paramCount > 0 && (
                 <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
@@ -102,7 +102,7 @@ export function RequestTabs() {
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="headers" className="text-xs">
+            <TabsTrigger value="headers">
               Headers
               {headerCount > 0 && (
                 <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
@@ -110,15 +110,9 @@ export function RequestTabs() {
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="body" className="text-xs">
-              Body
-            </TabsTrigger>
-            <TabsTrigger value="auth" className="text-xs">
-              Auth
-            </TabsTrigger>
-            <TabsTrigger value="tests" className="text-xs">
-              Tests
-            </TabsTrigger>
+            <TabsTrigger value="body">Body</TabsTrigger>
+            <TabsTrigger value="auth">Auth</TabsTrigger>
+            <TabsTrigger value="tests">Tests</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>

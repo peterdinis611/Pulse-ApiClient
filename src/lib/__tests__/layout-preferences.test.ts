@@ -31,6 +31,7 @@ describe("layout-preferences", () => {
 
   it("clamps explorer width on save", () => {
     saveLayoutPreferences({
+      ...defaultLayoutPreferences(),
       explorerCollapsed: true,
       explorerWidth: 999,
     });
@@ -41,6 +42,7 @@ describe("layout-preferences", () => {
 
   it("restores valid saved preferences", () => {
     saveLayoutPreferences({
+      ...defaultLayoutPreferences(),
       explorerCollapsed: false,
       explorerWidth: EXPLORER_WIDTH_MIN,
     });

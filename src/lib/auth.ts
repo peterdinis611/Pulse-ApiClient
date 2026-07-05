@@ -6,6 +6,14 @@ import {
   dbSaveSession,
   dbSwitchUser,
 } from "./db-client";
+import {
+  toAuthError,
+  validateLoginInput,
+  validateRegistrationInput,
+} from "./auth-errors";
+
+export type { AuthErrorCode, AuthErrorField } from "./auth-errors";
+export { AuthError, authErrorHint } from "./auth-errors";
 
 export type UserSession = {
   id: string;
@@ -14,13 +22,6 @@ export type UserSession = {
   initials: string;
   signedInAt: string;
 };
-
-export class AuthError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "AuthError";
-  }
-}
 
 export function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -63,18 +64,29 @@ export async function registerAccount(
   name: string,
   email: string,
   password: string,
+  confirmPassword: string,
 ): Promise<UserSession> {
+  const validationError = validateRegistrationInput(name, email, password, confirmPassword);
+  if (validationError) {
+    throw validationError;
+  }
+
   try {
-    return await dbRegisterAccount(name, email, password);
+    return await dbRegisterAccount(name.trim(), email.trim(), password);
   } catch (error) {
-    throw new AuthError(error instanceof Error ? error.message : "Registration failed.");
+    throw toAuthError(error, "Could not create your account. Try again.");
   }
 }
 
 export async function loginAccount(email: string, password: string): Promise<UserSession> {
+  const validationError = validateLoginInput(email, password);
+  if (validationError) {
+    throw validationError;
+  }
+
   try {
-    return await dbLoginAccount(email, password);
+    return await dbLoginAccount(email.trim(), password);
   } catch (error) {
-    throw new AuthError(error instanceof Error ? error.message : "Login failed.");
+    throw toAuthError(error, "Could not sign in. Check your email and password.");
   }
 }

@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { TestResultsList } from "@/components/TestResultsList";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { PanelHeader } from "@/components/ui/panel";
 import { ScrollAreaWithTop } from "@/components/ui/scroll-area-with-top";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -46,42 +47,68 @@ export function ResponsePanel() {
   };
 
   return (
-    <section className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-1.5">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          Response
-        </span>
-
+    <section className="flex h-full min-h-0 flex-col bg-surface-1/30">
+      <PanelHeader
+        label="Response"
+        actions={
+          response && !loading ? (
+            <>
+              {view === "body" && (
+                <Button type="button" variant="ghost" size="sm" className="h-7" onClick={() => void copyBody()}>
+                  <Copy className="size-3.5" />
+                  Copy
+                </Button>
+              )}
+              <Tabs value={view} onValueChange={(value) => setView(value as typeof view)}>
+                <TabsList className="h-8 border-0 bg-transparent">
+                  <TabsTrigger value="body" className="h-7 px-2.5 text-xs">
+                    Body
+                  </TabsTrigger>
+                  <TabsTrigger value="headers" className="h-7 px-2.5 text-xs">
+                    Headers
+                  </TabsTrigger>
+                  <TabsTrigger value="tests" className="h-7 px-2.5 text-xs">
+                    Tests
+                    {testResults && testResults.failed > 0 && (
+                      <span className="ml-1 text-destructive">!</span>
+                    )}
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </>
+          ) : undefined
+        }
+      >
         {response && !loading && (
-          <>
-            <Badge className={cn("font-mono", statusBadgeClass(response.status))}>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge className={cn("font-mono text-[11px]", statusBadgeClass(response.status))}>
               {response.status} {response.statusText}
             </Badge>
-            <Badge variant="outline" className="font-mono">
+            <Badge variant="outline" className="font-mono text-[11px]">
               {response.fromCache ? "cached" : `${response.elapsedMs} ms`}
             </Badge>
             {response.fromCache && response.cacheAgeMs != null && (
-              <Badge variant="secondary" className="font-mono">
+              <Badge variant="secondary" className="font-mono text-[11px]">
                 age {response.cacheAgeMs} ms
               </Badge>
             )}
-            <Badge variant="outline" className="font-mono">
+            <Badge variant="outline" className="font-mono text-[11px]">
               {formatBytes(response.sizeBytes)}
             </Badge>
             {response.contentType && (
-              <Badge variant="secondary" className="max-w-[220px] truncate font-mono">
+              <Badge variant="secondary" className="max-w-[200px] truncate font-mono text-[11px]">
                 {response.contentType}
               </Badge>
             )}
             {graphqlErrors.length > 0 && (
-              <Badge className="border-destructive/30 bg-destructive/10 font-mono text-destructive">
+              <Badge className="border-destructive/30 bg-destructive/10 font-mono text-[11px] text-destructive">
                 GraphQL {graphqlErrors.length} error{graphqlErrors.length === 1 ? "" : "s"}
               </Badge>
             )}
             {testResults && testResults.total > 0 && (
               <Badge
                 className={cn(
-                  "font-mono",
+                  "font-mono text-[11px]",
                   testResults.failed > 0
                     ? "border-destructive/30 bg-destructive/10 text-destructive"
                     : "status-badge-success",
@@ -90,41 +117,14 @@ export function ResponsePanel() {
                 Tests {testResults.passed}/{testResults.total}
               </Badge>
             )}
-          </>
-        )}
-
-        {response && !loading && (
-          <div className="ml-auto flex items-center gap-2">
-            {view === "body" && (
-              <Button type="button" variant="ghost" size="sm" onClick={() => void copyBody()}>
-                <Copy />
-                Copy
-              </Button>
-            )}
-            <Tabs value={view} onValueChange={(value) => setView(value as typeof view)}>
-              <TabsList className="h-8">
-                <TabsTrigger value="body" className="text-xs">
-                  Body
-                </TabsTrigger>
-                <TabsTrigger value="headers" className="text-xs">
-                  Headers
-                </TabsTrigger>
-                <TabsTrigger value="tests" className="text-xs">
-                  Test Results
-                  {testResults && testResults.failed > 0 && (
-                    <span className="ml-1 text-destructive">!</span>
-                  )}
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
           </div>
         )}
-      </div>
+      </PanelHeader>
 
       <ScrollAreaWithTop className="min-h-0 flex-1" resetKey={scrollResetKey}>
         <div className="p-4">
           {loading && (
-            <div className="flex min-h-[180px] flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+            <div className="flex min-h-[180px] flex-col items-center justify-center gap-3 text-body text-muted-foreground">
               <div className="h-1 w-40 overflow-hidden rounded-full bg-muted">
                 <div className="h-full w-1/3 animate-pulse bg-primary" />
               </div>
@@ -133,9 +133,9 @@ export function ResponsePanel() {
           )}
 
           {!loading && error && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4">
-              <p className="text-sm font-medium text-destructive">Request failed</p>
-              <p className="mt-1 text-sm text-destructive/90">{error}</p>
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4">
+              <p className="text-body font-medium text-destructive">Request failed</p>
+              <p className="mt-1 text-body text-destructive/90">{error}</p>
             </div>
           )}
 
@@ -147,20 +147,18 @@ export function ResponsePanel() {
           )}
 
           {!loading && response && view === "body" && (
-            <pre className="whitespace-pre-wrap break-words rounded-md border border-border bg-muted/30 p-4 font-mono text-sm leading-relaxed text-foreground">
-              {body || "(empty body)"}
-            </pre>
+            <pre className="ui-code-block">{body || "(empty body)"}</pre>
           )}
 
           {!loading && response && view === "headers" && (
-            <div className="divide-y divide-border rounded-md border border-border">
+            <div className="ui-panel divide-y divide-border/60">
               {response.headers.map((header) => (
                 <div
                   key={`${header.key}-${header.value}`}
-                  className="grid grid-cols-[220px_1fr] gap-4 px-4 py-2.5"
+                  className="grid grid-cols-[200px_1fr] gap-4 px-4 py-2.5"
                 >
-                  <span className="font-mono text-sm text-muted-foreground">{header.key}</span>
-                  <span className="break-all font-mono text-sm text-foreground">{header.value}</span>
+                  <span className="font-mono text-[13px] text-muted-foreground">{header.key}</span>
+                  <span className="break-all font-mono text-[13px] text-foreground">{header.value}</span>
                 </div>
               ))}
             </div>

@@ -37,14 +37,14 @@ export function AppRail() {
   };
 
   return (
-    <aside className="flex w-11 shrink-0 flex-col items-center border-r border-rail-border bg-rail py-2">
+    <aside className="flex w-12 shrink-0 flex-col items-center border-r border-rail-border bg-rail py-3">
       <TooltipWrap label={APP_NAME}>
-        <div className="mb-2 flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-          <Zap className="size-3.5" />
+        <div className="mb-3 flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+          <Zap className="size-4" />
         </div>
       </TooltipWrap>
 
-      <nav className="flex flex-col items-center gap-0.5">
+      <nav className="flex flex-col items-center gap-1">
         {NAV_ITEMS.map(({ view, icon: Icon, label }) => {
           const active =
             view === "request" ? mainView === "request" : mainView === view;
@@ -62,10 +62,10 @@ export function AppRail() {
                   setMainView(view);
                 }}
                 className={cn(
-                  "relative flex size-8 items-center justify-center rounded-md transition-colors",
+                  "relative flex size-9 items-center justify-center rounded-lg transition-all",
                   active
-                    ? "bg-accent text-foreground rail-active-indicator"
-                    : "text-rail-foreground hover:bg-accent/70 hover:text-foreground",
+                    ? "bg-accent text-foreground shadow-sm rail-active-indicator"
+                    : "text-rail-foreground hover:bg-accent/60 hover:text-foreground",
                 )}
               >
                 <Icon className="size-4" />
@@ -75,7 +75,7 @@ export function AppRail() {
         })}
       </nav>
 
-      <div className="mt-auto flex flex-col items-center gap-1 pb-1">
+      <div className="mt-auto flex flex-col items-center gap-1.5 pb-1">
         <ThemeToggle />
         <UserAuthAvatar />
       </div>

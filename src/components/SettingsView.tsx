@@ -44,22 +44,24 @@ import {
 import { cn } from "@/lib/utils";
 
 function SettingsSection({
+  id,
   title,
   description,
   children,
   action,
 }: {
+  id?: string;
   title: string;
   description: string;
   children: ReactNode;
   action?: ReactNode;
 }) {
   return (
-    <section className="space-y-4 border-b border-border pb-8 last:border-b-0 last:pb-0">
+    <section id={id} className="scroll-mt-4 space-y-4 border-b border-border pb-8 last:border-b-0 last:pb-0">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h2 className="text-[13px] font-medium">{title}</h2>
-          <p className="mt-1 text-[13px] text-muted-foreground">{description}</p>
+          <h2 className="text-title">{title}</h2>
+          <p className="mt-1 text-body text-muted-foreground">{description}</p>
         </div>
         {action}
       </div>
@@ -101,6 +103,44 @@ function StatPill({ label, value }: { label: string; value: string | number }) {
       <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="mt-0.5 text-[13px] font-medium tabular-nums">{value}</p>
     </div>
+  );
+}
+
+const SETTINGS_NAV = [
+  { id: "appearance", label: "Appearance" },
+  { id: "data", label: "Data & storage" },
+  { id: "http", label: "HTTP engine" },
+  { id: "layout", label: "Layout" },
+  { id: "cookies", label: "Cookie jar" },
+  { id: "collections", label: "Collections" },
+  { id: "folders", label: "Folders" },
+] as const;
+
+function SettingsNav({
+  activeId,
+  onSelect,
+}: {
+  activeId: string;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <nav className="space-y-0.5" aria-label="Settings sections">
+      {SETTINGS_NAV.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          className={cn(
+            "w-full rounded-md px-3 py-2 text-left text-[13px] transition-colors",
+            activeId === item.id
+              ? "bg-accent font-medium text-accent-foreground"
+              : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+          )}
+          onClick={() => onSelect(item.id)}
+        >
+          {item.label}
+        </button>
+      ))}
+    </nav>
   );
 }
 
@@ -151,6 +191,12 @@ export function SettingsView() {
   const [clearingCache, setClearingCache] = useState(false);
   const [cookies, setCookies] = useState<StoredCookie[]>([]);
   const [clearingCookies, setClearingCookies] = useState(false);
+  const [activeSection, setActiveSection] = useState<string>(SETTINGS_NAV[0].id);
+
+  const scrollToSection = (id: string) => {
+    setActiveSection(id);
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -317,16 +363,19 @@ export function SettingsView() {
   };
 
   return (
-    <ScrollAreaWithTop className="h-full min-h-0" resetKey={mainView}>
-      <div className="mx-auto w-full max-w-2xl space-y-8 px-4 py-6 sm:px-6">
-        <header className="space-y-1">
-          <h1 className="text-lg font-semibold tracking-tight">Settings</h1>
-          <p className="text-[13px] text-muted-foreground">
-            Appearance, workspace data, collections, and HTTP engine preferences.
-          </p>
-        </header>
-
+    <div className="flex h-full min-h-0">
+      <aside className="hidden w-52 shrink-0 border-r border-border bg-surface-1/60 md:flex md:flex-col">
+        <div className="border-b border-border/60 px-4 py-4">
+          <p className="text-caption">Sections</p>
+        </div>
+        <div className="p-3">
+          <SettingsNav activeId={activeSection} onSelect={scrollToSection} />
+        </div>
+      </aside>
+      <ScrollAreaWithTop className="min-h-0 flex-1" resetKey={mainView}>
+        <div className="mx-auto w-full max-w-2xl space-y-8 px-4 py-6 sm:px-6">
         <SettingsSection
+          id="appearance"
           title="Appearance"
           description={`Choose how ${APP_NAME} looks on this device.`}
         >
@@ -335,6 +384,7 @@ export function SettingsView() {
         </SettingsSection>
 
         <SettingsSection
+          id="data"
           title="Data & storage"
           description="Local SQLite database, cache, and request history."
         >
@@ -424,6 +474,7 @@ export function SettingsView() {
         </SettingsSection>
 
         <SettingsSection
+          id="http"
           title="HTTP engine"
           description="Concurrency, timeouts, and response caching."
         >
@@ -510,6 +561,7 @@ export function SettingsView() {
         </SettingsSection>
 
         <SettingsSection
+          id="layout"
           title="Layout"
           description="Explorer panel visibility and keyboard shortcuts."
         >
@@ -528,6 +580,7 @@ export function SettingsView() {
         </SettingsSection>
 
         <SettingsSection
+          id="cookies"
           title="Cookie jar"
           description="Cookies received from HTTP responses are stored automatically and sent on matching requests."
           action={
@@ -563,6 +616,7 @@ export function SettingsView() {
         </SettingsSection>
 
         <SettingsSection
+          id="collections"
           title="Collections"
           description="Organize saved requests and import from Postman or OpenAPI."
           action={
@@ -700,6 +754,7 @@ export function SettingsView() {
         </SettingsSection>
 
         <SettingsSection
+          id="folders"
           title="Folders"
           description="Manage folders inside the active collection."
         >
@@ -770,6 +825,7 @@ export function SettingsView() {
         </SettingsSection>
 
       </div>
-    </ScrollAreaWithTop>
+      </ScrollAreaWithTop>
+    </div>
   );
 }

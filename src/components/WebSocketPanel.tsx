@@ -29,7 +29,7 @@ function statusBadgeClass(status: string): string {
     case "open":
       return "status-badge-success";
     case "connecting":
-      return "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400";
+      return "status-badge-warning";
     case "error":
       return "border-destructive/30 bg-destructive/10 text-destructive";
     default:
@@ -55,23 +55,25 @@ export function WebSocketPanel() {
   const canSend = ws.status === "open" && draft.trim().length > 0;
 
   return (
-    <section className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-2">
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          WebSocket
-        </span>
-        <Badge className={cn("font-mono capitalize", statusBadgeClass(ws.status))}>{ws.status}</Badge>
-        {ws.handshakeStatus != null && (
-          <Badge variant="outline" className="font-mono">
-            Handshake {ws.handshakeStatus}
+    <section className="flex h-full min-h-0 flex-col bg-surface-1/30">
+      <div className="ui-panel-header flex-wrap gap-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <span className="text-caption">WebSocket</span>
+          <Badge className={cn("font-mono capitalize text-[11px]", statusBadgeClass(ws.status))}>
+            {ws.status}
           </Badge>
-        )}
-        {ws.closeCode != null && (
-          <Badge variant="outline" className="font-mono">
-            Closed {ws.closeCode}
-          </Badge>
-        )}
-        <div className="ml-auto flex items-center gap-2">
+          {ws.handshakeStatus != null && (
+            <Badge variant="outline" className="font-mono text-[11px]">
+              Handshake {ws.handshakeStatus}
+            </Badge>
+          )}
+          {ws.closeCode != null && (
+            <Badge variant="outline" className="font-mono text-[11px]">
+              Closed {ws.closeCode}
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
           {ws.handshakeHeaders && ws.handshakeHeaders.length > 0 && (
             <Tabs value={view} onValueChange={(value) => setView(value as typeof view)}>
               <TabsList className="h-8">
