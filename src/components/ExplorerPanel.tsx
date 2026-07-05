@@ -175,7 +175,7 @@ export function ExplorerPanel() {
   };
 
   return (
-    <aside className="flex min-h-0 flex-1 flex-col">
+    <aside id="explorer-panel" className="flex min-h-0 flex-1 flex-col">
       <div className="explorer-header">
         <div className="explorer-header__title">
           <p className="text-title text-sm">Explorer</p>
@@ -190,13 +190,14 @@ export function ExplorerPanel() {
               <Plus className="size-3.5" />
             </TooltipIconButton>
             <TooltipIconButton
-              variant="ghost"
-              size="icon"
-              className="size-7 text-muted-foreground hover:text-foreground"
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
               label="Hide explorer (⌘B)"
               onClick={toggleExplorerCollapsed}
             >
               <PanelLeftClose className="size-3.5" />
+              <span className="hidden sm:inline">Hide</span>
             </TooltipIconButton>
           </div>
         </div>

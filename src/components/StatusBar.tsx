@@ -12,7 +12,6 @@ import { toast } from "@/lib/toast";
 import type { HttpEngineStats } from "@/types";
 import { WindowMenu } from "@/components/WindowMenu";
 import { TooltipIconButton } from "@/components/TooltipIconButton";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export function StatusBar() {
@@ -53,17 +52,17 @@ export function StatusBar() {
   }, [pendingRequestCount]);
 
   return (
-    <footer className="flex h-7 shrink-0 items-center justify-between border-t border-topbar-border bg-topbar px-3 text-[11px] text-topbar-muted">
-      <div className="flex min-w-0 items-center gap-2.5">
+    <footer className="view-header flex h-8 shrink-0 items-center justify-between px-3 text-[11px] text-topbar-muted">
+      <div className="flex min-w-0 items-center gap-2">
         {pendingRequestCount > 0 && (
-          <span className="inline-flex items-center gap-1.5 text-topbar-foreground">
-            <LoaderCircle className="size-3.5 animate-spin" />
+          <span className="status-chip status-chip--active">
+            <LoaderCircle className="size-3 animate-spin" />
             {pendingRequestCount} active
-            {engineStats ? ` / ${engineStats.maxConcurrent} max` : ""}
+            {engineStats ? ` / ${engineStats.maxConcurrent}` : ""}
           </span>
         )}
         {engineStats && pendingRequestCount === 0 && (
-          <span className="hidden sm:inline">
+          <span className="status-chip hidden sm:inline-flex">
             {engineStats.totalCompleted} ok · {engineStats.totalFailed} failed
           </span>
         )}
@@ -71,34 +70,32 @@ export function StatusBar() {
           <button
             type="button"
             className={cn(
-              "inline-flex max-w-[200px] items-center gap-1.5 truncate rounded-md px-1.5 py-0.5 transition-colors hover:bg-topbar-foreground/8 hover:text-topbar-foreground",
-              hasTabOverride && "text-primary",
+              "status-chip max-w-[200px] hover:border-primary/30 hover:bg-primary/5 hover:text-topbar-foreground",
+              hasTabOverride && "status-chip--active",
             )}
             onClick={() => setMainView("environments")}
             title="Open environments"
           >
-            <Globe2 className="size-3.5 shrink-0" />
+            <Globe2 className="size-3 shrink-0" />
             <span className="truncate">{activeEnvironment.name}</span>
             {hasTabOverride && (
-              <span className="rounded bg-primary/15 px-1 text-[10px] font-medium uppercase text-primary">
+              <span className="rounded-full bg-primary/20 px-1.5 text-[9px] font-bold uppercase text-primary">
                 Tab
               </span>
             )}
           </button>
         )}
-        <Button
+        <button
           type="button"
-          variant="ghost"
-          size="sm"
           className={cn(
-            "h-6 gap-1.5 px-2 text-topbar-muted hover:text-topbar-foreground",
-            consoleOpen && "bg-topbar-foreground/10 text-topbar-foreground",
+            "status-chip hover:text-topbar-foreground",
+            consoleOpen && "status-chip--active",
           )}
           onClick={() => setConsoleOpen(!consoleOpen)}
         >
-          <TerminalSquare className="size-3.5" />
+          <TerminalSquare className="size-3" />
           Console
-        </Button>
+        </button>
       </div>
 
       <div className="flex items-center gap-0.5">
@@ -106,7 +103,7 @@ export function StatusBar() {
         <TooltipIconButton
           variant="ghost"
           size="icon"
-          className="size-7 text-topbar-muted hover:text-topbar-foreground"
+          className="size-7 rounded-lg text-topbar-muted hover:text-topbar-foreground"
           label="Clear HTTP cache"
           onClick={() =>
             void clearHttpCache()
@@ -121,8 +118,8 @@ export function StatusBar() {
             variant="ghost"
             size="icon"
             className={cn(
-              "size-7 text-topbar-muted hover:text-topbar-foreground",
-              responsePanelOpen && "bg-topbar-foreground/10 text-topbar-foreground",
+              "size-7 rounded-lg text-topbar-muted hover:text-topbar-foreground",
+              responsePanelOpen && "bg-primary/10 text-primary",
             )}
             label={responsePanelOpen ? "Hide response panel" : "Show response panel"}
             onClick={() => setResponsePanelOpen(!responsePanelOpen)}

@@ -37,14 +37,14 @@ export function AppRail() {
   };
 
   return (
-    <aside className="flex w-12 shrink-0 flex-col items-center border-r border-rail-border bg-rail py-3">
+    <aside className="flex w-[52px] shrink-0 flex-col items-center border-r border-rail-border bg-rail py-3">
       <TooltipWrap label={APP_NAME}>
-        <div className="mb-3 flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+        <div className="mb-4 flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/25">
           <Zap className="size-4" />
         </div>
       </TooltipWrap>
 
-      <nav className="flex flex-col items-center gap-1">
+      <nav className="flex flex-col items-center gap-1.5">
         {NAV_ITEMS.map(({ view, icon: Icon, label }) => {
           const active =
             view === "request" ? mainView === "request" : mainView === view;
@@ -62,20 +62,20 @@ export function AppRail() {
                   setMainView(view);
                 }}
                 className={cn(
-                  "relative flex size-9 items-center justify-center rounded-lg transition-all",
+                  "relative flex size-10 items-center justify-center rounded-xl transition-all",
                   active
-                    ? "bg-accent text-foreground shadow-sm rail-active-indicator"
-                    : "text-rail-foreground hover:bg-accent/60 hover:text-foreground",
+                    ? "nav-rail-active rail-active-indicator"
+                    : "text-rail-foreground hover:bg-accent/70 hover:text-foreground",
                 )}
               >
-                <Icon className="size-4" />
+                <Icon className="size-[18px]" />
               </button>
             </TooltipWrap>
           );
         })}
       </nav>
 
-      <div className="mt-auto flex flex-col items-center gap-1.5 pb-1">
+      <div className="mt-auto flex flex-col items-center gap-2 pb-1">
         <ThemeToggle />
         <UserAuthAvatar />
       </div>

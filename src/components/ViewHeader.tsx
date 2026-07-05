@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AppWindow, Globe2, LoaderCircle, PanelLeft, Plus, X } from "lucide-react";
+import { AppWindow, Globe2, LoaderCircle, PanelLeftClose, PanelLeftOpen, Plus, X } from "lucide-react";
 import { RequestTabsMenu } from "@/components/RequestTabsMenu";
 import { TabScrollStrip } from "@/components/TabScrollStrip";
 import { TooltipIconButton, TooltipWrap } from "@/components/TooltipIconButton";
@@ -56,7 +56,31 @@ export function ViewHeader() {
     const showTabsMenu = tabs.length > 1 || tabsOverflowing;
 
     return (
-      <header className="view-header flex h-9 shrink-0 items-stretch overflow-hidden">
+      <header className="view-header flex h-10 shrink-0 items-stretch overflow-hidden">
+        {explorerCollapsed ? (
+          <button
+            type="button"
+            className="explorer-show-btn group flex shrink-0 items-center gap-2 border-r border-topbar-border/60 px-3 text-[13px] font-medium text-topbar-foreground transition-colors hover:bg-topbar-foreground/8"
+            aria-expanded={false}
+            aria-controls="explorer-panel"
+            onClick={toggleExplorerCollapsed}
+          >
+            <PanelLeftOpen className="size-4 text-primary transition-transform group-hover:scale-105" />
+            <span>Explorer</span>
+            <kbd className="explorer-kbd hidden xl:inline">⌘B</kbd>
+          </button>
+        ) : (
+          <TooltipIconButton
+            variant="ghost"
+            size="icon"
+            className="explorer-hide-btn mx-1 size-8 shrink-0 text-topbar-muted hover:text-topbar-foreground"
+            label="Hide explorer (⌘B)"
+            onClick={toggleExplorerCollapsed}
+          >
+            <PanelLeftClose className="size-4" />
+          </TooltipIconButton>
+        )}
+
         <TabScrollStrip
           activeItemId={activeTabId}
           onOverflowChange={setTabsOverflowing}
@@ -75,10 +99,10 @@ export function ViewHeader() {
                 key={tab.id}
                 data-tab-id={tab.id}
                 className={cn(
-                  "group relative flex h-9 max-w-[220px] min-w-[88px] shrink-0 items-stretch",
+                  "group relative mx-0.5 flex h-8 max-w-[220px] min-w-[88px] shrink-0 items-stretch rounded-lg",
                   active
-                    ? "text-topbar-foreground after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary"
-                    : "text-topbar-muted hover:bg-topbar-foreground/5 hover:text-topbar-foreground",
+                    ? "bg-background text-topbar-foreground shadow-sm ring-1 ring-border/60"
+                    : "text-topbar-muted hover:bg-topbar-foreground/8 hover:text-topbar-foreground",
                 )}
               >
                 <button
@@ -130,7 +154,7 @@ export function ViewHeader() {
           })}
         </TabScrollStrip>
 
-        <div className="flex shrink-0 items-center gap-0.5 border-l border-topbar-border px-1.5">
+        <div className="flex shrink-0 items-center gap-1 border-l border-topbar-border/60 px-2">
           {showTabsMenu && (
             <RequestTabsMenu
               tabs={tabs}
@@ -148,18 +172,6 @@ export function ViewHeader() {
             onClick={newRequestTab}
           >
             <Plus className="size-3.5" />
-          </TooltipIconButton>
-          <TooltipIconButton
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "size-7 text-topbar-muted hover:text-topbar-foreground",
-              !explorerCollapsed && "bg-topbar-foreground/10 text-topbar-foreground",
-            )}
-            label={explorerCollapsed ? "Show explorer (⌘B)" : "Hide explorer (⌘B)"}
-            onClick={toggleExplorerCollapsed}
-          >
-            <PanelLeft className="size-3.5" />
           </TooltipIconButton>
         </div>
       </header>

@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FileCode2, FolderOpen, RefreshCw, Trash2 } from "lucide-react";
+import { FileCode2, FolderOpen, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import {
   applyCustomThemeFromBrowserFile,
   applyCustomThemeFromPath,
   clearCustomThemeCss,
+  CUSTOM_THEME_CSS_TEMPLATE,
   getBrowserCustomThemePath,
-  loadAndApplyCustomThemeCss,
+  loadCustomThemeCssForEditor,
   pickCustomThemeCssFile,
   reloadCustomThemeCss,
+  saveCustomThemeCssContent,
 } from "@/lib/custom-theme";
 import { getAppSettings } from "@/lib/http-client";
 import { canUseTauriIpc } from "@/lib/tauri-runtime";
@@ -15,37 +17,37 @@ import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 export function CustomThemeSettings() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [cssPath, setCssPath] = useState("");
+  const [cssContent, setCssContent] = useState("");
+  const [savedCssContent, setSavedCssContent] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const isDesktop = canUseTauriIpc();
+  const editorDirty = cssContent !== savedCssContent;
 
-  const refreshPath = useCallback(async () => {
+  const refreshEditor = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
 
     try {
+      let path = "";
       if (isDesktop) {
         const settings = await getAppSettings();
-        const path = settings.customThemeCssPath?.trim() ?? "";
-        setCssPath(path);
-        if (path) {
-          try {
-            await reloadCustomThemeCss(path);
-          } catch (error) {
-            const message = error instanceof Error ? error.message : "Could not load custom CSS";
-            setLoadError(message);
-          }
-        }
+        path = settings.customThemeCssPath?.trim() ?? "";
       } else {
-        setCssPath(getBrowserCustomThemePath() ?? "");
-        await loadAndApplyCustomThemeCss();
+        path = getBrowserCustomThemePath() ?? "";
       }
+
+      setCssPath(path);
+      const content = await loadCustomThemeCssForEditor(path || null);
+      setCssContent(content);
+      setSavedCssContent(content);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not load custom theme settings";
       setLoadError(message);
@@ -55,8 +57,8 @@ export function CustomThemeSettings() {
   }, [isDesktop]);
 
   useEffect(() => {
-    void refreshPath();
-  }, [refreshPath]);
+    void refreshEditor();
+  }, [refreshEditor]);
 
   const applyPath = async (path: string) => {
     const trimmed = path.trim();
@@ -67,7 +69,10 @@ export function CustomThemeSettings() {
     try {
       await applyCustomThemeFromPath(trimmed);
       setCssPath(trimmed);
-      toast.success("Custom theme CSS applied");
+      const content = await loadCustomThemeCssForEditor(trimmed);
+      setCssContent(content);
+      setSavedCssContent(content);
+      toast.success("Custom theme CSS loaded from file");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to apply custom CSS";
       setLoadError(message);
@@ -75,6 +80,29 @@ export function CustomThemeSettings() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleApplyEditor = () => {
+    setBusy(true);
+    setLoadError(null);
+    try {
+      saveCustomThemeCssContent(cssContent);
+      setSavedCssContent(cssContent);
+      toast.success("Custom CSS applied");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to apply custom CSS";
+      setLoadError(message);
+      toast.error(message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleInsertTemplate = () => {
+    if (cssContent.trim() && !window.confirm("Replace current CSS with the starter template?")) {
+      return;
+    }
+    setCssContent(CUSTOM_THEME_CSS_TEMPLATE);
   };
 
   const handleBrowse = async () => {
@@ -106,7 +134,10 @@ export function CustomThemeSettings() {
     try {
       await applyCustomThemeFromBrowserFile(file);
       setCssPath(file.name);
-      toast.success("Custom theme CSS applied");
+      const content = await loadCustomThemeCssForEditor(null);
+      setCssContent(content);
+      setSavedCssContent(content);
+      toast.success("Custom theme CSS loaded from file");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to read CSS file";
       setLoadError(message);
@@ -124,7 +155,10 @@ export function CustomThemeSettings() {
     setLoadError(null);
     try {
       await reloadCustomThemeCss(cssPath.trim());
-      toast.success("Custom theme CSS reloaded");
+      const content = await loadCustomThemeCssForEditor(cssPath.trim());
+      setCssContent(content);
+      setSavedCssContent(content);
+      toast.success("Custom theme CSS reloaded from file");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to reload CSS file";
       setLoadError(message);
@@ -140,6 +174,8 @@ export function CustomThemeSettings() {
     try {
       await clearCustomThemeCss();
       setCssPath("");
+      setCssContent("");
+      setSavedCssContent("");
       toast.success("Custom theme CSS removed");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to clear custom CSS";
@@ -150,22 +186,65 @@ export function CustomThemeSettings() {
   };
 
   return (
-    <div className="space-y-3 rounded-lg border border-border/70 bg-muted/10 p-4">
+    <div className="space-y-4 rounded-lg border border-border/70 bg-muted/10 p-4">
       <div className="flex items-start gap-3">
         <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
           <FileCode2 className="size-4" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium">Custom CSS file</p>
+          <p className="text-sm font-medium">Custom CSS</p>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Load a <code className="text-xs">.css</code> file to override theme variables and styles on top of
-            your selected theme.
+            Edit CSS below or load a <code className="text-xs">.css</code> file to override theme
+            variables and Pulse styles on top of your selected theme.
           </p>
         </div>
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="custom-theme-css-path">CSS file</Label>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Label htmlFor="custom-theme-css-editor">CSS editor</Label>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={loading || busy}
+              onClick={handleInsertTemplate}
+            >
+              <Sparkles className="size-3.5" />
+              Starter template
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={loading || busy || !editorDirty}
+              onClick={handleApplyEditor}
+            >
+              Apply CSS
+            </Button>
+          </div>
+        </div>
+
+        <Textarea
+          id="custom-theme-css-editor"
+          value={cssContent}
+          onChange={(event) => setCssContent(event.target.value)}
+          spellCheck={false}
+          disabled={loading || busy}
+          placeholder={CUSTOM_THEME_CSS_TEMPLATE}
+          className="min-h-[220px] resize-y text-xs leading-relaxed"
+        />
+
+        <p className="text-xs text-muted-foreground">
+          Changes apply after you click <span className="font-medium text-foreground">Apply CSS</span>.
+          Use CSS variables like <code className="text-[11px]">--primary</code>,{" "}
+          <code className="text-[11px]">--background</code>, and{" "}
+          <code className="text-[11px]">--sidebar</code>.
+        </p>
+      </div>
+
+      <div className="space-y-2 border-t border-border/60 pt-4">
+        <Label htmlFor="custom-theme-css-path">Load from file {isDesktop ? "" : "(browser)"}</Label>
         <div className="flex flex-col gap-2 sm:flex-row">
           <Input
             id="custom-theme-css-path"
@@ -185,7 +264,13 @@ export function CustomThemeSettings() {
             className={cn("font-mono text-xs", !isDesktop && "cursor-default")}
           />
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" size="sm" disabled={loading || busy} onClick={() => void handleBrowse()}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={loading || busy}
+              onClick={() => void handleBrowse()}
+            >
               <FolderOpen className="size-4" />
               Browse
             </Button>
@@ -197,7 +282,7 @@ export function CustomThemeSettings() {
                 disabled={loading || busy || !cssPath.trim()}
                 onClick={() => void applyPath(cssPath)}
               >
-                Apply
+                Load file
               </Button>
             )}
             <Button
@@ -214,7 +299,7 @@ export function CustomThemeSettings() {
               type="button"
               variant="outline"
               size="sm"
-              disabled={loading || busy || !cssPath.trim()}
+              disabled={loading || busy || (!cssPath.trim() && !cssContent.trim())}
               onClick={() => void handleClear()}
             >
               <Trash2 className="size-4" />
@@ -236,8 +321,8 @@ export function CustomThemeSettings() {
 
       {!isDesktop && (
         <p className="text-xs text-muted-foreground">
-          In the browser preview, the selected file is stored locally for this session. Use the desktop app to
-          keep a file path and reload edits from disk.
+          In the browser preview, CSS is stored locally in this browser. Use the desktop app to keep
+          a file path and reload edits from disk.
         </p>
       )}
     </div>

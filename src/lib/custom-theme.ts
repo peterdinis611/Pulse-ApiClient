@@ -10,6 +10,24 @@ export const CUSTOM_THEME_STYLE_ID = "pulse-custom-theme";
 const STORAGE_CONTENT_SUFFIX = "custom-theme-css";
 const STORAGE_PATH_SUFFIX = "custom-theme-css-path";
 
+export const CUSTOM_THEME_CSS_TEMPLATE = `/* Override Pulse theme variables (applied on top of your selected theme) */
+:root {
+  /* --primary: oklch(0.52 0.13 205); */
+  /* --radius: 0.5rem; */
+}
+
+/* Target a specific theme, e.g. dark: */
+/* html[data-theme="dark"] {
+  --background: oklch(0.11 0.012 210);
+  --sidebar: oklch(0.1 0.01 218);
+} */
+
+/* Component-level overrides: */
+/* .request-url-composite {
+  border-radius: 999px;
+} */
+`;
+
 export function applyCustomThemeCss(css: string | null | undefined): void {
   const existing = document.getElementById(CUSTOM_THEME_STYLE_ID);
   existing?.remove();
@@ -23,9 +41,24 @@ export function applyCustomThemeCss(css: string | null | undefined): void {
   document.head.appendChild(style);
 }
 
-export function clearBrowserCustomThemeCss(): void {
+export function getStoredCustomThemeCss(): string | null {
+  return readStorageItem(STORAGE_CONTENT_SUFFIX);
+}
+
+export function saveCustomThemeCssContent(css: string): void {
+  writeStorageItem(STORAGE_CONTENT_SUFFIX, css);
+  applyCustomThemeCss(css);
+}
+
+export function clearStoredCustomThemeCss(): void {
   localStorage.removeItem(`pulse-api-client/${STORAGE_CONTENT_SUFFIX}`);
   localStorage.removeItem(`pulse-api-client/${STORAGE_PATH_SUFFIX}`);
+  localStorage.removeItem(`relay-api-client/${STORAGE_CONTENT_SUFFIX}`);
+  localStorage.removeItem(`relay-api-client/${STORAGE_PATH_SUFFIX}`);
+}
+
+export function clearBrowserCustomThemeCss(): void {
+  clearStoredCustomThemeCss();
   applyCustomThemeCss(null);
 }
 
@@ -49,9 +82,17 @@ export async function pickCustomThemeCssFile(): Promise<string | null> {
 }
 
 export async function loadAndApplyCustomThemeCss(): Promise<string | null> {
+  const stored = getStoredCustomThemeCss();
+
   if (canUseTauriIpc()) {
     const settings = await runEffect(getAppSettingsEffect());
     const path = settings.customThemeCssPath?.trim() || null;
+
+    if (stored?.trim()) {
+      applyCustomThemeCss(stored);
+      return path;
+    }
+
     if (!path) {
       applyCustomThemeCss(null);
       return null;
@@ -62,8 +103,7 @@ export async function loadAndApplyCustomThemeCss(): Promise<string | null> {
     return path;
   }
 
-  const css = readStorageItem(STORAGE_CONTENT_SUFFIX);
-  applyCustomThemeCss(css);
+  applyCustomThemeCss(stored);
   return readStorageItem(STORAGE_PATH_SUFFIX);
 }
 
@@ -71,7 +111,7 @@ export async function applyCustomThemeFromPath(path: string): Promise<void> {
   if (canUseTauriIpc()) {
     await setCustomThemeCssPath(path);
     const css = await readCustomThemeCss(path);
-    applyCustomThemeCss(css);
+    saveCustomThemeCssContent(css);
     return;
   }
 
@@ -80,27 +120,35 @@ export async function applyCustomThemeFromPath(path: string): Promise<void> {
 
 export async function applyCustomThemeFromBrowserFile(file: File): Promise<void> {
   const css = await file.text();
-  writeStorageItem(STORAGE_CONTENT_SUFFIX, css);
   writeStorageItem(STORAGE_PATH_SUFFIX, file.name);
-  applyCustomThemeCss(css);
+  saveCustomThemeCssContent(css);
 }
 
 export async function clearCustomThemeCss(): Promise<void> {
   if (canUseTauriIpc()) {
     await setCustomThemeCssPath(null);
-  } else {
-    clearBrowserCustomThemeCss();
-    return;
   }
 
+  clearStoredCustomThemeCss();
   applyCustomThemeCss(null);
 }
 
 export async function reloadCustomThemeCss(path: string): Promise<void> {
   const css = canUseTauriIpc()
     ? await readCustomThemeCss(path)
-    : readStorageItem(STORAGE_CONTENT_SUFFIX);
-  applyCustomThemeCss(css);
+    : getStoredCustomThemeCss() ?? "";
+  saveCustomThemeCssContent(css);
+}
+
+export async function loadCustomThemeCssForEditor(path: string | null): Promise<string> {
+  const stored = getStoredCustomThemeCss()?.trim();
+  if (stored) return stored;
+
+  if (path?.trim() && canUseTauriIpc()) {
+    return readCustomThemeCss(path.trim());
+  }
+
+  return "";
 }
 
 export function getBrowserCustomThemePath(): string | null {

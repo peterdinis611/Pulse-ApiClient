@@ -11,7 +11,7 @@ export function MethodBadge({ method, className }: MethodBadgeProps) {
   return (
     <span
       className={cn(
-        "inline-flex min-w-[34px] items-center justify-center rounded border px-1 py-0.5 font-mono text-[10px] font-bold leading-none",
+        "inline-flex min-w-[36px] items-center justify-center rounded-md px-1.5 py-0.5 font-mono text-[10px] font-bold leading-none",
         methodBadgeClass(method),
         className,
       )}

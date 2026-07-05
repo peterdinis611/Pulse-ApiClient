@@ -98,9 +98,9 @@ export function RequestBar() {
   }, [canConnect, canSend, connectWebSocket, isWebSocket, sendCurrentRequest]);
 
   return (
-    <div className="shrink-0 border-b border-border bg-topbar">
-      <div className="flex items-stretch gap-2 px-3 py-2">
-        <div className="flex min-w-0 flex-1 overflow-hidden rounded-md border border-topbar-border bg-background shadow-sm">
+    <div className="request-bar shrink-0">
+      <div className="flex items-stretch gap-2.5 px-3 py-2.5">
+        <div className="request-url-composite">
           {isWebSocket ? (
             <div className="flex h-9 w-20 shrink-0 items-center justify-center border-r border-border bg-muted/30">
               <Badge variant="secondary" className="font-mono text-[10px] uppercase">
@@ -179,7 +179,7 @@ export function RequestBar() {
           <div className="flex shrink-0 items-center gap-1.5">
             <Button
               type="button"
-              className="h-9 px-5"
+              className="h-9 shrink-0 rounded-xl px-5 shadow-md shadow-primary/20"
               disabled={loading || !canSend}
               onClick={() => void sendCurrentRequest()}
             >
@@ -200,7 +200,7 @@ export function RequestBar() {
         )}
       </div>
 
-      <div className="flex items-center gap-2 border-t border-topbar-border/70 px-3 py-1">
+      <div className="flex items-center gap-2 border-t border-topbar-border/50 px-3 py-1.5">
         <Input
           className="h-7 min-w-0 flex-1 border-transparent bg-transparent px-2 text-[13px] shadow-none focus-visible:ring-0"
           value={request.name}

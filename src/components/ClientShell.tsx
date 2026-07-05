@@ -88,7 +88,7 @@ export function ClientShell() {
   const showExplorer = mainView === "request";
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="app-shell flex h-screen">
       <AppRail />
       {showExplorer && (
         <ResizableExplorer>
