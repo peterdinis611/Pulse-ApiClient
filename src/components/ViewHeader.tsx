@@ -1,12 +1,10 @@
 import { useState } from "react";
-import { AppWindow, Globe2, LoaderCircle, PanelLeftClose, PanelLeftOpen, Plus, X } from "lucide-react";
+import { Globe2, LoaderCircle, PanelLeftClose, PanelLeftOpen, Plus, X } from "lucide-react";
 import { RequestTabsMenu } from "@/components/RequestTabsMenu";
 import { TabScrollStrip } from "@/components/TabScrollStrip";
 import { TooltipIconButton, TooltipWrap } from "@/components/TooltipIconButton";
-import { MethodBadge } from "@/components/MethodBadge";
 import { useApp } from "@/machines";
-import { openRequestInNewWindow } from "@/lib/window-manager";
-import { toast } from "@/lib/toast";
+import { methodShortLabel, methodTextClass } from "@/lib/method-colors";
 import { cn } from "@/lib/utils";
 
 const VIEW_META = {
@@ -41,22 +39,11 @@ export function ViewHeader() {
   const [tabsOverflowing, setTabsOverflowing] = useState(false);
 
   if (mainView === "request") {
-    const handlePopOut = async (tabId: string) => {
-      const tab = tabs.find((item) => item.id === tabId);
-      if (!tab) return;
-
-      try {
-        await openRequestInNewWindow(tab.request);
-        toast.success("Opened in new window", tab.request.name);
-      } catch {
-        toast.error("Failed to open new window");
-      }
-    };
-
     const showTabsMenu = tabs.length > 1 || tabsOverflowing;
 
     return (
-      <header className="view-header flex h-10 shrink-0 items-stretch overflow-hidden">
+      <header className="view-header flex h-11 shrink-0 items-stretch overflow-hidden">
+        {/* Explorer toggle */}
         {explorerCollapsed ? (
           <button
             type="button"
@@ -73,7 +60,7 @@ export function ViewHeader() {
           <TooltipIconButton
             variant="ghost"
             size="icon"
-            className="explorer-hide-btn mx-1 size-8 shrink-0 text-topbar-muted hover:text-topbar-foreground"
+            className="explorer-hide-btn mx-1 size-8 shrink-0 self-center text-topbar-muted hover:text-topbar-foreground"
             label="Hide explorer (⌘B)"
             onClick={toggleExplorerCollapsed}
           >
@@ -81,6 +68,7 @@ export function ViewHeader() {
           </TooltipIconButton>
         )}
 
+        {/* Tab strip */}
         <TabScrollStrip
           activeItemId={activeTabId}
           onOverflowChange={setTabsOverflowing}
@@ -99,62 +87,71 @@ export function ViewHeader() {
                 key={tab.id}
                 data-tab-id={tab.id}
                 className={cn(
-                  "group relative mx-0.5 flex h-8 max-w-[220px] min-w-[88px] shrink-0 items-stretch rounded-lg",
-                  active
-                    ? "bg-background text-topbar-foreground shadow-sm ring-1 ring-border/60"
-                    : "text-topbar-muted hover:bg-topbar-foreground/8 hover:text-topbar-foreground",
+                  "request-tab group",
+                  active ? "request-tab--active" : "request-tab--idle",
                 )}
               >
+                {/* active bottom indicator */}
+                {active && <span className="request-tab__indicator" aria-hidden />}
+
                 <button
                   type="button"
-                  className="flex min-w-0 flex-1 items-center gap-1.5 px-2.5 text-left text-[13px]"
+                  className="request-tab__body"
                   onClick={() => setActiveTab(tab.id)}
                 >
-                  <MethodBadge method={tab.request.method} />
-                  {pending && <LoaderCircle className="size-3 shrink-0 animate-spin" />}
+                  {pending ? (
+                    <LoaderCircle className="size-3 shrink-0 animate-spin text-primary" />
+                  ) : (
+                    <span
+                      className={cn(
+                        "shrink-0 font-mono text-[10px] font-bold tabular-nums",
+                        active
+                          ? methodTextClass(tab.request.method)
+                          : "text-topbar-muted group-hover:text-topbar-foreground/70",
+                      )}
+                    >
+                      {methodShortLabel(tab.request.method)}
+                    </span>
+                  )}
                   {hasOverride && tabEnv && (
-                    <TooltipWrap label={`Environment: ${tabEnv.name}`}>
+                    <TooltipWrap label={`Environment override: ${tabEnv.name}`}>
                       <Globe2 className="size-3 shrink-0 text-primary" aria-hidden />
                     </TooltipWrap>
                   )}
-                  <span className="truncate">{tab.request.name}</span>
+                  <span
+                    className={cn(
+                      "min-w-0 flex-1 truncate text-left text-[13px]",
+                      active ? "text-topbar-foreground" : "text-topbar-muted",
+                    )}
+                  >
+                    {tab.request.name}
+                  </span>
                 </button>
-                <TooltipIconButton
-                  variant="ghost"
-                  size="icon"
+
+                {/* close */}
+                <button
+                  type="button"
+                  aria-label="Close tab"
                   className={cn(
-                    "size-6 shrink-0 text-topbar-muted hover:text-topbar-foreground",
-                    active ? "opacity-60 hover:opacity-100" : "opacity-0 group-hover:opacity-100",
+                    "request-tab__close",
+                    active
+                      ? "opacity-50 hover:opacity-100"
+                      : "opacity-0 group-hover:opacity-60 group-hover:hover:opacity-100",
                   )}
-                  label="Open in new window"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void handlePopOut(tab.id);
-                  }}
-                >
-                  <AppWindow className="size-3" />
-                </TooltipIconButton>
-                <TooltipIconButton
-                  variant="ghost"
-                  size="icon"
-                  className={cn(
-                    "mr-1 size-6 shrink-0 text-topbar-muted hover:text-topbar-foreground",
-                    active ? "opacity-60 hover:opacity-100" : "opacity-0 group-hover:opacity-100",
-                  )}
-                  label="Close tab"
                   onClick={(event) => {
                     event.stopPropagation();
                     closeTab(tab.id);
                   }}
                 >
                   <X className="size-3" />
-                </TooltipIconButton>
+                </button>
               </div>
             );
           })}
         </TabScrollStrip>
 
-        <div className="flex shrink-0 items-center gap-1 border-l border-topbar-border/60 px-2">
+        {/* trailing actions */}
+        <div className="flex shrink-0 items-center gap-0.5 border-l border-topbar-border/60 px-2">
           {showTabsMenu && (
             <RequestTabsMenu
               tabs={tabs}
@@ -168,7 +165,7 @@ export function ViewHeader() {
             variant="ghost"
             size="icon"
             className="size-7 text-topbar-muted hover:text-topbar-foreground"
-            label="New request tab"
+            label="New request tab (⌘T)"
             onClick={newRequestTab}
           >
             <Plus className="size-3.5" />

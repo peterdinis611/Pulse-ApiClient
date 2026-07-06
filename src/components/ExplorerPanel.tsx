@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
+  Clock,
   Copy,
   Download,
   FolderPlus,
@@ -42,11 +43,85 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { ApiRequest, SavedRequest } from "@/types";
+import type { ApiRequest, HistoryEntry, SavedRequest } from "@/types";
+import { statusBadgeClass } from "@/lib/method-colors";
 import { cn } from "@/lib/utils";
 
 function requestSignature(request: ApiRequest): string {
   return `${request.method}\0${request.url}\0${request.name.trim()}`;
+}
+
+function relativeTime(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return "just now";
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  return `${diffDay}d ago`;
+}
+
+function HistoryRow({
+  entry,
+  active,
+  onClick,
+}: {
+  entry: HistoryEntry;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const displayName =
+    entry.request.name && entry.request.name !== "Untitled Request"
+      ? entry.request.name
+      : null;
+  const displayUrl = entry.request.url.replace(/^https?:\/\//, "");
+
+  return (
+    <button
+      type="button"
+      className={cn(
+        "group/item flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors",
+        active
+          ? "bg-[color-mix(in_oklch,var(--primary)_14%,var(--sidebar-accent))] text-foreground shadow-[inset_2px_0_0_0_var(--primary)]"
+          : "hover:bg-sidebar-accent/60",
+      )}
+      onClick={onClick}
+    >
+      {/* row 1: method + name/url */}
+      <div className="flex min-w-0 items-center gap-1.5">
+        <MethodBadge method={entry.request.method} />
+        <span className="min-w-0 flex-1 truncate font-medium text-[13px] text-foreground/90">
+          {displayName ?? displayUrl}
+        </span>
+        {entry.response && (
+          <span
+            className={cn(
+              "shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-semibold",
+              statusBadgeClass(entry.response.status),
+            )}
+          >
+            {entry.response.status}
+          </span>
+        )}
+      </div>
+
+      {/* row 2: secondary info */}
+      <div className="flex min-w-0 items-center gap-2 pl-[44px] text-[11px] text-muted-foreground">
+        {displayName && (
+          <span className="min-w-0 flex-1 truncate font-mono opacity-70">{displayUrl}</span>
+        )}
+        {!displayName && <span className="flex-1" />}
+        <span className="flex shrink-0 items-center gap-1 tabular-nums">
+          {entry.response && <span>{entry.response.elapsedMs} ms</span>}
+          {entry.response && <span className="opacity-40">·</span>}
+          <Clock className="size-2.5 opacity-60" />
+          <span>{relativeTime(entry.sentAt)}</span>
+        </span>
+      </div>
+    </button>
+  );
 }
 
 export function ExplorerPanel() {
@@ -416,22 +491,14 @@ export function ExplorerPanel() {
                 <Trash2 className="size-3.5" />
               </TooltipIconButton>
             </div>
-            <CollapsibleContent className="explorer-tree-nested space-y-0.5">
+            <CollapsibleContent className="space-y-0.5 px-1.5 pb-1">
               {historyEntries.map((entry) => (
-                <button
+                <HistoryRow
                   key={entry.id}
-                  type="button"
-                  className={cn(
-                    "explorer-tree-row group/item w-full",
-                    requestSignature(entry.request) === activeSignature && "explorer-tree-row--active",
-                  )}
+                  entry={entry}
+                  active={requestSignature(entry.request) === activeSignature}
                   onClick={() => loadHistoryEntry(entry)}
-                >
-                  <MethodBadge method={entry.request.method} />
-                  <span className="min-w-0 flex-1 truncate text-left">
-                    {entry.request.name || entry.request.url}
-                  </span>
-                </button>
+                />
               ))}
               {historyEntries.length === 0 && (
                 <p className="px-3 py-2 text-xs text-muted-foreground">No history yet</p>
@@ -441,7 +508,7 @@ export function ExplorerPanel() {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="mx-2 mt-1 h-7 w-[calc(100%-1rem)] text-xs text-muted-foreground"
+                  className="mx-1 mt-1 h-7 w-[calc(100%-0.5rem)] text-xs text-muted-foreground"
                   disabled={historyLoadingMore}
                   onClick={() => void loadMoreHistory()}
                 >

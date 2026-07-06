@@ -45,7 +45,7 @@ function App() {
 
   return (
     <ErrorBoundary onRetry={() => setAttempt((value) => value + 1)}>
-      <Toaster position="top-right" />
+      <Toaster />
       <AppProvider key={attempt}>
         <AppShell />
       </AppProvider>

@@ -2,39 +2,25 @@ import { toast as sonner } from "sonner";
 
 import type { HttpResponse } from "@/types";
 
-function responseTimingDescription(
-  response: Pick<HttpResponse, "elapsedMs" | "fromCache">,
-): string {
-  const cacheLabel = response.fromCache ? " · cached" : "";
-  return `${response.elapsedMs} ms${cacheLabel}`;
-}
+const TOAST_OPTIONS = {
+  duration: 3500,
+} as const;
 
 export const toast = {
   success(title: string, description?: string) {
-    sonner.success(title, { description });
+    sonner.success(title, { description, ...TOAST_OPTIONS });
   },
   error(title: string, description?: string) {
-    sonner.error(title, { description });
+    sonner.error(title, { description, ...TOAST_OPTIONS });
   },
   info(title: string, description?: string) {
-    sonner.info(title, { description });
+    sonner.info(title, { description, ...TOAST_OPTIONS });
   },
   warning(title: string, description?: string) {
-    sonner.warning(title, { description });
+    sonner.warning(title, { description, ...TOAST_OPTIONS });
   },
-  requestResponse(response: Pick<HttpResponse, "status" | "elapsedMs" | "fromCache">) {
-    const description = responseTimingDescription(response);
-
-    if (response.status >= 200 && response.status < 300) {
-      sonner.success("Request completed", { description });
-    } else if (response.status >= 300 && response.status < 400) {
-      sonner.info("Request redirected", { description });
-    } else if (response.status >= 400 && response.status < 500) {
-      sonner.error("Client error", { description });
-    } else if (response.status >= 500) {
-      sonner.error("Server error", { description });
-    } else {
-      sonner.info("Request finished", { description });
-    }
+  /** @deprecated HTTP responses are shown in the response panel and status bar instead of toasts. */
+  requestResponse(_response: Pick<HttpResponse, "status" | "elapsedMs" | "fromCache">) {
+    // Intentionally no-op: status is visible in ResponsePanel + StatusBar.
   },
 };

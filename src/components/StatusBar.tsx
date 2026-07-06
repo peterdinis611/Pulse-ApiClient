@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  AlertCircle,
   Globe2,
   LayoutPanelTop,
   LoaderCircle,
@@ -8,6 +9,7 @@ import {
 } from "lucide-react";
 import { useApp } from "@/machines";
 import { clearHttpCache, getHttpEngineStats } from "@/lib/http-client";
+import { statusBadgeClass } from "@/lib/method-colors";
 import { toast } from "@/lib/toast";
 import type { HttpEngineStats } from "@/types";
 import { WindowMenu } from "@/components/WindowMenu";
@@ -26,6 +28,10 @@ export function StatusBar() {
     tabEnvironmentOverrideId,
     activeEnvironmentId,
     setMainView,
+    response,
+    error,
+    loading,
+    testResults,
   } = useApp();
   const [engineStats, setEngineStats] = useState<HttpEngineStats | null>(null);
   const hasTabOverride =
@@ -65,6 +71,42 @@ export function StatusBar() {
           <span className="status-chip hidden sm:inline-flex">
             {engineStats.totalCompleted} ok · {engineStats.totalFailed} failed
           </span>
+        )}
+        {mainView === "request" && !loading && error && (
+          <button
+            type="button"
+            className="status-chip max-w-[min(100%,280px)] border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/15"
+            onClick={() => setResponsePanelOpen(true)}
+            title={error}
+          >
+            <AlertCircle className="size-3 shrink-0" />
+            <span className="truncate">Request failed</span>
+          </button>
+        )}
+        {mainView === "request" && !loading && response && (
+          <button
+            type="button"
+            className={cn(
+              "status-chip max-w-[min(100%,320px)] font-mono hover:opacity-90",
+              statusBadgeClass(response.status),
+            )}
+            onClick={() => setResponsePanelOpen(!responsePanelOpen)}
+            title="Toggle response panel"
+          >
+            <span className="truncate">
+              {response.status}
+              {response.statusText ? ` ${response.statusText}` : ""}
+            </span>
+            <span className="text-topbar-muted">·</span>
+            <span className="shrink-0 tabular-nums">
+              {response.fromCache ? "cached" : `${response.elapsedMs} ms`}
+            </span>
+            {testResults && testResults.failed > 0 && (
+              <span className="shrink-0 rounded-full bg-destructive/20 px-1.5 text-[9px] font-bold text-destructive">
+                {testResults.failed} test{testResults.failed === 1 ? "" : "s"}
+              </span>
+            )}
+          </button>
         )}
         {activeEnvironment && (
           <button

@@ -1337,9 +1337,6 @@ export const appMachine = setup({
             ({ context }) => {
               persistLastRequest(context);
             },
-            ({ event }) => {
-              toast.requestResponse(event.response);
-            },
           ],
         },
         SEND_FAILED: {
@@ -1361,9 +1358,6 @@ export const appMachine = setup({
                 })),
               };
             }),
-            ({ event }) => {
-              toast.error("Request failed", event.error);
-            },
           ],
         },
         CANCEL_SEND: {

@@ -1,38 +1,47 @@
 import { useEffect, useMemo, useState } from "react";
 import { Copy } from "lucide-react";
 import { useApp } from "@/machines";
-import { formatBytes, prettyJson } from "@/lib/helpers";
+import { formatBytes } from "@/lib/helpers";
 import { toast } from "@/lib/toast";
-import { formatGraphqlResponse, parseGraphqlResponse } from "@/lib/graphql";
+import { parseGraphqlResponse } from "@/lib/graphql";
 import { statusBadgeClass } from "@/lib/method-colors";
+import {
+  defaultResponseBodyFormat,
+  formatResponseBody,
+  type ResponseBodyFormat,
+} from "@/lib/response-body";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/EmptyState";
 import { TestResultsList } from "@/components/TestResultsList";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { PanelHeader } from "@/components/ui/panel";
 import { ScrollAreaWithTop } from "@/components/ui/scroll-area-with-top";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export function ResponsePanel() {
   const { response, error, loading, testResults } = useApp();
   const [view, setView] = useState<"body" | "headers" | "tests">("body");
+  const [bodyFormat, setBodyFormat] = useState<ResponseBodyFormat>("pretty");
 
-  const body = useMemo(() => {
-    if (!response) return "";
-    const ct = response.contentType ?? "";
-    const graphql = parseGraphqlResponse(response.body);
-    if (graphql) return formatGraphqlResponse(response.body);
-    if (ct.includes("json")) return prettyJson(response.body);
-    return response.body;
-  }, [response]);
+  const formattedBody = useMemo(() => {
+    if (!response) return { text: "", jsonValid: null as boolean | null };
+    return formatResponseBody(response.body, response.contentType, bodyFormat);
+  }, [bodyFormat, response]);
+
+  const body = formattedBody.text;
 
   const graphqlErrors = useMemo(() => parseGraphqlResponse(response?.body ?? "")?.errors ?? [], [response]);
 
   const scrollResetKey = useMemo(
-    () => `${response?.requestId ?? "none"}-${response?.elapsedMs ?? 0}-${loading ? "loading" : "idle"}`,
-    [loading, response?.elapsedMs, response?.requestId],
+    () =>
+      `${response?.requestId ?? "none"}-${response?.elapsedMs ?? 0}-${bodyFormat}-${loading ? "loading" : "idle"}`,
+    [bodyFormat, loading, response?.elapsedMs, response?.requestId],
   );
+
+  useEffect(() => {
+    if (!response) return;
+    setBodyFormat(defaultResponseBodyFormat(response.body, response.contentType));
+  }, [response?.body, response?.contentType, response?.requestId]);
 
   useEffect(() => {
     if (testResults && testResults.failed > 0) {
@@ -46,80 +55,95 @@ export function ResponsePanel() {
     toast.success("Copied to clipboard");
   };
 
+  const contentTypeShort = response?.contentType?.split(";")[0]?.trim() ?? null;
+
   return (
     <section className="flex h-full min-h-0 flex-col bg-surface-1/30">
-      <PanelHeader
-        label="Response"
-        actions={
-          response && !loading ? (
+      {/* single-row toolbar */}
+      <div className="response-toolbar">
+        {/* left: label + meta */}
+        <div className="flex min-w-0 items-center gap-2 overflow-hidden">
+          <span className="text-caption shrink-0">Response</span>
+          {response && !loading && (
             <>
-              {view === "body" && (
-                <Button type="button" variant="ghost" size="sm" className="h-7" onClick={() => void copyBody()}>
-                  <Copy className="size-3.5" />
-                  Copy
-                </Button>
-              )}
-              <Tabs value={view} onValueChange={(value) => setView(value as typeof view)}>
-                <TabsList className="h-8 border-0 bg-transparent">
-                  <TabsTrigger value="body" className="h-7 px-2.5 text-xs">
-                    Body
-                  </TabsTrigger>
-                  <TabsTrigger value="headers" className="h-7 px-2.5 text-xs">
-                    Headers
-                  </TabsTrigger>
-                  <TabsTrigger value="tests" className="h-7 px-2.5 text-xs">
-                    Tests
-                    {testResults && testResults.failed > 0 && (
-                      <span className="ml-1 text-destructive">!</span>
-                    )}
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </>
-          ) : undefined
-        }
-      >
-        {response && !loading && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Badge className={cn("font-mono text-[11px]", statusBadgeClass(response.status))}>
-              {response.status} {response.statusText}
-            </Badge>
-            <Badge variant="outline" className="font-mono text-[11px]">
-              {response.fromCache ? "cached" : `${response.elapsedMs} ms`}
-            </Badge>
-            {response.fromCache && response.cacheAgeMs != null && (
-              <Badge variant="secondary" className="font-mono text-[11px]">
-                age {response.cacheAgeMs} ms
-              </Badge>
-            )}
-            <Badge variant="outline" className="font-mono text-[11px]">
-              {formatBytes(response.sizeBytes)}
-            </Badge>
-            {response.contentType && (
-              <Badge variant="secondary" className="max-w-[200px] truncate font-mono text-[11px]">
-                {response.contentType}
-              </Badge>
-            )}
-            {graphqlErrors.length > 0 && (
-              <Badge className="border-destructive/30 bg-destructive/10 font-mono text-[11px] text-destructive">
-                GraphQL {graphqlErrors.length} error{graphqlErrors.length === 1 ? "" : "s"}
-              </Badge>
-            )}
-            {testResults && testResults.total > 0 && (
-              <Badge
+              <span
                 className={cn(
-                  "font-mono text-[11px]",
-                  testResults.failed > 0
-                    ? "border-destructive/30 bg-destructive/10 text-destructive"
-                    : "status-badge-success",
+                  "shrink-0 rounded-md border px-1.5 py-0.5 font-mono text-[11px] font-medium",
+                  statusBadgeClass(response.status),
                 )}
               >
-                Tests {testResults.passed}/{testResults.total}
-              </Badge>
-            )}
+                {response.status}
+              </span>
+              <span className="truncate font-mono text-[11px] text-muted-foreground">
+                {response.statusText && (
+                  <span className="mr-1.5 text-foreground/80">{response.statusText}</span>
+                )}
+                {response.fromCache ? "cached" : `${response.elapsedMs} ms`}
+                {" · "}
+                {formatBytes(response.sizeBytes)}
+                {contentTypeShort && (
+                  <span className="ml-1.5 text-muted-foreground/70">{contentTypeShort}</span>
+                )}
+              </span>
+              {response.fromCache && response.cacheAgeMs != null && (
+                <Badge variant="secondary" className="shrink-0 font-mono text-[11px]">
+                  age {response.cacheAgeMs} ms
+                </Badge>
+              )}
+              {graphqlErrors.length > 0 && (
+                <Badge className="shrink-0 border-destructive/30 bg-destructive/10 font-mono text-[11px] text-destructive">
+                  GraphQL {graphqlErrors.length} err
+                </Badge>
+              )}
+              {testResults && testResults.total > 0 && (
+                <Badge
+                  className={cn(
+                    "shrink-0 font-mono text-[11px]",
+                    testResults.failed > 0
+                      ? "border-destructive/30 bg-destructive/10 text-destructive"
+                      : "status-badge-success",
+                  )}
+                >
+                  {testResults.passed}/{testResults.total} tests
+                </Badge>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* right: tabs + copy */}
+        {response && !loading && (
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-muted-foreground"
+              onClick={() => void copyBody()}
+            >
+              <Copy className="size-3.5" />
+              Copy
+            </Button>
+            <div className="mx-1 h-4 w-px bg-border/60" />
+            <Tabs value={view} onValueChange={(value) => setView(value as typeof view)}>
+              <TabsList className="h-8 border-0 bg-transparent">
+                <TabsTrigger value="body" className="h-7 px-2.5 text-xs">
+                  Body
+                </TabsTrigger>
+                <TabsTrigger value="headers" className="h-7 px-2.5 text-xs">
+                  Headers
+                </TabsTrigger>
+                <TabsTrigger value="tests" className="h-7 px-2.5 text-xs">
+                  Tests
+                  {testResults && testResults.failed > 0 && (
+                    <span className="ml-1 text-destructive">!</span>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
         )}
-      </PanelHeader>
+      </div>
 
       <ScrollAreaWithTop className="min-h-0 flex-1" resetKey={scrollResetKey}>
         <div className="p-4">
@@ -147,7 +171,25 @@ export function ResponsePanel() {
           )}
 
           {!loading && response && view === "body" && (
-            <pre className="ui-code-block">{body || "(empty body)"}</pre>
+            <div className="space-y-3">
+              {/* format picker — inline above body, not in the main toolbar */}
+              <div className="flex items-center gap-2">
+                <Tabs
+                  value={bodyFormat}
+                  onValueChange={(value) => setBodyFormat(value as ResponseBodyFormat)}
+                >
+                  <TabsList className="h-7 border border-border/60 bg-muted/30">
+                    <TabsTrigger value="pretty" className="h-6 px-2 text-xs">Pretty</TabsTrigger>
+                    <TabsTrigger value="raw" className="h-6 px-2 text-xs">Raw</TabsTrigger>
+                    <TabsTrigger value="json" className="h-6 px-2 text-xs">JSON</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+                {bodyFormat === "json" && formattedBody.jsonValid === false && (
+                  <span className="text-xs text-warning">Not valid JSON — showing raw text.</span>
+                )}
+              </div>
+              <pre className="ui-code-block">{body || "(empty body)"}</pre>
+            </div>
           )}
 
           {!loading && response && view === "headers" && (
