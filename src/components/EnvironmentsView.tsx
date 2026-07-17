@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Download, Plus, Trash2, Upload } from "lucide-react";
 import { useApp } from "@/machines";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PageShell, PageToolbar } from "@/components/PageShell";
 import { TooltipIconButton } from "@/components/TooltipIconButton";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Panel, PanelBody, PanelHeader } from "@/components/ui/panel";
 import { Separator } from "@/components/ui/separator";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 export function EnvironmentsView() {
@@ -30,6 +32,7 @@ export function EnvironmentsView() {
   const [selectedId, setSelectedId] = useState(
     () => activeEnvironmentId ?? environments[0]?.id ?? "",
   );
+  const [deleteEnvOpen, setDeleteEnvOpen] = useState(false);
 
   const selectedEnv =
     environments.find((env) => env.id === selectedId) ?? environments[0] ?? null;
@@ -120,11 +123,7 @@ export function EnvironmentsView() {
                   size="icon"
                   className="size-8 text-destructive"
                   label="Delete environment"
-                  onClick={() => {
-                    deleteEnvironment(selectedEnv.id);
-                    const next = environments.find((env) => env.id !== selectedEnv.id);
-                    if (next) setSelectedId(next.id);
-                  }}
+                  onClick={() => setDeleteEnvOpen(true)}
                 >
                   <Trash2 />
                 </TooltipIconButton>
@@ -214,6 +213,27 @@ export function EnvironmentsView() {
           </PanelBody>
         </Panel>
       )}
+
+      <ConfirmDialog
+        open={deleteEnvOpen}
+        onOpenChange={setDeleteEnvOpen}
+        title="Delete environment?"
+        description={
+          selectedEnv
+            ? `“${selectedEnv.name}” and its variables will be permanently removed.`
+            : "This environment will be permanently removed."
+        }
+        confirmLabel="Delete environment"
+        onConfirm={() => {
+          if (!selectedEnv) return;
+          const id = selectedEnv.id;
+          const name = selectedEnv.name;
+          deleteEnvironment(id);
+          const next = environments.find((env) => env.id !== id);
+          if (next) setSelectedId(next.id);
+          toast.success("Environment deleted", name);
+        }}
+      />
     </PageShell>
   );
 }

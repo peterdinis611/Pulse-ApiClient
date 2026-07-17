@@ -26,6 +26,7 @@ import { downloadJson } from "@/lib/download";
 import { ThemePicker } from "@/components/ThemePicker";
 import { CustomThemeSettings } from "@/components/CustomThemeSettings";
 import { CollectionExportMenu } from "@/components/CollectionExportMenu";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useHistory } from "@/hooks/useHistory";
 import { emitWorkspaceReset } from "@/lib/workspace-sync";
 import { TooltipIconButton } from "@/components/TooltipIconButton";
@@ -187,6 +188,14 @@ export function SettingsView() {
   );
   const [databasePath, setDatabasePath] = useState<string | null>(null);
   const [confirmResetDb, setConfirmResetDb] = useState(false);
+  const [pendingDeleteCollection, setPendingDeleteCollection] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [pendingDeleteFolder, setPendingDeleteFolder] = useState<{
+    collectionId: string;
+    path: string;
+  } | null>(null);
   const [resettingDb, setResettingDb] = useState(false);
   const [clearingCache, setClearingCache] = useState(false);
   const [cookies, setCookies] = useState<StoredCookie[]>([]);
@@ -417,19 +426,26 @@ export function SettingsView() {
             title="Clear request history"
             description={`Remove ${historyCount} saved history ${historyCount === 1 ? "entry" : "entries"} from the workspace.`}
           >
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
+            <ConfirmDialog
+              title="Clear history?"
+              description={
+                historyCount === 1
+                  ? "This will permanently remove 1 history entry."
+                  : `This will permanently remove ${historyCount} history entries.`
+              }
+              confirmLabel="Clear history"
               disabled={historyCount === 0}
-              onClick={() => {
+              trigger={
+                <Button type="button" variant="outline" size="sm" disabled={historyCount === 0}>
+                  <History className="size-4" />
+                  Clear history
+                </Button>
+              }
+              onConfirm={() => {
                 clearHistory();
                 toast.success("History cleared");
               }}
-            >
-              <History className="size-4" />
-              Clear history
-            </Button>
+            />
           </SettingRow>
 
           <SettingRow
@@ -743,7 +759,9 @@ export function SettingsView() {
                     className="size-8 text-destructive"
                     label="Delete collection"
                     disabled={collectionGroups.length === 1}
-                    onClick={() => deleteCollectionGroup(group.id)}
+                    onClick={() =>
+                      setPendingDeleteCollection({ id: group.id, name: group.name })
+                    }
                   >
                     <Trash2 className="size-4" />
                   </TooltipIconButton>
@@ -813,7 +831,12 @@ export function SettingsView() {
                       size="icon"
                       className="size-8 text-destructive"
                       label="Delete folder"
-                      onClick={() => deleteFolder(activeCollection.id, folder)}
+                      onClick={() =>
+                        setPendingDeleteFolder({
+                          collectionId: activeCollection.id,
+                          path: folder,
+                        })
+                      }
                     >
                       <Trash2 className="size-4" />
                     </TooltipIconButton>
@@ -826,6 +849,48 @@ export function SettingsView() {
 
       </div>
       </ScrollAreaWithTop>
+
+      <ConfirmDialog
+        open={pendingDeleteCollection !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeleteCollection(null);
+        }}
+        title="Delete collection?"
+        description={
+          pendingDeleteCollection
+            ? `“${pendingDeleteCollection.name}” and all of its requests will be permanently removed.`
+            : "This collection will be permanently removed."
+        }
+        confirmLabel="Delete collection"
+        onConfirm={() => {
+          if (pendingDeleteCollection) {
+            deleteCollectionGroup(pendingDeleteCollection.id);
+            toast.success("Collection deleted", pendingDeleteCollection.name);
+          }
+          setPendingDeleteCollection(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={pendingDeleteFolder !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeleteFolder(null);
+        }}
+        title="Delete folder?"
+        description={
+          pendingDeleteFolder
+            ? `Folder “${pendingDeleteFolder.path}” will be removed.`
+            : "This folder will be removed."
+        }
+        confirmLabel="Delete folder"
+        onConfirm={() => {
+          if (pendingDeleteFolder) {
+            deleteFolder(pendingDeleteFolder.collectionId, pendingDeleteFolder.path);
+            toast.success("Folder deleted", pendingDeleteFolder.path);
+          }
+          setPendingDeleteFolder(null);
+        }}
+      />
     </div>
   );
 }

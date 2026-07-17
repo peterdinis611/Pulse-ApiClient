@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useApp } from "@/machines";
 import {
-  EXPLORER_WIDTH_MAX,
+  clampExplorerWidth,
   EXPLORER_WIDTH_MIN,
+  getExplorerWidthMax,
 } from "@/lib/layout-preferences";
 import { cn } from "@/lib/utils";
 
@@ -10,23 +11,35 @@ type ResizableExplorerProps = {
   children: ReactNode;
 };
 
-function clampWidth(width: number): number {
-  return Math.min(EXPLORER_WIDTH_MAX, Math.max(EXPLORER_WIDTH_MIN, Math.round(width)));
-}
-
 export function ResizableExplorer({ children }: ResizableExplorerProps) {
   const { explorerWidth, setExplorerWidth, explorerCollapsed } = useApp();
   const open = !explorerCollapsed;
   const [isDragging, setIsDragging] = useState(false);
+  const [maxWidth, setMaxWidth] = useState(() => getExplorerWidthMax());
   const dragging = useRef(false);
   const startX = useRef(0);
   const startWidth = useRef(explorerWidth);
+  const widthRef = useRef(explorerWidth);
+  widthRef.current = explorerWidth;
+
+  useEffect(() => {
+    const updateMax = () => {
+      const nextMax = getExplorerWidthMax();
+      setMaxWidth(nextMax);
+      if (widthRef.current > nextMax) {
+        setExplorerWidth(nextMax);
+      }
+    };
+    updateMax();
+    window.addEventListener("resize", updateMax);
+    return () => window.removeEventListener("resize", updateMax);
+  }, [setExplorerWidth]);
 
   const onPointerMove = useCallback(
     (event: PointerEvent) => {
       if (!dragging.current) return;
       const delta = event.clientX - startX.current;
-      setExplorerWidth(clampWidth(startWidth.current + delta));
+      setExplorerWidth(clampExplorerWidth(startWidth.current + delta));
     },
     [setExplorerWidth],
   );
@@ -59,6 +72,14 @@ export function ResizableExplorer({ children }: ResizableExplorerProps) {
     [endDrag, explorerWidth, onPointerMove, open],
   );
 
+  const onDoubleClick = useCallback(() => {
+    if (!open) return;
+    const mid = Math.round((EXPLORER_WIDTH_MIN + maxWidth) / 2);
+    // Toggle between default-ish mid and nearly full
+    const next = explorerWidth >= maxWidth - 24 ? mid : maxWidth;
+    setExplorerWidth(next);
+  }, [explorerWidth, maxWidth, open, setExplorerWidth]);
+
   useEffect(() => () => endDrag(), [endDrag]);
 
   return (
@@ -71,20 +92,27 @@ export function ResizableExplorer({ children }: ResizableExplorerProps) {
       )}
       style={{ width: open ? explorerWidth : 0 }}
     >
-      <div className="explorer-shell__inner flex h-full min-h-0 flex-col" style={{ width: explorerWidth }}>
-        <div className="explorer-shell__content flex min-h-0 flex-1 flex-col">{children}</div>
+      <div
+        className="explorer-shell__inner flex h-full min-h-0 min-w-0 flex-col overflow-hidden"
+        style={{ width: explorerWidth }}
+      >
+        <div className="explorer-shell__content flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          {children}
+        </div>
         <div
           role="separator"
           aria-orientation="vertical"
           aria-valuenow={explorerWidth}
           aria-valuemin={EXPLORER_WIDTH_MIN}
-          aria-valuemax={EXPLORER_WIDTH_MAX}
+          aria-valuemax={maxWidth}
           aria-label="Resize explorer"
+          title="Drag to resize · double-click to expand / restore"
           className={cn(
             "absolute -right-1.5 top-0 z-20 flex h-full w-3 cursor-col-resize touch-none items-center justify-center",
             !open && "pointer-events-none opacity-0",
           )}
           onPointerDown={onPointerDown}
+          onDoubleClick={onDoubleClick}
         >
           <span className="h-12 w-0.5 rounded-full bg-border/80 transition-colors hover:bg-primary/70" />
         </div>

@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ResizeHandle } from "@/components/ResizeHandle";
+import {
+  clampWorkspaceSplitRatio,
+  WORKSPACE_SPLIT_RATIO_MAX,
+  WORKSPACE_SPLIT_RATIO_MIN,
+} from "@/lib/layout-preferences";
 
 type ResizableSplitProps = {
   top: ReactNode;
@@ -14,7 +19,7 @@ export function ResizableSplit({
   initialRatio = 52,
   onRatioChange,
 }: ResizableSplitProps) {
-  const [ratio, setRatio] = useState(initialRatio);
+  const [ratio, setRatio] = useState(() => clampWorkspaceSplitRatio(initialRatio));
   const dragging = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -22,7 +27,7 @@ export function ResizableSplit({
     if (!dragging.current || !containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const next = ((event.clientY - rect.top) / rect.height) * 100;
-    setRatio(Math.min(78, Math.max(22, next)));
+    setRatio(clampWorkspaceSplitRatio(next));
   }, []);
 
   const onMouseUp = useCallback(() => {
@@ -52,6 +57,9 @@ export function ResizableSplit({
       <ResizeHandle
         orientation="horizontal"
         aria-valuenow={ratio}
+        aria-valuemin={WORKSPACE_SPLIT_RATIO_MIN}
+        aria-valuemax={WORKSPACE_SPLIT_RATIO_MAX}
+        title="Drag to resize request / response"
         onMouseDown={() => {
           dragging.current = true;
           document.body.style.cursor = "row-resize";

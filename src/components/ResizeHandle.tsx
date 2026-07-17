@@ -3,17 +3,23 @@ import { cn } from "@/lib/utils";
 type ResizeHandleProps = {
   orientation: "horizontal" | "vertical";
   className?: string;
+  title?: string;
   onMouseDown?: (event: React.MouseEvent<HTMLDivElement>) => void;
   onPointerDown?: (event: React.PointerEvent<HTMLDivElement>) => void;
   "aria-valuenow"?: number;
+  "aria-valuemin"?: number;
+  "aria-valuemax"?: number;
 };
 
 export function ResizeHandle({
   orientation,
   className,
+  title,
   onMouseDown,
   onPointerDown,
   "aria-valuenow": ariaValueNow,
+  "aria-valuemin": ariaValueMin,
+  "aria-valuemax": ariaValueMax,
 }: ResizeHandleProps) {
   const horizontal = orientation === "horizontal";
 
@@ -22,6 +28,9 @@ export function ResizeHandle({
       role="separator"
       aria-orientation={orientation}
       aria-valuenow={ariaValueNow}
+      aria-valuemin={ariaValueMin}
+      aria-valuemax={ariaValueMax}
+      title={title}
       className={cn(
         "resize-handle group flex shrink-0 items-center justify-center",
         horizontal

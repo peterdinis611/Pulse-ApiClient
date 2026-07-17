@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  EXPLORER_WIDTH_MAX,
   EXPLORER_WIDTH_MIN,
+  clampExplorerWidth,
   defaultLayoutPreferences,
+  getExplorerWidthMax,
   loadLayoutPreferences,
   saveLayoutPreferences,
 } from "../layout-preferences";
@@ -29,15 +30,16 @@ describe("layout-preferences", () => {
     expect(loadLayoutPreferences()).toEqual(defaultLayoutPreferences());
   });
 
-  it("clamps explorer width on save", () => {
+  it("clamps explorer width to viewport-aware max on save", () => {
+    const viewportMax = getExplorerWidthMax(1280);
     saveLayoutPreferences({
       ...defaultLayoutPreferences(),
       explorerCollapsed: true,
-      explorerWidth: 999,
+      explorerWidth: 9999,
     });
     const loaded = loadLayoutPreferences();
     expect(loaded.explorerCollapsed).toBe(true);
-    expect(loaded.explorerWidth).toBe(EXPLORER_WIDTH_MAX);
+    expect(loaded.explorerWidth).toBe(viewportMax);
   });
 
   it("restores valid saved preferences", () => {
@@ -47,5 +49,10 @@ describe("layout-preferences", () => {
       explorerWidth: EXPLORER_WIDTH_MIN,
     });
     expect(loadLayoutPreferences().explorerWidth).toBe(EXPLORER_WIDTH_MIN);
+  });
+
+  it("allows explorer almost full window width", () => {
+    expect(getExplorerWidthMax(1440)).toBeGreaterThan(800);
+    expect(clampExplorerWidth(900, 1440)).toBe(900);
   });
 });

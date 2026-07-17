@@ -940,10 +940,29 @@ export const appMachine = setup({
           }),
         },
         LOAD_HISTORY_ENTRY: {
-          actions: raise(({ event }) => ({
-            type: "OPEN_REQUEST_TAB" as const,
-            request: structuredClone(event.entry.request),
-          })),
+          actions: [
+            assign(({ context, event }) => {
+              // Apply the history snapshot into the active editor.
+              // (OPEN_REQUEST_TAB matches by request.id and would only focus the
+              // existing tab without restoring URL/headers from history.)
+              const request = normalizeRequest(structuredClone(event.entry.request));
+              return {
+                tabs: mapActiveTab(context, (tab) => ({
+                  ...tab,
+                  request,
+                  response: null,
+                  error: null,
+                  loading: false,
+                  inFlightRequestId: null,
+                  testResults: null,
+                  ws: defaultWebSocketSession(),
+                })),
+                mainView: "request" as const,
+                responsePanelOpen: true,
+              };
+            }),
+            "persistLastRequest",
+          ],
         },
         CLEAR_HISTORY: {
           actions: () => {

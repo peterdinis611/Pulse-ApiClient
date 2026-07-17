@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import {
   clampConsoleHeight,
   CONSOLE_HEIGHT_DEFAULT,
+  CONSOLE_HEIGHT_MIN,
+  getConsoleHeightMax,
   loadLayoutPreferences,
   saveLayoutPreferences,
 } from "@/lib/layout-preferences";
@@ -15,9 +17,21 @@ export function ResizableConsole({ children }: ResizableConsoleProps) {
   const [height, setHeight] = useState(
     () => loadLayoutPreferences().consoleHeight ?? CONSOLE_HEIGHT_DEFAULT,
   );
+  const [maxHeight, setMaxHeight] = useState(() => getConsoleHeightMax());
   const dragging = useRef(false);
   const startY = useRef(0);
   const startHeight = useRef(height);
+
+  useEffect(() => {
+    const updateMax = () => {
+      const nextMax = getConsoleHeightMax();
+      setMaxHeight(nextMax);
+      setHeight((current) => (current > nextMax ? nextMax : current));
+    };
+    updateMax();
+    window.addEventListener("resize", updateMax);
+    return () => window.removeEventListener("resize", updateMax);
+  }, []);
 
   const onMouseMove = useCallback((event: MouseEvent) => {
     if (!dragging.current) return;
@@ -51,6 +65,9 @@ export function ResizableConsole({ children }: ResizableConsoleProps) {
       <ResizeHandle
         orientation="horizontal"
         aria-valuenow={height}
+        aria-valuemin={CONSOLE_HEIGHT_MIN}
+        aria-valuemax={maxHeight}
+        title="Drag to resize console"
         onMouseDown={(event) => {
           dragging.current = true;
           startY.current = event.clientY;

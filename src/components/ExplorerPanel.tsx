@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+  ArrowLeft,
   ChevronDown,
   ChevronRight,
-  Clock,
   Copy,
   Download,
-  FolderPlus,
+  ExternalLink,
+  Eye,
   Folder,
+  FolderPlus,
   History,
   LoaderCircle,
   MoreHorizontal,
@@ -16,6 +18,7 @@ import {
   Search,
   Trash2,
   Upload,
+  X,
 } from "lucide-react";
 import { useApp } from "@/machines";
 import { useHistory } from "@/hooks/useHistory";
@@ -28,6 +31,7 @@ import { toast } from "@/lib/toast";
 import type { FolderTreeNode } from "@/lib/collections";
 import { AddFolderMenu } from "@/components/AddFolderMenu";
 import { CollectionRunResultsPanel } from "@/components/CollectionRunResultsPanel";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { MethodBadge } from "@/components/MethodBadge";
 import { TooltipIconButton } from "@/components/TooltipIconButton";
 import { Button } from "@/components/ui/button";
@@ -44,8 +48,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { ApiRequest, HistoryEntry, SavedRequest } from "@/types";
-import { statusBadgeClass } from "@/lib/method-colors";
+import { methodShortLabel, methodTextClass, statusBadgeClass } from "@/lib/method-colors";
 import { cn } from "@/lib/utils";
+
+type PreviewTarget =
+  | { kind: "collection"; item: SavedRequest }
+  | { kind: "history"; entry: HistoryEntry };
 
 function requestSignature(request: ApiRequest): string {
   return `${request.method}\0${request.url}\0${request.name.trim()}`;
@@ -63,65 +71,30 @@ function relativeTime(iso: string): string {
   return `${diffDay}d ago`;
 }
 
-function HistoryRow({
-  entry,
-  active,
-  onClick,
-}: {
-  entry: HistoryEntry;
-  active: boolean;
-  onClick: () => void;
-}) {
-  const displayName =
-    entry.request.name && entry.request.name !== "Untitled Request"
-      ? entry.request.name
-      : null;
-  const displayUrl = entry.request.url.replace(/^https?:\/\//, "");
+/** Path leaf only — never append query (it blows past the sidebar width). */
+function shortUrlParts(url: string): { title: string; host: string; hasQuery: boolean } {
+  const raw = url.trim();
+  if (!raw) return { title: "(no URL)", host: "", hasQuery: false };
+  try {
+    const parsed = new URL(raw);
+    const segments = parsed.pathname.split("/").filter(Boolean);
+    const leaf = segments.length > 0 ? segments[segments.length - 1]! : "/";
+    return { title: leaf, host: parsed.host, hasQuery: parsed.search.length > 1 };
+  } catch {
+    const stripped = raw.replace(/^https?:\/\//, "");
+    const q = stripped.indexOf("?");
+    const pathPart = q >= 0 ? stripped.slice(0, q) : stripped;
+    const slash = pathPart.indexOf("/");
+    if (slash === -1) return { title: pathPart, host: "", hasQuery: q >= 0 };
+    const leaf = pathPart.slice(slash + 1).split("/").filter(Boolean).pop() ?? "/";
+    return { title: leaf, host: pathPart.slice(0, slash), hasQuery: q >= 0 };
+  }
+}
 
-  return (
-    <button
-      type="button"
-      className={cn(
-        "group/item flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors",
-        active
-          ? "bg-[color-mix(in_oklch,var(--primary)_14%,var(--sidebar-accent))] text-foreground shadow-[inset_2px_0_0_0_var(--primary)]"
-          : "hover:bg-sidebar-accent/60",
-      )}
-      onClick={onClick}
-    >
-      {/* row 1: method + name/url */}
-      <div className="flex min-w-0 items-center gap-1.5">
-        <MethodBadge method={entry.request.method} />
-        <span className="min-w-0 flex-1 truncate font-medium text-[13px] text-foreground/90">
-          {displayName ?? displayUrl}
-        </span>
-        {entry.response && (
-          <span
-            className={cn(
-              "shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-semibold",
-              statusBadgeClass(entry.response.status),
-            )}
-          >
-            {entry.response.status}
-          </span>
-        )}
-      </div>
-
-      {/* row 2: secondary info */}
-      <div className="flex min-w-0 items-center gap-2 pl-[44px] text-[11px] text-muted-foreground">
-        {displayName && (
-          <span className="min-w-0 flex-1 truncate font-mono opacity-70">{displayUrl}</span>
-        )}
-        {!displayName && <span className="flex-1" />}
-        <span className="flex shrink-0 items-center gap-1 tabular-nums">
-          {entry.response && <span>{entry.response.elapsedMs} ms</span>}
-          {entry.response && <span className="opacity-40">·</span>}
-          <Clock className="size-2.5 opacity-60" />
-          <span>{relativeTime(entry.sentAt)}</span>
-        </span>
-      </div>
-    </button>
-  );
+function requestDisplayName(request: ApiRequest): string | null {
+  const name = request.name.trim();
+  if (!name || name === "Untitled Request") return null;
+  return name;
 }
 
 export function ExplorerPanel() {
@@ -169,8 +142,16 @@ export function ExplorerPanel() {
   const [collectionRun, setCollectionRun] = useState<CollectionRunResult | null>(null);
   const [runProgress, setRunProgress] = useState<string | null>(null);
   const [showRunResults, setShowRunResults] = useState(false);
+  const [preview, setPreview] = useState<PreviewTarget | null>(null);
+  const [clearHistoryOpen, setClearHistoryOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<
+    | { kind: "request"; id: string; name: string }
+    | { kind: "folder"; collectionId: string; path: string }
+    | null
+  >(null);
 
   const debouncedSidebarSearch = useDebouncedValue(sidebarSearch);
+  const isSearching = debouncedSidebarSearch.trim().length > 0;
 
   const filteredCollectionsSync = useMemo(() => {
     return filterSavedRequests(collections, debouncedSidebarSearch);
@@ -231,10 +212,7 @@ export function ExplorerPanel() {
             `${result.passed}/${result.totalTests} tests passed`,
           );
         } else {
-          toast.success(
-            "Collection run finished",
-            `All ${result.totalTests} tests passed`,
-          );
+          toast.success("Collection run finished", `All ${result.totalTests} tests passed`);
         }
       } else {
         toast.success("Collection run finished", `${result.steps.length} requests completed`);
@@ -249,8 +227,17 @@ export function ExplorerPanel() {
     }
   };
 
+  const openPreview = (target: PreviewTarget) => setPreview(target);
+
+  const openFromPreview = () => {
+    if (!preview) return;
+    if (preview.kind === "collection") loadSavedRequest(preview.item);
+    else loadHistoryEntry(preview.entry);
+    setPreview(null);
+  };
+
   return (
-    <aside id="explorer-panel" className="flex min-h-0 flex-1 flex-col">
+    <aside id="explorer-panel" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <div className="explorer-header">
         <div className="explorer-header__title">
           <p className="text-title text-sm">Explorer</p>
@@ -264,261 +251,328 @@ export function ExplorerPanel() {
             >
               <Plus className="size-3.5" />
             </TooltipIconButton>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 text-muted-foreground"
+                  aria-label="Import / export"
+                >
+                  <MoreHorizontal className="size-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem onClick={() => importRef.current?.click()}>
+                  <Upload className="size-3.5" />
+                  Import
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => downloadJson(exportCollections(), "pulse-collections.json")}
+                >
+                  <Download className="size-3.5" />
+                  Export all
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <TooltipIconButton
-              variant="outline"
-              size="sm"
-              className="h-7 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
+              variant="ghost"
+              size="icon"
+              className="size-7 text-muted-foreground hover:text-foreground"
               label="Hide explorer (⌘B)"
               onClick={toggleExplorerCollapsed}
             >
               <PanelLeftClose className="size-3.5" />
-              <span className="hidden sm:inline">Hide</span>
             </TooltipIconButton>
+            <input
+              ref={importRef}
+              type="file"
+              accept="application/json,.json,.yaml,.yml"
+              hidden
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                void file.text().then(importCollections);
+                event.target.value = "";
+              }}
+            />
           </div>
         </div>
 
-        <div className="explorer-env-card">
-          <EnvironmentSwitcher
-            mode="workspace"
-            environments={environments}
-            workspaceEnvironmentId={activeEnvironmentId}
-            workspaceEnvironment={workspaceEnvironment}
-            requestEnvironment={activeEnvironment}
-            onSetWorkspace={setActiveEnvironmentId}
-            onAddEnvironment={addEnvironment}
-            onManageEnvironments={() => setMainView("environments")}
-            compact
-            className="w-full max-w-none border-0 bg-transparent shadow-none"
-          />
-        </div>
+        <EnvironmentSwitcher
+          mode="workspace"
+          environments={environments}
+          workspaceEnvironmentId={activeEnvironmentId}
+          workspaceEnvironment={workspaceEnvironment}
+          requestEnvironment={activeEnvironment}
+          onSetWorkspace={setActiveEnvironmentId}
+          onAddEnvironment={addEnvironment}
+          onManageEnvironments={() => setMainView("environments")}
+          compact
+          className="w-full max-w-none"
+        />
 
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={sidebarSearch}
             onChange={(event) => setSidebarSearch(event.target.value)}
-            className="h-8 border-sidebar-border/80 bg-background/70 pl-8 text-[13px] shadow-none focus-visible:bg-background"
-            placeholder="Search collections & history…"
+            className="h-8 border-sidebar-border/80 bg-background/70 pl-8 pr-8 text-[13px] shadow-none focus-visible:bg-background"
+            placeholder="Search requests & history…"
           />
+          {sidebarSearch && (
+            <button
+              type="button"
+              className="absolute right-1.5 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+              aria-label="Clear search"
+              onClick={() => setSidebarSearch("")}
+            >
+              <X className="size-3" />
+            </button>
+          )}
         </div>
       </div>
 
-      <ScrollAreaWithTop className="min-h-0 flex-1" resetKey={sidebarSearch}>
-        <div className="space-y-1 p-2">
-          <Collapsible open={collectionsOpen} onOpenChange={setCollectionsOpen}>
-            <div className="explorer-section-header">
-              <CollapsibleTrigger asChild>
-                <button type="button" className="explorer-section-trigger">
-                  {collectionsOpen ? (
-                    <ChevronDown className="size-3.5 shrink-0" />
-                  ) : (
-                    <ChevronRight className="size-3.5 shrink-0" />
-                  )}
-                  Collections
-                  <span className="explorer-count-badge">{collectionGroups.length}</span>
-                </button>
-              </CollapsibleTrigger>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-7 shrink-0 text-muted-foreground"
-                    aria-label="Collection actions"
-                  >
-                    <MoreHorizontal className="size-3.5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-44">
-                  <DropdownMenuItem onClick={() => importRef.current?.click()}>
-                    <Upload className="size-3.5" />
-                    Import
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => downloadJson(exportCollections(), "pulse-collections.json")}
-                  >
-                    <Download className="size-3.5" />
-                    Export all
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <input
-                ref={importRef}
-                type="file"
-                accept="application/json,.json,.yaml,.yml"
-                hidden
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (!file) return;
-                  void file.text().then(importCollections);
-                  event.target.value = "";
-                }}
+      {preview ? (
+        <RequestPreviewPanel
+          target={preview}
+          onClose={() => setPreview(null)}
+          onOpen={openFromPreview}
+        />
+      ) : (
+        <ScrollAreaWithTop
+          className="min-h-0 flex-1"
+          resetKey={`${sidebarSearch}:${isSearching ? "search" : "browse"}`}
+        >
+          <div className="min-w-0 space-y-3 p-2 pb-3">
+            {isSearching ? (
+              <SearchResults
+                collections={filteredCollections}
+                collectionGroups={collectionGroups}
+                historyEntries={historyEntries}
+                activeSignature={activeSignature}
+                onOpenCollection={loadSavedRequest}
+                onOpenHistory={loadHistoryEntry}
+                onPreview={openPreview}
               />
-            </div>
-            <CollapsibleContent className="explorer-tree-nested space-y-0.5">
-              {collectionGroups.map((group) => {
-                const items = requestsForCollection(filteredCollections, group.id);
-                const grouped = groupRequestsByFolder(items, group.folders);
-                const open = openCollections[group.id] ?? true;
-
-                return (
-                  <Collapsible
-                    key={group.id}
-                    open={open}
-                    onOpenChange={(value) =>
-                      setOpenCollections((current) => ({ ...current, [group.id]: value }))
-                    }
-                  >
-                    <div className="explorer-collection-row group/collection">
+            ) : (
+              <>
+                <section>
+                  <Collapsible open={collectionsOpen} onOpenChange={setCollectionsOpen}>
+                    <div className="explorer-section-header">
                       <CollapsibleTrigger asChild>
-                        <button type="button" className="explorer-tree-row min-w-0 flex-1 font-medium">
-                          {open ? (
-                            <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+                        <button type="button" className="explorer-section-trigger">
+                          {collectionsOpen ? (
+                            <ChevronDown className="size-3.5 shrink-0" />
                           ) : (
-                            <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+                            <ChevronRight className="size-3.5 shrink-0" />
                           )}
-                          <span className="min-w-0 flex-1 truncate text-left">{group.name}</span>
-                          <span className="explorer-count-badge">{items.length}</span>
+                          Collections
+                          <span className="explorer-count-badge">{collectionGroups.length}</span>
+                        </button>
+                      </CollapsibleTrigger>
+                    </div>
+                    <CollapsibleContent className="mt-0.5 space-y-0.5">
+                      {collectionGroups.map((group) => {
+                        const items = requestsForCollection(filteredCollections, group.id);
+                        const grouped = groupRequestsByFolder(items, group.folders);
+                        const open = openCollections[group.id] ?? true;
+
+                        return (
+                          <Collapsible
+                            key={group.id}
+                            open={open}
+                            onOpenChange={(value) =>
+                              setOpenCollections((current) => ({ ...current, [group.id]: value }))
+                            }
+                          >
+                            <div className="explorer-collection-row group/collection">
+                              <CollapsibleTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="explorer-tree-row min-w-0 flex-1 font-medium"
+                                >
+                                  {open ? (
+                                    <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+                                  ) : (
+                                    <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+                                  )}
+                                  <span className="min-w-0 flex-1 truncate text-left">
+                                    {group.name}
+                                  </span>
+                                  <span className="explorer-count-badge">{items.length}</span>
+                                </button>
+                              </CollapsibleTrigger>
+                              <TooltipIconButton
+                                variant="ghost"
+                                size="icon"
+                                className="explorer-action-btn"
+                                label="Run collection"
+                                disabled={items.length === 0 || runningCollectionId !== null}
+                                onClick={() => void handleRunCollection(group.id, group.name)}
+                              >
+                                {runningCollectionId === group.id ? (
+                                  <LoaderCircle className="size-3.5 animate-spin" />
+                                ) : (
+                                  <Play className="size-3.5" />
+                                )}
+                              </TooltipIconButton>
+                              <AddFolderMenu
+                                collectionId={group.id}
+                                collectionName={group.name}
+                                folders={group.folders}
+                                trigger={
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="explorer-action-btn"
+                                    title="Add folder"
+                                    aria-label="Add folder"
+                                    onClick={(event) => event.stopPropagation()}
+                                  >
+                                    <FolderPlus className="size-3.5" />
+                                  </Button>
+                                }
+                              />
+                              <CollectionActionsMenu
+                                collectionId={group.id}
+                                collectionName={group.name}
+                                exportCollection={exportCollection}
+                              />
+                            </div>
+                            <CollapsibleContent className="explorer-tree-nested space-y-0.5">
+                              {grouped.folders.map((folder) => (
+                                <FolderBranch
+                                  key={folder.path}
+                                  folder={folder}
+                                  collectionId={group.id}
+                                  collectionName={group.name}
+                                  folders={group.folders}
+                                  onOpen={loadSavedRequest}
+                                  onPreview={(item) =>
+                                    openPreview({ kind: "collection", item })
+                                  }
+                                  onDuplicate={duplicateSavedRequest}
+                                  onDelete={(id, name) =>
+                                    setPendingDelete({ kind: "request", id, name })
+                                  }
+                                  onDeleteFolder={(folderPath) =>
+                                    setPendingDelete({
+                                      kind: "folder",
+                                      collectionId: group.id,
+                                      path: folderPath,
+                                    })
+                                  }
+                                  onMove={(id, targetFolder) =>
+                                    moveSavedRequest(id, group.id, targetFolder)
+                                  }
+                                  activeSignature={activeSignature}
+                                />
+                              ))}
+                              {grouped.root.map((item) => (
+                                <CollectionItem
+                                  key={item.id}
+                                  item={item}
+                                  folders={group.folders}
+                                  selected={requestSignature(item.request) === activeSignature}
+                                  onOpen={() => loadSavedRequest(item)}
+                                  onPreview={() => openPreview({ kind: "collection", item })}
+                                  onDuplicate={() => duplicateSavedRequest(item.id)}
+                                  onDelete={() =>
+                                    setPendingDelete({
+                                      kind: "request",
+                                      id: item.id,
+                                      name: item.name,
+                                    })
+                                  }
+                                  onMove={(targetFolder) =>
+                                    moveSavedRequest(item.id, group.id, targetFolder)
+                                  }
+                                />
+                              ))}
+                              {items.length === 0 && grouped.folders.length === 0 && (
+                                <p className="px-2 py-1.5 text-[11px] text-muted-foreground">
+                                  No requests
+                                </p>
+                              )}
+                            </CollapsibleContent>
+                          </Collapsible>
+                        );
+                      })}
+                      {collectionGroups.length === 0 && (
+                        <p className="px-2 py-1.5 text-[11px] text-muted-foreground">
+                          No collections yet
+                        </p>
+                      )}
+                    </CollapsibleContent>
+                  </Collapsible>
+                </section>
+
+                <section>
+                  <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
+                    <div className="explorer-section-header">
+                      <CollapsibleTrigger asChild>
+                        <button type="button" className="explorer-section-trigger min-w-0 flex-1">
+                          {historyOpen ? (
+                            <ChevronDown className="size-3.5 shrink-0" />
+                          ) : (
+                            <ChevronRight className="size-3.5 shrink-0" />
+                          )}
+                          <History className="size-3 shrink-0 opacity-70" />
+                          History
+                          {historyCount > 0 && (
+                            <span className="explorer-count-badge">{historyCount}</span>
+                          )}
                         </button>
                       </CollapsibleTrigger>
                       <TooltipIconButton
                         variant="ghost"
                         size="icon"
-                        className="explorer-action-btn"
-                        label="Run collection"
-                        disabled={items.length === 0 || runningCollectionId !== null}
-                        onClick={() => void handleRunCollection(group.id, group.name)}
+                        className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
+                        label="Clear history"
+                        disabled={historyCount === 0}
+                        onClick={() => setClearHistoryOpen(true)}
                       >
-                        {runningCollectionId === group.id ? (
-                          <LoaderCircle className="size-3.5 animate-spin" />
-                        ) : (
-                          <Play className="size-3.5" />
-                        )}
+                        <Trash2 className="size-3.5" />
                       </TooltipIconButton>
-                      <AddFolderMenu
-                        collectionId={group.id}
-                        collectionName={group.name}
-                        folders={group.folders}
-                        trigger={
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="explorer-action-btn"
-                            title="Add folder"
-                            aria-label="Add folder"
-                            onClick={(event) => event.stopPropagation()}
-                          >
-                            <FolderPlus className="size-3.5" />
-                          </Button>
-                        }
-                      />
-                      <CollectionActionsMenu
-                        collectionId={group.id}
-                        collectionName={group.name}
-                        exportCollection={exportCollection}
-                      />
                     </div>
-                    <CollapsibleContent className="explorer-tree-nested space-y-0.5">
-                      {grouped.folders.map((folder) => (
-                        <FolderBranch
-                          key={folder.path}
-                          folder={folder}
-                          collectionId={group.id}
-                          collectionName={group.name}
-                          folders={group.folders}
-                          onOpen={loadSavedRequest}
-                          onDuplicate={duplicateSavedRequest}
-                          onDelete={deleteSavedRequest}
-                          onDeleteFolder={(folderPath) => deleteFolder(group.id, folderPath)}
-                          onMove={(id, targetFolder) => moveSavedRequest(id, group.id, targetFolder)}
-                          activeSignature={activeSignature}
+                    <CollapsibleContent className="mt-0.5 space-y-0.5">
+                      {historyEntries.map((entry) => (
+                        <HistoryRow
+                          key={entry.id}
+                          entry={entry}
+                          active={requestSignature(entry.request) === activeSignature}
+                          onClick={() => loadHistoryEntry(entry)}
+                          onPreview={() => openPreview({ kind: "history", entry })}
                         />
                       ))}
-                      {grouped.root.map((item) => (
-                        <CollectionItem
-                          key={item.id}
-                          item={item}
-                          folders={group.folders}
-                          selected={requestSignature(item.request) === activeSignature}
-                          onOpen={() => loadSavedRequest(item)}
-                          onDuplicate={() => duplicateSavedRequest(item.id)}
-                          onDelete={() => deleteSavedRequest(item.id)}
-                          onMove={(targetFolder) => moveSavedRequest(item.id, group.id, targetFolder)}
-                        />
-                      ))}
-                      {items.length === 0 && (
-                        <p className="px-3 py-2 text-xs text-muted-foreground">No requests</p>
+                      {historyEntries.length === 0 && (
+                        <p className="px-2 py-1.5 text-[11px] text-muted-foreground">
+                          No history yet
+                        </p>
+                      )}
+                      {historyHasMore && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="mt-1 h-7 w-full text-xs text-muted-foreground"
+                          disabled={historyLoadingMore}
+                          onClick={() => void loadMoreHistory()}
+                        >
+                          {historyLoadingMore ? "Loading…" : "Load more"}
+                        </Button>
                       )}
                     </CollapsibleContent>
                   </Collapsible>
-                );
-              })}
-              {collectionGroups.length === 0 && (
-                <p className="px-3 py-2 text-xs text-muted-foreground">No collections yet</p>
-              )}
-            </CollapsibleContent>
-          </Collapsible>
-
-          <div className="mx-2 my-1.5 h-px bg-border/50" />
-
-          <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
-            <div className="explorer-section-header">
-              <CollapsibleTrigger asChild>
-                <button type="button" className="explorer-section-trigger min-w-0 flex-1">
-                  {historyOpen ? (
-                    <ChevronDown className="size-3.5 shrink-0" />
-                  ) : (
-                    <ChevronRight className="size-3.5 shrink-0" />
-                  )}
-                  <History className="size-3.5 shrink-0" />
-                  <span>History</span>
-                  {historyCount > 0 && <span className="explorer-count-badge">{historyCount}</span>}
-                </button>
-              </CollapsibleTrigger>
-              <TooltipIconButton
-                variant="ghost"
-                size="icon"
-                className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
-                label="Clear history"
-                disabled={historyCount === 0}
-                onClick={() => {
-                  clearHistory();
-                  toast.success("History cleared");
-                }}
-              >
-                <Trash2 className="size-3.5" />
-              </TooltipIconButton>
-            </div>
-            <CollapsibleContent className="space-y-0.5 px-1.5 pb-1">
-              {historyEntries.map((entry) => (
-                <HistoryRow
-                  key={entry.id}
-                  entry={entry}
-                  active={requestSignature(entry.request) === activeSignature}
-                  onClick={() => loadHistoryEntry(entry)}
-                />
-              ))}
-              {historyEntries.length === 0 && (
-                <p className="px-3 py-2 text-xs text-muted-foreground">No history yet</p>
-              )}
-              {historyHasMore && !debouncedSidebarSearch.trim() && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="mx-1 mt-1 h-7 w-[calc(100%-0.5rem)] text-xs text-muted-foreground"
-                  disabled={historyLoadingMore}
-                  onClick={() => void loadMoreHistory()}
-                >
-                  {historyLoadingMore ? "Loading…" : "Load more"}
-                </Button>
-              )}
-            </CollapsibleContent>
-          </Collapsible>
-        </div>
-      </ScrollAreaWithTop>
+                </section>
+              </>
+            )}
+          </div>
+        </ScrollAreaWithTop>
+      )}
 
       {(runProgress || collectionRun) && (
         <div className="shrink-0 border-t border-sidebar-border bg-sidebar/90 px-3 py-2 text-[12px] text-muted-foreground">
@@ -547,7 +601,263 @@ export function ExplorerPanel() {
         />
       )}
 
+      <ConfirmDialog
+        open={clearHistoryOpen}
+        onOpenChange={setClearHistoryOpen}
+        title="Clear history?"
+        description={
+          historyCount === 1
+            ? "This will permanently remove 1 history entry."
+            : `This will permanently remove ${historyCount} history entries.`
+        }
+        confirmLabel="Clear history"
+        onConfirm={() => {
+          clearHistory();
+          toast.success("History cleared");
+        }}
+      />
+
+      <ConfirmDialog
+        open={pendingDelete?.kind === "request"}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null);
+        }}
+        title="Delete request?"
+        description={
+          pendingDelete?.kind === "request"
+            ? `“${pendingDelete.name}” will be removed from this collection.`
+            : "This request will be removed from the collection."
+        }
+        confirmLabel="Delete"
+        onConfirm={() => {
+          if (pendingDelete?.kind === "request") {
+            deleteSavedRequest(pendingDelete.id);
+            toast.success("Request deleted", pendingDelete.name);
+          }
+          setPendingDelete(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={pendingDelete?.kind === "folder"}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null);
+        }}
+        title="Delete folder?"
+        description={
+          pendingDelete?.kind === "folder"
+            ? `Empty folder “${pendingDelete.path}” will be removed.`
+            : "This folder will be removed."
+        }
+        confirmLabel="Delete"
+        onConfirm={() => {
+          if (pendingDelete?.kind === "folder") {
+            deleteFolder(pendingDelete.collectionId, pendingDelete.path);
+            toast.success("Folder deleted", pendingDelete.path);
+          }
+          setPendingDelete(null);
+        }}
+      />
     </aside>
+  );
+}
+
+function SearchResults({
+  collections,
+  collectionGroups,
+  historyEntries,
+  activeSignature,
+  onOpenCollection,
+  onOpenHistory,
+  onPreview,
+}: {
+  collections: SavedRequest[];
+  collectionGroups: Array<{ id: string; name: string }>;
+  historyEntries: HistoryEntry[];
+  activeSignature: string;
+  onOpenCollection: (item: SavedRequest) => void;
+  onOpenHistory: (entry: HistoryEntry) => void;
+  onPreview: (target: PreviewTarget) => void;
+}) {
+  const groupName = (collectionId: string) =>
+    collectionGroups.find((g) => g.id === collectionId)?.name ?? "Collection";
+
+  const empty = collections.length === 0 && historyEntries.length === 0;
+
+  if (empty) {
+    return (
+      <p className="px-2 py-6 text-center text-[12px] text-muted-foreground">
+        No matches. Try a method, path, or request name.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {collections.length > 0 && (
+        <section className="space-y-0.5">
+          <p className="explorer-section-label">
+            Collections
+            <span className="explorer-count-badge ml-1.5">{collections.length}</span>
+          </p>
+          {collections.map((item) => {
+            const { title, host } = shortUrlParts(item.request.url);
+            const name = requestDisplayName(item.request) ?? item.name;
+            return (
+              <ResultRow
+                key={item.id}
+                method={item.request.method}
+                title={name}
+                subtitle={[groupName(item.collectionId), item.folder, host || title]
+                  .filter(Boolean)
+                  .join(" · ")}
+                active={requestSignature(item.request) === activeSignature}
+                onOpen={() => onOpenCollection(item)}
+                onPreview={() => onPreview({ kind: "collection", item })}
+              />
+            );
+          })}
+        </section>
+      )}
+
+      {historyEntries.length > 0 && (
+        <section className="space-y-0.5">
+          <p className="explorer-section-label">
+            History
+            <span className="explorer-count-badge ml-1.5">{historyEntries.length}</span>
+          </p>
+          {historyEntries.map((entry) => {
+            const name = requestDisplayName(entry.request);
+            const { title, host } = shortUrlParts(entry.request.url);
+            return (
+              <ResultRow
+                key={entry.id}
+                method={entry.request.method}
+                title={name ?? title}
+                subtitle={[host, entry.response ? `${entry.response.status}` : null, relativeTime(entry.sentAt)]
+                  .filter(Boolean)
+                  .join(" · ")}
+                status={entry.response?.status}
+                active={requestSignature(entry.request) === activeSignature}
+                onOpen={() => onOpenHistory(entry)}
+                onPreview={() => onPreview({ kind: "history", entry })}
+              />
+            );
+          })}
+        </section>
+      )}
+    </div>
+  );
+}
+
+function ResultRow({
+  method,
+  title,
+  subtitle,
+  status,
+  active,
+  onOpen,
+  onPreview,
+}: {
+  method: string;
+  title: string;
+  subtitle: string;
+  status?: number;
+  active: boolean;
+  onOpen: () => void;
+  onPreview: () => void;
+}) {
+  return (
+    <div className={cn("explorer-row group/item", active && "explorer-row--active")}>
+      <button type="button" className="explorer-row__main" onClick={onOpen}>
+        <span className={cn("explorer-method", methodTextClass(method))}>
+          {methodShortLabel(method)}
+        </span>
+        <span className="min-w-0 flex-1 overflow-hidden">
+          <span className="block truncate text-[13px] font-medium text-foreground/90">{title}</span>
+          <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{subtitle}</span>
+        </span>
+        {status !== undefined && (
+          <span
+            className={cn(
+              "shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-semibold",
+              statusBadgeClass(status),
+            )}
+          >
+            {status}
+          </span>
+        )}
+      </button>
+      <TooltipIconButton
+        variant="ghost"
+        size="icon"
+        className="explorer-row__preview"
+        label="View details"
+        onClick={(e) => {
+          e.stopPropagation();
+          onPreview();
+        }}
+      >
+        <Eye className="size-3.5" />
+      </TooltipIconButton>
+    </div>
+  );
+}
+
+function HistoryRow({
+  entry,
+  active,
+  onClick,
+  onPreview,
+}: {
+  entry: HistoryEntry;
+  active: boolean;
+  onClick: () => void;
+  onPreview?: () => void;
+}) {
+  const name = requestDisplayName(entry.request);
+  const { title, host, hasQuery } = shortUrlParts(entry.request.url);
+  const primary = name ?? title;
+  const secondary = [host, hasQuery ? "query" : null, entry.response ? `${entry.response.elapsedMs} ms` : null, relativeTime(entry.sentAt)]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <div className={cn("explorer-row group/item", active && "explorer-row--active")}>
+      <button type="button" className="explorer-row__main" onClick={onClick}>
+        <span className={cn("explorer-method", methodTextClass(entry.request.method))}>
+          {methodShortLabel(entry.request.method)}
+        </span>
+        <span className="min-w-0 flex-1 overflow-hidden">
+          <span className="block truncate text-[13px] font-medium text-foreground/90">{primary}</span>
+          <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{secondary}</span>
+        </span>
+        {entry.response && (
+          <span
+            className={cn(
+              "shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-semibold",
+              statusBadgeClass(entry.response.status),
+            )}
+          >
+            {entry.response.status}
+          </span>
+        )}
+      </button>
+      {onPreview && (
+        <TooltipIconButton
+          variant="ghost"
+          size="icon"
+          className="explorer-row__preview"
+          label="View details"
+          onClick={(e) => {
+            e.stopPropagation();
+            onPreview();
+          }}
+        >
+          <Eye className="size-3.5" />
+        </TooltipIconButton>
+      )}
+    </div>
   );
 }
 
@@ -614,6 +924,7 @@ function FolderBranch({
   folders,
   activeSignature,
   onOpen,
+  onPreview,
   onDuplicate,
   onDelete,
   onDeleteFolder,
@@ -625,8 +936,9 @@ function FolderBranch({
   folders: string[];
   activeSignature: string;
   onOpen: (item: SavedRequest) => void;
+  onPreview?: (item: SavedRequest) => void;
   onDuplicate: (id: string) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string, name: string) => void;
   onDeleteFolder: (folderPath: string) => void;
   onMove: (id: string, folder?: string) => void;
 }) {
@@ -635,15 +947,19 @@ function FolderBranch({
 
   return (
     <div className="space-y-0.5">
-      <div className="group/folder flex items-center gap-0.5 rounded-md pr-0.5 hover:bg-sidebar-accent/50">
+      <div className="group/folder flex items-center gap-0.5 rounded-md">
         <button
           type="button"
           className="explorer-tree-row min-w-0 flex-1 text-muted-foreground"
           onClick={() => setOpen((value) => !value)}
         >
-          {open ? <ChevronDown className="size-3.5 shrink-0" /> : <ChevronRight className="size-3.5 shrink-0" />}
+          {open ? (
+            <ChevronDown className="size-3.5 shrink-0" />
+          ) : (
+            <ChevronRight className="size-3.5 shrink-0" />
+          )}
           <Folder className="size-3.5 shrink-0 text-primary/70" />
-          <span className="truncate">{folder.name}</span>
+          <span className="min-w-0 flex-1 truncate text-left">{folder.name}</span>
           {isEmpty && <span className="explorer-count-badge">Empty</span>}
         </button>
         <AddFolderMenu
@@ -689,8 +1005,9 @@ function FolderBranch({
               folders={folders}
               selected={requestSignature(item.request) === activeSignature}
               onOpen={() => onOpen(item)}
+              onPreview={onPreview ? () => onPreview(item) : undefined}
               onDuplicate={() => onDuplicate(item.id)}
-              onDelete={() => onDelete(item.id)}
+              onDelete={() => onDelete(item.id, item.name)}
               onMove={(targetFolder) => onMove(item.id, targetFolder)}
             />
           ))}
@@ -703,6 +1020,7 @@ function FolderBranch({
               folders={folders}
               activeSignature={activeSignature}
               onOpen={onOpen}
+              onPreview={onPreview}
               onDuplicate={onDuplicate}
               onDelete={onDelete}
               onDeleteFolder={onDeleteFolder}
@@ -720,6 +1038,7 @@ function CollectionItem({
   folders,
   selected,
   onOpen,
+  onPreview,
   onDuplicate,
   onDelete,
   onMove,
@@ -728,18 +1047,21 @@ function CollectionItem({
   folders: string[];
   selected?: boolean;
   onOpen: () => void;
+  onPreview?: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
   onMove: (folder?: string) => void;
 }) {
   return (
-    <div className="group/item flex items-center gap-0.5 rounded-md pr-0.5 hover:bg-sidebar-accent/50">
+    <div className="group/item flex items-center gap-0.5 rounded-md">
       <button
         type="button"
         className={cn("explorer-tree-row min-w-0 flex-1", selected && "explorer-tree-row--active")}
         onClick={onOpen}
       >
-        <MethodBadge method={item.request.method} />
+        <span className={cn("explorer-method", methodTextClass(item.request.method))}>
+          {methodShortLabel(item.request.method)}
+        </span>
         <span className="truncate text-foreground/90">{item.name}</span>
       </button>
       <DropdownMenu>
@@ -756,6 +1078,15 @@ function CollectionItem({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
+          {onPreview && (
+            <>
+              <DropdownMenuItem onClick={onPreview}>
+                <Eye className="size-3.5" />
+                View details
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </>
+          )}
           <DropdownMenuLabel>Move to folder</DropdownMenuLabel>
           <DropdownMenuItem onClick={() => onMove(undefined)}>No folder</DropdownMenuItem>
           {folders.length > 0 && <DropdownMenuSeparator />}
@@ -775,6 +1106,176 @@ function CollectionItem({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+    </div>
+  );
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function PreviewSection({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+        {label}
+      </p>
+      <div className="rounded-md border border-border/50 bg-background/40 p-2.5">{children}</div>
+    </div>
+  );
+}
+
+function RequestPreviewPanel({
+  target,
+  onClose,
+  onOpen,
+}: {
+  target: PreviewTarget;
+  onClose: () => void;
+  onOpen: () => void;
+}) {
+  const req = target.kind === "collection" ? target.item.request : target.entry.request;
+  const response = target.kind === "history" ? target.entry.response : null;
+  const displayName = requestDisplayName(req);
+  const enabledHeaders = req.headers.filter((h) => h.enabled && h.key);
+  const enabledQuery = req.query.filter((q) => q.enabled && q.key);
+  const hasBody = req.bodyKind !== "none";
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-sidebar-border px-2 py-1.5">
+        <button
+          type="button"
+          className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+          onClick={onClose}
+        >
+          <ArrowLeft className="size-3.5" />
+          Back
+        </button>
+        <span className="min-w-0 flex-1 truncate text-center text-[12px] font-medium text-foreground/60">
+          {displayName ?? "Request detail"}
+        </span>
+        <Button type="button" size="sm" className="h-7 gap-1.5 px-3 text-[12px]" onClick={onOpen}>
+          <ExternalLink className="size-3" />
+          Open
+        </Button>
+      </div>
+
+      <ScrollAreaWithTop
+        className="min-h-0 flex-1"
+        resetKey={target.kind === "collection" ? target.item.id : target.entry.id}
+      >
+        <div className="space-y-3 p-3">
+          <div className="space-y-1.5">
+            {displayName && (
+              <p className="text-[13px] font-semibold text-foreground">{displayName}</p>
+            )}
+            <div className="flex min-w-0 items-start gap-2">
+              <MethodBadge method={req.method} />
+              <p className="min-w-0 break-all font-mono text-[11px] leading-relaxed text-muted-foreground">
+                {req.url || <span className="italic opacity-50">No URL set</span>}
+              </p>
+            </div>
+          </div>
+
+          {response && (
+            <PreviewSection label="Last response">
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={cn(
+                    "rounded px-1.5 py-0.5 font-mono text-[11px] font-semibold",
+                    statusBadgeClass(response.status),
+                  )}
+                >
+                  {response.status}
+                </span>
+                <span className="text-[11px] text-muted-foreground">{response.elapsedMs} ms</span>
+                <span className="text-[11px] text-muted-foreground">
+                  {formatBytes(response.sizeBytes)}
+                </span>
+              </div>
+            </PreviewSection>
+          )}
+
+          {req.auth.authType !== "none" && (
+            <PreviewSection label="Auth">
+              <p className="text-[12px] capitalize text-foreground/80">{req.auth.authType}</p>
+            </PreviewSection>
+          )}
+
+          {enabledHeaders.length > 0 && (
+            <PreviewSection label={`Headers · ${enabledHeaders.length}`}>
+              <div className="space-y-1.5">
+                {enabledHeaders.slice(0, 10).map((h) => (
+                  <div key={h.id} className="flex min-w-0 gap-1.5 font-mono text-[11px]">
+                    <span className="shrink-0 font-medium text-foreground/80">{h.key}:</span>
+                    <span className="min-w-0 break-all text-muted-foreground">
+                      {h.value || <span className="italic opacity-40">empty</span>}
+                    </span>
+                  </div>
+                ))}
+                {enabledHeaders.length > 10 && (
+                  <p className="text-[11px] italic text-muted-foreground">
+                    +{enabledHeaders.length - 10} more
+                  </p>
+                )}
+              </div>
+            </PreviewSection>
+          )}
+
+          {enabledQuery.length > 0 && (
+            <PreviewSection label={`Query params · ${enabledQuery.length}`}>
+              <div className="space-y-1.5">
+                {enabledQuery.map((q) => (
+                  <div key={q.id} className="flex min-w-0 gap-1.5 font-mono text-[11px]">
+                    <span className="shrink-0 font-medium text-foreground/80">{q.key}:</span>
+                    <span className="min-w-0 break-all text-muted-foreground">
+                      {q.value || <span className="italic opacity-40">empty</span>}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </PreviewSection>
+          )}
+
+          {hasBody && (
+            <PreviewSection label={`Body · ${req.bodyKind}`}>
+              {req.body ? (
+                <pre className="min-w-0 overflow-hidden whitespace-pre-wrap break-all font-mono text-[10px] leading-relaxed text-muted-foreground">
+                  {req.body.slice(0, 400)}
+                  {req.body.length > 400 && (
+                    <span className="italic opacity-50">… ({req.body.length - 400} more chars)</span>
+                  )}
+                </pre>
+              ) : (
+                <p className="text-[11px] italic text-muted-foreground opacity-50">Empty body</p>
+              )}
+            </PreviewSection>
+          )}
+
+          {target.kind === "collection" && (
+            <PreviewSection label="Collection">
+              <p className="text-[12px] text-foreground/80">
+                {target.item.folder ? (
+                  <span className="text-muted-foreground">{target.item.folder} / </span>
+                ) : null}
+                <span className="font-medium">{target.item.name}</span>
+              </p>
+            </PreviewSection>
+          )}
+
+          {target.kind === "history" && (
+            <PreviewSection label="Sent">
+              <p className="text-[12px] text-foreground/80">
+                {new Date(target.entry.sentAt).toLocaleString()} ·{" "}
+                <span className="text-muted-foreground">{relativeTime(target.entry.sentAt)}</span>
+              </p>
+            </PreviewSection>
+          )}
+        </div>
+      </ScrollAreaWithTop>
     </div>
   );
 }
