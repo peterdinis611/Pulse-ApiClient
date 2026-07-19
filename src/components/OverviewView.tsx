@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Clock3, MoreHorizontal, Search } from "lucide-react";
+import { Clock3, LoaderCircle, MoreHorizontal, Search } from "lucide-react";
 import { useApp } from "@/machines";
 import { useHistory } from "@/hooks/useHistory";
 import {
   buildOverviewItems,
+  filterHistoryEntries,
   filterOverviewItems,
   filterOverviewItemsAsync,
   isOverviewFilterDefault,
@@ -13,7 +14,7 @@ import {
   listHistoryPage,
   searchHistoryEntries,
 } from "@/lib/history-client";
-import { useDebouncedValue } from "@/lib/use-debounced-search";
+import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import type { HistoryEntry } from "@/types";
 import { MethodBadge } from "@/components/MethodBadge";
 import { PageShell, PageToolbar } from "@/components/PageShell";
@@ -44,8 +45,10 @@ export function OverviewView() {
   const { totalCount: historyCount } = useHistory();
   const [overviewHistory, setOverviewHistory] = useState<HistoryEntry[]>([]);
   const [searchedHistory, setSearchedHistory] = useState<HistoryEntry[] | null>(null);
+  const [searching, setSearching] = useState(false);
 
-  const debouncedQuery = useDebouncedValue(overviewFilter.query);
+  const search = useDebouncedSearch(overviewFilter.query, { delayMs: 180 });
+  const debouncedQuery = search.debouncedValue;
   const loadHistoryEntryRef = useRef(loadHistoryEntry);
   const loadSavedRequestRef = useRef(loadSavedRequest);
 
@@ -66,23 +69,30 @@ export function OverviewView() {
     const query = debouncedQuery.trim();
     if (!query) {
       setSearchedHistory(null);
+      setSearching(false);
       return;
     }
 
     let cancelled = false;
-    const timeout = window.setTimeout(() => {
-      void searchHistoryEntries(query, HISTORY_OVERVIEW_LIMIT).then((results) => {
+    setSearching(true);
+    void searchHistoryEntries(query, HISTORY_OVERVIEW_LIMIT)
+      .then((results) => {
         if (!cancelled) setSearchedHistory(results);
+      })
+      .finally(() => {
+        if (!cancelled) setSearching(false);
       });
-    }, 180);
 
     return () => {
       cancelled = true;
-      window.clearTimeout(timeout);
     };
   }, [debouncedQuery]);
 
-  const historyForOverview = debouncedQuery.trim() ? searchedHistory ?? [] : overviewHistory;
+  const historyForOverview = useMemo(() => {
+    if (!search.query) return overviewHistory;
+    if (searchedHistory) return searchedHistory;
+    return filterHistoryEntries(overviewHistory, search.query);
+  }, [overviewHistory, search.query, searchedHistory]);
 
   const allItems = useMemo(
     () =>
@@ -96,9 +106,9 @@ export function OverviewView() {
   const activeFilter = useMemo(
     () => ({
       ...overviewFilter,
-      query: debouncedQuery,
+      query: search.query,
     }),
-    [overviewFilter, debouncedQuery],
+    [overviewFilter, search.query],
   );
 
   const filteredItemsSync = useMemo(
@@ -111,20 +121,21 @@ export function OverviewView() {
   );
 
   useEffect(() => {
-    if (!debouncedQuery.trim()) {
+    if (!search.debouncedQuery) {
       setAsyncFilteredItems(null);
       return;
     }
 
     let cancelled = false;
-    void filterOverviewItemsAsync(allItems, activeFilter).then((next) => {
+    const debouncedFilter = { ...overviewFilter, query: search.debouncedQuery };
+    void filterOverviewItemsAsync(allItems, debouncedFilter).then((next) => {
       if (!cancelled) setAsyncFilteredItems(next);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [allItems, activeFilter, debouncedQuery]);
+  }, [allItems, overviewFilter, search.debouncedQuery]);
 
   const filteredItems = asyncFilteredItems ?? filteredItemsSync;
   const recentItems = useMemo(() => filteredItems.slice(0, 20), [filteredItems]);
@@ -138,12 +149,17 @@ export function OverviewView() {
 
       <PageToolbar>
         <div className="relative min-w-[200px] flex-1 sm:max-w-sm">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          {search.isPending || searching ? (
+            <LoaderCircle className="absolute left-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+          ) : (
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          )}
           <Input
             className="h-9 pl-9"
             placeholder="Search requests, URLs, methods…"
             value={overviewFilter.query}
             onChange={(event) => setOverviewFilter({ query: event.target.value })}
+            aria-busy={search.isPending || searching}
           />
         </div>
         <OverviewFilterMenu totalCount={allItems.length} filteredCount={filteredItems.length} />

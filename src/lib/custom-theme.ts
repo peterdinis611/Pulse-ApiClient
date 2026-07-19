@@ -5,27 +5,45 @@ import { invokeEffect } from "./effect/tauri";
 import { runEffect } from "./effect/run";
 import { getAppSettingsEffect } from "./http-ipc";
 import { canUseTauriIpc } from "./tauri-runtime";
+import pulseThemeOverrideExample from "../../examples/pulse-theme-override.example.css?raw";
 
 export const CUSTOM_THEME_STYLE_ID = "pulse-custom-theme";
 const STORAGE_CONTENT_SUFFIX = "custom-theme-css";
 const STORAGE_PATH_SUFFIX = "custom-theme-css-path";
 
-export const CUSTOM_THEME_CSS_TEMPLATE = `/* Override Pulse theme variables (applied on top of your selected theme) */
+/** Full showcase CSS shipped at `examples/pulse-theme-override.example.css`. */
+export const CUSTOM_THEME_CSS_EXAMPLE = pulseThemeOverrideExample;
+
+export const CUSTOM_THEME_CSS_TEMPLATE = `/* ============================================================
+   Pulse custom theme overrides (short starter)
+   For a full showcase of every token + component hook, use
+   “Load example file” or open:
+   examples/pulse-theme-override.example.css
+   ============================================================ */
+
 :root {
   /* --primary: oklch(0.52 0.13 205); */
-  /* --radius: 0.5rem; */
+  /* --primary-foreground: oklch(0.99 0 0); */
+  /* --background: oklch(0.985 0.004 210); */
+  /* --foreground: oklch(0.2 0.015 210); */
+  /* --sidebar: oklch(0.982 0.004 218); */
+  /* --rail: oklch(0.976 0.005 218); */
+  /* --topbar: oklch(0.988 0.003 218); */
+  /* --success: oklch(0.5 0.13 155); */
+  /* --destructive: oklch(0.55 0.2 25); */
+  /* --method-get: oklch(0.48 0.13 155); */
+  /* --radius: 0.75rem; */
+  /* --font-mono: "IBM Plex Mono", ui-monospace, monospace; */
 }
 
-/* Target a specific theme, e.g. dark: */
 /* html[data-theme="dark"] {
+  --primary: oklch(0.72 0.12 195);
   --background: oklch(0.11 0.012 210);
   --sidebar: oklch(0.1 0.01 218);
 } */
 
-/* Component-level overrides: */
-/* .request-url-composite {
-  border-radius: 999px;
-} */
+/* .request-url-composite { border-radius: 999px; } */
+/* .explorer-row--active { border-left: 3px solid var(--primary); } */
 `;
 
 export function applyCustomThemeCss(css: string | null | undefined): void {

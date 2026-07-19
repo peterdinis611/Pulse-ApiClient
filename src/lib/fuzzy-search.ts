@@ -11,21 +11,36 @@ export type SearchDocument = {
 
 const defaultFuseOptions: IFuseOptions<SearchDocument> = {
   keys: [
-    { name: "title", weight: 0.42 },
-    { name: "subtitle", weight: 0.32 },
-    { name: "method", weight: 0.12 },
-    { name: "meta", weight: 0.1 },
-    { name: "keywords", weight: 0.04 },
+    { name: "title", weight: 0.4 },
+    { name: "subtitle", weight: 0.28 },
+    { name: "keywords", weight: 0.18 },
+    { name: "method", weight: 0.08 },
+    { name: "meta", weight: 0.06 },
   ],
-  threshold: 0.38,
+  threshold: 0.34,
   ignoreLocation: true,
   includeScore: true,
-  minMatchCharLength: 1,
-  distance: 120,
+  minMatchCharLength: 2,
+  distance: 160,
+  useExtendedSearch: false,
 };
 
 function normalizeQuery(query: string): string {
   return query.trim();
+}
+
+function urlKeywords(url: string): string {
+  const raw = url.trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw);
+    const segments = parsed.pathname.split("/").filter(Boolean);
+    const leaf = segments.length > 0 ? segments[segments.length - 1]! : "";
+    const params = [...parsed.searchParams.keys()].join(" ");
+    return [parsed.host, leaf, params, parsed.pathname].filter(Boolean).join(" ");
+  } catch {
+    return raw.replace(/^https?:\/\//, "");
+  }
 }
 
 function createFuseIndex<T extends SearchDocument>(items: T[], options?: IFuseOptions<T>) {
@@ -82,16 +97,17 @@ export function matchesFuzzyQuery(document: SearchDocument, query: string): bool
 export function toSavedRequestDocument(item: {
   id: string;
   name: string;
-  request: { url: string; method: string };
+  request: { url: string; method: string; name?: string };
   folder?: string;
 }): SearchDocument {
+  const urlKeys = urlKeywords(item.request.url);
   return {
     id: item.id,
-    title: item.name,
+    title: item.name || item.request.name || item.request.url,
     subtitle: item.request.url,
     method: item.request.method,
     meta: item.folder ?? "Collection",
-    keywords: item.folder ?? "",
+    keywords: [item.folder, urlKeys, item.request.method].filter(Boolean).join(" "),
   };
 }
 
@@ -100,6 +116,7 @@ export function toHistoryDocument(entry: {
   request: { name: string; url: string; method: string };
   response?: { status: number; elapsedMs: number } | null;
 }): SearchDocument {
+  const urlKeys = urlKeywords(entry.request.url);
   return {
     id: entry.id,
     title: entry.request.name || entry.request.url,
@@ -108,7 +125,13 @@ export function toHistoryDocument(entry: {
     meta: entry.response
       ? `${entry.response.status} ${entry.response.elapsedMs}ms`
       : "Not sent",
-    keywords: entry.response ? String(entry.response.status) : "",
+    keywords: [
+      urlKeys,
+      entry.response ? String(entry.response.status) : "",
+      entry.request.method,
+    ]
+      .filter(Boolean)
+      .join(" "),
   };
 }
 
@@ -126,6 +149,8 @@ export function toOverviewDocument(item: {
     subtitle: item.subtitle,
     method: item.method,
     meta: item.meta,
-    keywords: item.status != null ? String(item.status) : "",
+    keywords: [urlKeywords(item.subtitle), item.status != null ? String(item.status) : ""]
+      .filter(Boolean)
+      .join(" "),
   };
 }

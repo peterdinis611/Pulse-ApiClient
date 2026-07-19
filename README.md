@@ -65,3 +65,14 @@ bun run screenshots:readme
 - `src-tauri/src/history.rs` — SQLite request history
 - `src-tauri/src/lib.rs` — Tauri commands
 - `docs/screenshots/` — README screenshots
+- `examples/pulse-theme-override.example.css` — sample custom CSS (all theme tokens + UI hooks)
+
+## Custom theme CSS
+
+Settings → Appearance → Custom CSS can overlay any built-in theme.
+
+1. Click **Load example file** (or open `examples/pulse-theme-override.example.css`)
+2. Click **Apply CSS** to see a coral showcase theme
+3. Edit tokens / comment sections you do not need
+
+The example covers surfaces, chrome (sidebar/rail/topbar/console), status + method colors, fonts/radius, per-theme `html[data-theme="…"]` scopes, and component classes.

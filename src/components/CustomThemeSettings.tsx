@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FileCode2, FolderOpen, RefreshCw, Sparkles, Trash2 } from "lucide-react";
+import { BookOpen, FileCode2, FolderOpen, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import {
   applyCustomThemeFromBrowserFile,
   applyCustomThemeFromPath,
   clearCustomThemeCss,
+  CUSTOM_THEME_CSS_EXAMPLE,
   CUSTOM_THEME_CSS_TEMPLATE,
   getBrowserCustomThemePath,
   loadCustomThemeCssForEditor,
@@ -103,6 +104,16 @@ export function CustomThemeSettings() {
       return;
     }
     setCssContent(CUSTOM_THEME_CSS_TEMPLATE);
+  };
+
+  const handleInsertExample = () => {
+    if (
+      cssContent.trim() &&
+      !window.confirm("Replace current CSS with the full override example file?")
+    ) {
+      return;
+    }
+    setCssContent(CUSTOM_THEME_CSS_EXAMPLE);
   };
 
   const handleBrowse = async () => {
@@ -216,6 +227,16 @@ export function CustomThemeSettings() {
             </Button>
             <Button
               type="button"
+              variant="outline"
+              size="sm"
+              disabled={loading || busy}
+              onClick={handleInsertExample}
+            >
+              <BookOpen className="size-3.5" />
+              Load example file
+            </Button>
+            <Button
+              type="button"
               size="sm"
               disabled={loading || busy || !editorDirty}
               onClick={handleApplyEditor}
@@ -232,14 +253,16 @@ export function CustomThemeSettings() {
           spellCheck={false}
           disabled={loading || busy}
           placeholder={CUSTOM_THEME_CSS_TEMPLATE}
-          className="min-h-[220px] resize-y text-xs leading-relaxed"
+          className="min-h-[320px] resize-y font-mono text-xs leading-relaxed"
         />
 
         <p className="text-xs text-muted-foreground">
           Changes apply after you click <span className="font-medium text-foreground">Apply CSS</span>.
-          Use CSS variables like <code className="text-[11px]">--primary</code>,{" "}
-          <code className="text-[11px]">--background</code>, and{" "}
-          <code className="text-[11px]">--sidebar</code>.
+          Use <span className="font-medium text-foreground">Load example file</span> for a full demo
+          of tokens (primary, chrome, methods, fonts…) and component hooks (
+          <code className="text-[11px]">.request-url-composite</code>,{" "}
+          <code className="text-[11px]">.explorer-row--active</code>, …). Source:{" "}
+          <code className="text-[11px]">examples/pulse-theme-override.example.css</code>.
         </p>
       </div>
 

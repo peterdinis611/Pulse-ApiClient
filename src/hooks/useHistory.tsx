@@ -17,6 +17,7 @@ import {
   listHistoryPage,
   searchHistoryEntries,
 } from "@/lib/history-client";
+import { filterHistoryEntries } from "@/lib/filters";
 import { emitHistoryUpdated, listenHistoryUpdated } from "@/lib/history-sync";
 import { listenWorkspaceReset } from "@/lib/workspace-sync";
 import { canUseTauriIpc } from "@/lib/tauri-runtime";
@@ -28,6 +29,8 @@ type HistoryContextValue = {
   hasMore: boolean;
   loading: boolean;
   loadingMore: boolean;
+  /** True while remote/history DB search is in flight for the current query. */
+  searching: boolean;
   searchQuery: string;
   searchResults: HistoryEntry[] | null;
   refresh: () => Promise<void>;
@@ -40,6 +43,8 @@ type HistoryContextValue = {
 
 const HistoryContext = createContext<HistoryContextValue | null>(null);
 
+const REMOTE_SEARCH_DEBOUNCE_MS = 220;
+
 export function HistoryProvider({ children }: { children: ReactNode }) {
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -48,7 +53,10 @@ export function HistoryProvider({ children }: { children: ReactNode }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<HistoryEntry[] | null>(null);
+  const [searching, setSearching] = useState(false);
   const searchRequestId = useRef(0);
+  const entriesRef = useRef(entries);
+  entriesRef.current = entries;
 
   const refresh = useCallback(async () => {
     if (!canUseTauriIpc()) {
@@ -95,6 +103,7 @@ export function HistoryProvider({ children }: { children: ReactNode }) {
     setTotalCount(0);
     setHasMore(false);
     setSearchResults(null);
+    setSearching(false);
     const windowId = await getCurrentWindowLabel().catch(() => undefined);
     await emitHistoryUpdated(windowId);
   }, []);
@@ -104,7 +113,9 @@ export function HistoryProvider({ children }: { children: ReactNode }) {
       if (!canUseTauriIpc()) return;
 
       await appendHistoryEntry(entry);
-      setEntries((current) => [entry, ...current.filter((item) => item.id !== entry.id)].slice(0, HISTORY_PAGE_SIZE));
+      setEntries((current) =>
+        [entry, ...current.filter((item) => item.id !== entry.id)].slice(0, HISTORY_PAGE_SIZE),
+      );
       setTotalCount((current) => current + 1);
       setHasMore(totalCount + 1 > HISTORY_PAGE_SIZE);
       const windowId = await getCurrentWindowLabel().catch(() => undefined);
@@ -153,29 +164,56 @@ export function HistoryProvider({ children }: { children: ReactNode }) {
     };
   }, [refresh]);
 
+  // Instant fuse.js over loaded pages + debounced remote search for full DB.
   useEffect(() => {
     const trimmed = searchQuery.trim();
     if (!trimmed) {
+      searchRequestId.current += 1;
       setSearchResults(null);
+      setSearching(false);
+      return;
+    }
+
+    const local = filterHistoryEntries(entriesRef.current, trimmed);
+    setSearchResults(local);
+
+    if (!canUseTauriIpc()) {
+      setSearching(false);
       return;
     }
 
     const requestId = searchRequestId.current + 1;
     searchRequestId.current = requestId;
+    setSearching(true);
+
     const timeout = window.setTimeout(() => {
-      void searchHistoryEntries(trimmed).then((results) => {
-        if (searchRequestId.current !== requestId) return;
-        setSearchResults(results);
-      });
-    }, 180);
+      void searchHistoryEntries(trimmed)
+        .then((results) => {
+          if (searchRequestId.current !== requestId) return;
+          setSearchResults(results.length > 0 ? results : local);
+        })
+        .catch(() => {
+          if (searchRequestId.current !== requestId) return;
+          setSearchResults(local);
+        })
+        .finally(() => {
+          if (searchRequestId.current === requestId) {
+            setSearching(false);
+          }
+        });
+    }, REMOTE_SEARCH_DEBOUNCE_MS);
 
-    return () => window.clearTimeout(timeout);
-  }, [searchQuery]);
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [searchQuery]); // entries intentionally omitted — local fuse uses current page via visibleEntries fallback
 
-  const visibleEntries = useMemo(
-    () => (searchQuery.trim() ? searchResults ?? [] : entries),
-    [entries, searchQuery, searchResults],
-  );
+  const visibleEntries = useMemo(() => {
+    const trimmed = searchQuery.trim();
+    if (!trimmed) return entries;
+    if (searchResults !== null) return searchResults;
+    return filterHistoryEntries(entries, trimmed);
+  }, [entries, searchQuery, searchResults]);
 
   const value = useMemo(
     () => ({
@@ -184,6 +222,7 @@ export function HistoryProvider({ children }: { children: ReactNode }) {
       hasMore,
       loading,
       loadingMore,
+      searching,
       searchQuery,
       searchResults,
       refresh,
@@ -199,6 +238,7 @@ export function HistoryProvider({ children }: { children: ReactNode }) {
       hasMore,
       loading,
       loadingMore,
+      searching,
       searchQuery,
       searchResults,
       refresh,
