@@ -14,6 +14,8 @@ Desktop API client built with **Tauri**, **React**, **TypeScript**, **Tailwind C
 
 ## Features
 
+See the full guide in [docs/FEATURES.md](./docs/FEATURES.md) (also available in-app under **Docs** in the left rail).
+
 - HTTP methods: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS
 - Query params, headers, body (none, JSON, raw, form-urlencoded, multipart)
 - Auth: Bearer, Basic, API key, OAuth 2.0 (client credentials + authorization code / PKCE)
@@ -25,6 +27,7 @@ Desktop API client built with **Tauri**, **React**, **TypeScript**, **Tailwind C
 - Cookie jar editor (add / edit / delete)
 - Custom themes + optional custom CSS overlay
 - WebSocket client, collection runner, fuzzy search
+- In-app **Docs** covering every feature
 - Keyboard shortcut: **Cmd/Ctrl + Enter** to send
 
 ## Screenshots
@@ -67,6 +70,7 @@ bun run screenshots:readme
 - `src-tauri/src/history.rs` — SQLite request history
 - `src-tauri/src/lib.rs` — Tauri commands
 - `docs/screenshots/` — README screenshots
+- `docs/FEATURES.md` — feature guide (synced with in-app Docs)
 - `examples/pulse-theme-override.example.css` — sample custom CSS (all theme tokens + UI hooks)
 
 ## Custom theme CSS

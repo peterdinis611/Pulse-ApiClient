@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   Globe2,
   LayoutGrid,
   Send,
@@ -21,6 +22,7 @@ const NAV_ITEMS: Array<{
   { view: "overview", icon: LayoutGrid, label: "Overview" },
   { view: "request", icon: Send, label: "Requests" },
   { view: "environments", icon: Globe2, label: "Environments" },
+  { view: "docs", icon: BookOpen, label: "Docs" },
   { view: "settings", icon: Settings, label: "Settings" },
 ];
 

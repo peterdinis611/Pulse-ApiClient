@@ -18,6 +18,9 @@ import {
 const ConsolePanel = lazy(() =>
   import("./ConsolePanel").then((module) => ({ default: module.ConsolePanel })),
 );
+const DocsView = lazy(() =>
+  import("./DocsView").then((module) => ({ default: module.DocsView })),
+);
 const EnvironmentsView = lazy(() =>
   import("./EnvironmentsView").then((module) => ({ default: module.EnvironmentsView })),
 );
@@ -75,7 +78,9 @@ export function ClientShell() {
               ? `Settings · ${APP_NAME}`
               : mainView === "environments"
                 ? `Environments · ${APP_NAME}`
-                : APP_NAME;
+                : mainView === "docs"
+                  ? `Docs · ${APP_NAME}`
+                  : APP_NAME;
 
       try {
         await setWindowTitle(label, title);
@@ -102,6 +107,7 @@ export function ClientShell() {
             {mainView === "overview" && <OverviewView />}
             {mainView === "environments" && <EnvironmentsView />}
             {mainView === "settings" && <SettingsView />}
+            {mainView === "docs" && <DocsView />}
             {mainView === "request" && <RequestWorkspace />}
           </Suspense>
         </main>

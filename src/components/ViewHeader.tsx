@@ -16,6 +16,10 @@ const VIEW_META = {
     title: "Environments",
     description: "Variables for URLs, headers, auth, and bodies.",
   },
+  docs: {
+    title: "Docs",
+    description: "Guides for every Pulse feature — requests, auth, tests, themes, and more.",
+  },
   settings: {
     title: "Settings",
     description: "Appearance, data, collections, and HTTP engine.",
