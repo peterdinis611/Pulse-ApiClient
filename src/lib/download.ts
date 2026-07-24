@@ -1,5 +1,9 @@
 export function downloadJson(content: string, filename: string) {
-  downloadBlob(new Blob([content], { type: "application/json" }), filename);
+  downloadBlob(createDownloadBlob(content, "application/json"), filename);
+}
+
+export function createDownloadBlob(data: BlobPart, mimeType: string): Blob {
+  return new Blob([data], { type: mimeType });
 }
 
 export function downloadBlob(blob: Blob, filename: string) {
@@ -15,7 +19,7 @@ export function downloadBytes(bytes: Uint8Array, mimeType: string, filename: str
   // Copy into a plain ArrayBuffer-backed Uint8Array for BlobPart typing.
   const copy = new Uint8Array(bytes.byteLength);
   copy.set(bytes);
-  downloadBlob(new Blob([copy], { type: mimeType }), filename);
+  downloadBlob(createDownloadBlob(copy, mimeType), filename);
 }
 
 export function collectionExportFilename(name: string, suffix: string): string {

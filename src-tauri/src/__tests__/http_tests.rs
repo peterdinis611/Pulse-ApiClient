@@ -104,3 +104,56 @@ fn enabled_pairs_skips_disabled_and_blank_keys() {
 
     assert_eq!(pairs, vec![("Enabled".to_string(), "yes".to_string())]);
 }
+
+#[test]
+fn encode_response_body_keeps_utf8_text() {
+    let (body, encoding) = encode_response_body(b"{\"ok\":true}", Some("application/json"));
+    assert_eq!(encoding, "utf8");
+    assert_eq!(body, "{\"ok\":true}");
+}
+
+#[test]
+fn encode_response_body_base64_for_images() {
+    use base64::Engine;
+    let png_bytes = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    let (body, encoding) = encode_response_body(&png_bytes, Some("image/png"));
+    assert_eq!(encoding, "base64");
+    assert_eq!(
+        body,
+        base64::engine::general_purpose::STANDARD.encode(png_bytes)
+    );
+}
+
+#[test]
+fn encode_response_body_base64_for_pdf_and_excel() {
+    let bytes = b"%PDF-1.4 binary\x00\xff";
+    let (pdf_body, pdf_enc) = encode_response_body(bytes, Some("application/pdf"));
+    assert_eq!(pdf_enc, "base64");
+    assert!(!pdf_body.is_empty());
+
+    let (xlsx_body, xlsx_enc) = encode_response_body(
+        bytes,
+        Some("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    );
+    assert_eq!(xlsx_enc, "base64");
+    assert_eq!(xlsx_body, pdf_body);
+}
+
+#[test]
+fn encode_response_body_base64_for_invalid_utf8() {
+    use base64::Engine;
+    let bytes = [0xff, 0xfe, 0xfd];
+    let (body, encoding) = encode_response_body(&bytes, Some("text/plain"));
+    assert_eq!(encoding, "base64");
+    assert_eq!(
+        body,
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    );
+}
+
+#[test]
+fn encode_response_body_keeps_csv_as_utf8() {
+    let (body, encoding) = encode_response_body(b"a,b\n1,2\n", Some("text/csv; charset=utf-8"));
+    assert_eq!(encoding, "utf8");
+    assert_eq!(body, "a,b\n1,2\n");
+}

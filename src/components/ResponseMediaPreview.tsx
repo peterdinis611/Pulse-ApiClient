@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import * as XLSX from "xlsx";
 import type { HttpResponse } from "@/types";
 import {
   decodeResponseBytes,
@@ -7,6 +6,7 @@ import {
   responseMimeType,
   type ResponsePreviewKind,
 } from "@/lib/response-body";
+import { parseSpreadsheetPreview } from "@/lib/spreadsheet-preview";
 import { cn } from "@/lib/utils";
 
 type ResponseMediaPreviewProps = {
@@ -29,33 +29,7 @@ function useObjectUrl(bytes: Uint8Array, mime: string): string | null {
 }
 
 function ExcelPreview({ bytes, mime }: { bytes: Uint8Array; mime: string }) {
-  const sheet = useMemo(() => {
-    try {
-      const isCsv = mime.includes("csv") || mime === "text/csv";
-      const workbook = isCsv
-        ? XLSX.read(new TextDecoder().decode(bytes), { type: "string" })
-        : XLSX.read(bytes, { type: "array" });
-      const firstName = workbook.SheetNames[0];
-      if (!firstName) return { error: "Workbook has no sheets.", rows: [] as string[][], name: "" };
-      const worksheet = workbook.Sheets[firstName];
-      if (!worksheet) return { error: "Could not read first sheet.", rows: [] as string[][], name: firstName };
-      const rows = XLSX.utils.sheet_to_json<(string | number | boolean | null)[]>(worksheet, {
-        header: 1,
-        defval: "",
-        raw: false,
-      });
-      const limited = rows.slice(0, 200).map((row) =>
-        (Array.isArray(row) ? row : []).slice(0, 40).map((cell) => String(cell ?? "")),
-      );
-      return { error: null as string | null, rows: limited, name: firstName };
-    } catch (error) {
-      return {
-        error: error instanceof Error ? error.message : "Failed to parse spreadsheet.",
-        rows: [] as string[][],
-        name: "",
-      };
-    }
-  }, [bytes, mime]);
+  const sheet = useMemo(() => parseSpreadsheetPreview(bytes, mime), [bytes, mime]);
 
   if (sheet.error) {
     return (

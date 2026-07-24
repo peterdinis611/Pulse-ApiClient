@@ -73,8 +73,9 @@ bun run screenshots:readme
 
 Settings → Appearance → Custom CSS can overlay any built-in theme.
 
-1. Click **Load example file** (or open `examples/pulse-theme-override.example.css`)
-2. Click **Apply CSS** to see a coral showcase theme
-3. Edit tokens / comment sections you do not need
+1. Use **Snippets** / **CSS variables** / **Component hooks** for quick edits
+2. Optionally enable **Live preview** while typing
+3. Click **Apply CSS** to persist (or **Export** a `.css` file)
+4. **Full example** loads `examples/pulse-theme-override.example.css`
 
 The example covers surfaces, chrome (sidebar/rail/topbar/console), status + method colors, fonts/radius, per-theme `html[data-theme="…"]` scopes, and component classes.

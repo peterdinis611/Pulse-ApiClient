@@ -41,7 +41,7 @@ export function detectPreviewKind(
   const isBase64 = bodyEncoding === "base64";
 
   if (mime.startsWith("image/")) return "image";
-  if (mime === "application/pdf" || mime.endsWith("/pdf")) return "pdf";
+  if (mime.includes("pdf")) return "pdf";
   if (
     mime.includes("spreadsheetml") ||
     mime.includes("ms-excel") ||

@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BookOpen, FileCode2, FolderOpen, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import {
+  BookOpen,
+  Download,
+  FileCode2,
+  FolderOpen,
+  RefreshCw,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
+import {
+  applyCustomThemeCss,
   applyCustomThemeFromBrowserFile,
   applyCustomThemeFromPath,
   clearCustomThemeCss,
@@ -12,10 +21,19 @@ import {
   reloadCustomThemeCss,
   saveCustomThemeCssContent,
 } from "@/lib/custom-theme";
+import {
+  appendCssBlock,
+  CUSTOM_CSS_COMPONENT_HOOKS,
+  CUSTOM_CSS_SNIPPETS,
+  CUSTOM_CSS_TOKEN_GROUPS,
+  insertCssToken,
+} from "@/lib/custom-theme-snippets";
+import { downloadBlob } from "@/lib/download";
 import { getAppSettings } from "@/lib/http-client";
 import { canUseTauriIpc } from "@/lib/tauri-runtime";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,12 +41,15 @@ import { cn } from "@/lib/utils";
 
 export function CustomThemeSettings() {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const livePreviewTimer = useRef<number | null>(null);
   const [cssPath, setCssPath] = useState("");
   const [cssContent, setCssContent] = useState("");
   const [savedCssContent, setSavedCssContent] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [livePreview, setLivePreview] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(true);
   const isDesktop = canUseTauriIpc();
   const editorDirty = cssContent !== savedCssContent;
 
@@ -60,6 +81,29 @@ export function CustomThemeSettings() {
   useEffect(() => {
     void refreshEditor();
   }, [refreshEditor]);
+
+  useEffect(() => {
+    return () => {
+      if (livePreviewTimer.current != null) {
+        window.clearTimeout(livePreviewTimer.current);
+      }
+    };
+  }, []);
+
+  const scheduleLivePreview = (nextCss: string) => {
+    if (!livePreview) return;
+    if (livePreviewTimer.current != null) {
+      window.clearTimeout(livePreviewTimer.current);
+    }
+    livePreviewTimer.current = window.setTimeout(() => {
+      applyCustomThemeCss(nextCss);
+    }, 280);
+  };
+
+  const updateCssContent = (next: string) => {
+    setCssContent(next);
+    scheduleLivePreview(next);
+  };
 
   const applyPath = async (path: string) => {
     const trimmed = path.trim();
@@ -103,7 +147,7 @@ export function CustomThemeSettings() {
     if (cssContent.trim() && !window.confirm("Replace current CSS with the starter template?")) {
       return;
     }
-    setCssContent(CUSTOM_THEME_CSS_TEMPLATE);
+    updateCssContent(CUSTOM_THEME_CSS_TEMPLATE);
   };
 
   const handleInsertExample = () => {
@@ -113,7 +157,22 @@ export function CustomThemeSettings() {
     ) {
       return;
     }
-    setCssContent(CUSTOM_THEME_CSS_EXAMPLE);
+    updateCssContent(CUSTOM_THEME_CSS_EXAMPLE);
+  };
+
+  const handleInsertSnippet = (css: string) => {
+    updateCssContent(appendCssBlock(cssContent, css));
+    toast.success("Snippet added");
+  };
+
+  const handleInsertToken = (token: string) => {
+    updateCssContent(insertCssToken(cssContent, token));
+  };
+
+  const handleExport = () => {
+    const content = cssContent.trim() || CUSTOM_THEME_CSS_TEMPLATE;
+    downloadBlob(new Blob([content], { type: "text/css" }), "pulse-theme-override.css");
+    toast.success("CSS exported", "pulse-theme-override.css");
   };
 
   const handleBrowse = async () => {
@@ -205,15 +264,126 @@ export function CustomThemeSettings() {
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium">Custom CSS</p>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Edit CSS below or load a <code className="text-xs">.css</code> file to override theme
-            variables and Pulse styles on top of your selected theme.
+            Override theme tokens and Pulse components. Use snippets, insert variables, or load a{" "}
+            <code className="text-xs">.css</code> file.
           </p>
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/50 px-3 py-2">
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <Checkbox
+            checked={livePreview}
+            onCheckedChange={(checked) => {
+              const enabled = checked === true;
+              setLivePreview(enabled);
+              if (enabled) applyCustomThemeCss(cssContent);
+              else if (!editorDirty) applyCustomThemeCss(savedCssContent);
+            }}
+            disabled={loading || busy}
+          />
+          <span>
+            Live preview
+            <span className="ml-1 text-xs text-muted-foreground">(applies while typing)</span>
+          </span>
+        </label>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => setToolsOpen((open) => !open)}
+        >
+          {toolsOpen ? "Hide tools" : "Show tools"}
+        </Button>
+      </div>
+
+      {toolsOpen && (
+        <div className="space-y-4 rounded-lg border border-border/60 bg-background/40 p-3">
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Snippets
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {CUSTOM_CSS_SNIPPETS.map((snippet) => (
+                <Button
+                  key={snippet.id}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  disabled={loading || busy}
+                  title={snippet.description}
+                  onClick={() => handleInsertSnippet(snippet.css)}
+                >
+                  {snippet.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                CSS variables
+              </p>
+              <div className="max-h-40 space-y-2 overflow-auto pr-1">
+                {CUSTOM_CSS_TOKEN_GROUPS.map((group) => (
+                  <div key={group.id}>
+                    <p className="mb-1 text-[11px] font-medium text-foreground/80">{group.label}</p>
+                    <div className="flex flex-wrap gap-1">
+                      {group.tokens.map((token) => (
+                        <button
+                          key={token.name}
+                          type="button"
+                          disabled={loading || busy}
+                          title={token.hint}
+                          className="rounded border border-border/70 bg-muted/30 px-1.5 py-0.5 font-mono text-[10px] text-foreground hover:border-primary/40 hover:bg-primary/5 disabled:opacity-50"
+                          onClick={() => handleInsertToken(token.name)}
+                        >
+                          {token.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Component hooks
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {CUSTOM_CSS_COMPONENT_HOOKS.map((hook) => (
+                  <button
+                    key={hook.name}
+                    type="button"
+                    disabled={loading || busy}
+                    title={hook.hint}
+                    className="rounded border border-border/70 bg-muted/30 px-1.5 py-0.5 font-mono text-[10px] text-foreground hover:border-primary/40 hover:bg-primary/5 disabled:opacity-50"
+                    onClick={() =>
+                      handleInsertSnippet(
+                        `${hook.name} {\n  /* ${hook.hint} */\n}\n`,
+                      )
+                    }
+                  >
+                    {hook.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <Label htmlFor="custom-theme-css-editor">CSS editor</Label>
+          <Label htmlFor="custom-theme-css-editor">
+            CSS editor
+            {editorDirty && (
+              <span className="ml-2 text-[11px] font-normal text-warning">Unsaved changes</span>
+            )}
+          </Label>
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
@@ -223,7 +393,7 @@ export function CustomThemeSettings() {
               onClick={handleInsertTemplate}
             >
               <Sparkles className="size-3.5" />
-              Starter template
+              Starter
             </Button>
             <Button
               type="button"
@@ -233,7 +403,17 @@ export function CustomThemeSettings() {
               onClick={handleInsertExample}
             >
               <BookOpen className="size-3.5" />
-              Load example file
+              Full example
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={loading || busy || !cssContent.trim()}
+              onClick={handleExport}
+            >
+              <Download className="size-3.5" />
+              Export
             </Button>
             <Button
               type="button"
@@ -249,20 +429,17 @@ export function CustomThemeSettings() {
         <Textarea
           id="custom-theme-css-editor"
           value={cssContent}
-          onChange={(event) => setCssContent(event.target.value)}
+          onChange={(event) => updateCssContent(event.target.value)}
           spellCheck={false}
           disabled={loading || busy}
           placeholder={CUSTOM_THEME_CSS_TEMPLATE}
-          className="min-h-[320px] resize-y font-mono text-xs leading-relaxed"
+          className="min-h-[360px] resize-y font-mono text-xs leading-relaxed"
         />
 
         <p className="text-xs text-muted-foreground">
-          Changes apply after you click <span className="font-medium text-foreground">Apply CSS</span>.
-          Use <span className="font-medium text-foreground">Load example file</span> for a full demo
-          of tokens (primary, chrome, methods, fonts…) and component hooks (
-          <code className="text-[11px]">.request-url-composite</code>,{" "}
-          <code className="text-[11px]">.explorer-row--active</code>, …). Source:{" "}
-          <code className="text-[11px]">examples/pulse-theme-override.example.css</code>.
+          {livePreview
+            ? "Live preview is on — edits apply after a short delay. Click Apply CSS to persist."
+            : "Click Apply CSS to save. Snippets append blocks; variables insert into :root."}
         </p>
       </div>
 

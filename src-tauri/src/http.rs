@@ -98,7 +98,7 @@ fn default_body_encoding() -> String {
     "utf8".to_string()
 }
 
-fn encode_response_body(bytes: &[u8], content_type: Option<&str>) -> (String, String) {
+pub(crate) fn encode_response_body(bytes: &[u8], content_type: Option<&str>) -> (String, String) {
     let mime = content_type.unwrap_or("").to_ascii_lowercase();
     let looks_binary = mime.starts_with("image/")
         || mime.starts_with("audio/")
