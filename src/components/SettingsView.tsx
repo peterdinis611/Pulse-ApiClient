@@ -4,6 +4,8 @@ import {
   Download,
   FolderPlus,
   History,
+  Pencil,
+  Plus,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -13,8 +15,10 @@ import { dbGetDatabasePath, dbResetDatabase } from "@/lib/db-client";
 import {
   clearHttpCache,
   clearHttpCookies,
+  deleteHttpCookie,
   getHttpEngineStats,
   loadHttpSettingsDashboard,
+  setHttpCookie,
   setHttpSettings,
   type StoredCookie,
 } from "@/lib/http-client";
@@ -166,6 +170,8 @@ export function SettingsView() {
     exportCollection,
     importCollections,
     importPostmanCollection,
+    importBrunoCollection,
+    importInsomniaCollection,
     importOpenApiCollection,
     clearHistory,
     resetWorkspace,
@@ -175,6 +181,8 @@ export function SettingsView() {
 
   const nativeImportRef = useRef<HTMLInputElement>(null);
   const postmanImportRef = useRef<HTMLInputElement>(null);
+  const brunoImportRef = useRef<HTMLInputElement>(null);
+  const insomniaImportRef = useRef<HTMLInputElement>(null);
   const openApiImportRef = useRef<HTMLInputElement>(null);
   const [newCollectionName, setNewCollectionName] = useState("");
   const [newFolderName, setNewFolderName] = useState("");
@@ -200,6 +208,15 @@ export function SettingsView() {
   const [clearingCache, setClearingCache] = useState(false);
   const [cookies, setCookies] = useState<StoredCookie[]>([]);
   const [clearingCookies, setClearingCookies] = useState(false);
+  const [savingCookie, setSavingCookie] = useState(false);
+  const [cookieForm, setCookieForm] = useState({
+    name: "",
+    value: "",
+    url: "https://",
+    domain: "",
+    path: "/",
+  });
+  const [editingCookieKey, setEditingCookieKey] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<string>(SETTINGS_NAV[0].id);
 
   const scrollToSection = (id: string) => {
@@ -300,12 +317,21 @@ export function SettingsView() {
     }
   };
 
-  const handleImport = async (file: File, kind: "pulse" | "postman" | "openapi") => {
+  const handleImport = async (
+    file: File,
+    kind: "pulse" | "postman" | "bruno" | "insomnia" | "openapi",
+  ) => {
     try {
       const raw = await file.text();
       if (kind === "postman") {
         importPostmanCollection(raw);
         toast.success("Postman collection imported", file.name);
+      } else if (kind === "bruno") {
+        importBrunoCollection(raw);
+        toast.success("Bruno collection imported", file.name);
+      } else if (kind === "insomnia") {
+        importInsomniaCollection(raw);
+        toast.success("Insomnia export imported", file.name);
       } else if (kind === "openapi") {
         importOpenApiCollection(raw);
         toast.success("OpenAPI collection imported", file.name);
@@ -321,16 +347,95 @@ export function SettingsView() {
     }
   };
 
+  const resetCookieForm = () => {
+    setCookieForm({
+      name: "",
+      value: "",
+      url: "https://",
+      domain: "",
+      path: "/",
+    });
+    setEditingCookieKey(null);
+  };
+
   const handleClearCookies = async () => {
     setClearingCookies(true);
     try {
       await clearHttpCookies();
       setCookies([]);
+      resetCookieForm();
       toast.success("Cookie jar cleared");
     } catch {
       toast.error("Failed to clear cookies");
     } finally {
       setClearingCookies(false);
+    }
+  };
+
+  const handleEditCookie = (cookie: StoredCookie) => {
+    setEditingCookieKey(`${cookie.url}\0${cookie.name}`);
+    setCookieForm({
+      name: cookie.name,
+      value: cookie.value,
+      url: cookie.url,
+      domain: cookie.domain ?? "",
+      path: cookie.path ?? "/",
+    });
+  };
+
+  const handleSaveCookie = async () => {
+    const name = cookieForm.name.trim();
+    const url = cookieForm.url.trim();
+    if (!name || !url) {
+      toast.error("Name and URL are required");
+      return;
+    }
+
+    setSavingCookie(true);
+    try {
+      if (
+        editingCookieKey &&
+        editingCookieKey !== `${url}\0${name}`
+      ) {
+        const [previousUrl, previousName] = editingCookieKey.split("\0");
+        if (previousUrl && previousName) {
+          await deleteHttpCookie(previousName, previousUrl);
+        }
+      }
+
+      const next = await setHttpCookie({
+        name,
+        value: cookieForm.value,
+        url,
+        domain: cookieForm.domain.trim() || null,
+        path: cookieForm.path.trim() || "/",
+      });
+      setCookies(next);
+      resetCookieForm();
+      toast.success(editingCookieKey ? "Cookie updated" : "Cookie saved");
+    } catch (error) {
+      toast.error(
+        "Failed to save cookie",
+        error instanceof Error ? error.message : undefined,
+      );
+    } finally {
+      setSavingCookie(false);
+    }
+  };
+
+  const handleDeleteCookie = async (cookie: StoredCookie) => {
+    try {
+      const next = await deleteHttpCookie(cookie.name, cookie.url);
+      setCookies(next);
+      if (editingCookieKey === `${cookie.url}\0${cookie.name}`) {
+        resetCookieForm();
+      }
+      toast.success("Cookie deleted");
+    } catch (error) {
+      toast.error(
+        "Failed to delete cookie",
+        error instanceof Error ? error.message : undefined,
+      );
     }
   };
 
@@ -598,7 +703,7 @@ export function SettingsView() {
         <SettingsSection
           id="cookies"
           title="Cookie jar"
-          description="Cookies received from HTTP responses are stored automatically and sent on matching requests."
+          description="Cookies from Set-Cookie responses are stored automatically. You can also add, edit, or delete them — they are sent on matching requests."
           action={
             <Button
               type="button"
@@ -611,20 +716,140 @@ export function SettingsView() {
             </Button>
           }
         >
+          <div className="space-y-3 rounded-lg border border-border/70 bg-muted/10 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-medium">
+                {editingCookieKey ? "Edit cookie" : "Add cookie"}
+              </p>
+              {editingCookieKey && (
+                <Button type="button" variant="ghost" size="sm" onClick={resetCookieForm}>
+                  Cancel
+                </Button>
+              )}
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="cookie-name">Name</Label>
+                <Input
+                  id="cookie-name"
+                  value={cookieForm.name}
+                  onChange={(event) =>
+                    setCookieForm((current) => ({ ...current, name: event.target.value }))
+                  }
+                  placeholder="session"
+                  className="font-mono text-xs"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="cookie-value">Value</Label>
+                <Input
+                  id="cookie-value"
+                  value={cookieForm.value}
+                  onChange={(event) =>
+                    setCookieForm((current) => ({ ...current, value: event.target.value }))
+                  }
+                  placeholder="abc123"
+                  className="font-mono text-xs"
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="cookie-url">URL</Label>
+                <Input
+                  id="cookie-url"
+                  value={cookieForm.url}
+                  onChange={(event) =>
+                    setCookieForm((current) => ({ ...current, url: event.target.value }))
+                  }
+                  placeholder="https://api.example.com"
+                  className="font-mono text-xs"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="cookie-domain">Domain (optional)</Label>
+                <Input
+                  id="cookie-domain"
+                  value={cookieForm.domain}
+                  onChange={(event) =>
+                    setCookieForm((current) => ({ ...current, domain: event.target.value }))
+                  }
+                  placeholder=".example.com"
+                  className="font-mono text-xs"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="cookie-path">Path</Label>
+                <Input
+                  id="cookie-path"
+                  value={cookieForm.path}
+                  onChange={(event) =>
+                    setCookieForm((current) => ({ ...current, path: event.target.value }))
+                  }
+                  placeholder="/"
+                  className="font-mono text-xs"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                size="sm"
+                disabled={savingCookie || !canUseTauriIpc()}
+                onClick={() => void handleSaveCookie()}
+              >
+                <Plus className="size-3.5" />
+                {savingCookie ? "Saving…" : editingCookieKey ? "Update cookie" : "Add cookie"}
+              </Button>
+            </div>
+            {!canUseTauriIpc() && (
+              <p className="text-xs text-muted-foreground">
+                Cookie jar editing requires the desktop app.
+              </p>
+            )}
+          </div>
+
           {cookies.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No cookies stored yet. Send a request that returns Set-Cookie headers.
+            <p className="mt-3 text-sm text-muted-foreground">
+              No cookies stored yet. Send a request that returns Set-Cookie headers, or add one above.
             </p>
           ) : (
-            <div className="space-y-2">
+            <div className="mt-3 space-y-2">
               {cookies.map((cookie) => (
                 <div
                   key={`${cookie.url}-${cookie.name}`}
-                  className="rounded-lg border border-border/70 px-3 py-2 font-mono text-xs"
+                  className="flex items-start gap-2 rounded-lg border border-border/70 px-3 py-2 font-mono text-xs"
                 >
-                  <p className="font-semibold text-foreground">{cookie.name}</p>
-                  <p className="mt-1 break-all text-muted-foreground">{cookie.value}</p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">{cookie.url}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-foreground">{cookie.name}</p>
+                    <p className="mt-1 break-all text-muted-foreground">{cookie.value}</p>
+                    <p className="mt-1 break-all text-[11px] text-muted-foreground">{cookie.url}</p>
+                    {(cookie.domain || cookie.path) && (
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        {[cookie.domain ? `domain=${cookie.domain}` : null, cookie.path ? `path=${cookie.path}` : null]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 gap-0.5">
+                    <TooltipIconButton
+                      variant="ghost"
+                      size="icon"
+                      className="size-7"
+                      label="Edit cookie"
+                      onClick={() => handleEditCookie(cookie)}
+                    >
+                      <Pencil className="size-3.5" />
+                    </TooltipIconButton>
+                    <TooltipIconButton
+                      variant="ghost"
+                      size="icon"
+                      className="size-7 text-destructive hover:text-destructive"
+                      label="Delete cookie"
+                      onClick={() => void handleDeleteCookie(cookie)}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </TooltipIconButton>
+                  </div>
                 </div>
               ))}
             </div>
@@ -634,7 +859,7 @@ export function SettingsView() {
         <SettingsSection
           id="collections"
           title="Collections"
-          description="Organize saved requests and import from Postman or OpenAPI."
+          description="Organize saved requests and import from Postman, Bruno, Insomnia, or OpenAPI."
           action={
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" size="sm" onClick={() => openApiImportRef.current?.click()}>
@@ -644,6 +869,14 @@ export function SettingsView() {
               <Button type="button" variant="outline" size="sm" onClick={() => postmanImportRef.current?.click()}>
                 <Upload className="size-4" />
                 Postman
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => brunoImportRef.current?.click()}>
+                <Upload className="size-4" />
+                Bruno
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => insomniaImportRef.current?.click()}>
+                <Upload className="size-4" />
+                Insomnia
               </Button>
               <Button type="button" variant="outline" size="sm" onClick={() => nativeImportRef.current?.click()}>
                 <Upload className="size-4" />
@@ -685,6 +918,30 @@ export function SettingsView() {
               const file = event.target.files?.[0];
               if (!file) return;
               void handleImport(file, "postman");
+              event.target.value = "";
+            }}
+          />
+          <input
+            ref={brunoImportRef}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (!file) return;
+              void handleImport(file, "bruno");
+              event.target.value = "";
+            }}
+          />
+          <input
+            ref={insomniaImportRef}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (!file) return;
+              void handleImport(file, "insomnia");
               event.target.value = "";
             }}
           />

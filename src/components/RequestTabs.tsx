@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useApp } from "@/machines";
 import { KeyValueEditor } from "@/components/KeyValueEditor";
 import { TestsTabPanel } from "@/components/TestsTabPanel";
+import { PreRequestTabPanel } from "@/components/PreRequestTabPanel";
 import { BODY_KINDS } from "@/types";
 import type { BodyKind, MultipartField } from "@/types";
 import { Trash2 } from "lucide-react";
@@ -20,7 +22,15 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VariableField } from "@/components/VariableField";
+import { exchangeOAuthToken } from "@/lib/http-client";
+import {
+  buildOAuthAuthorizeUrl,
+  extractAuthCodeFromRedirect,
+  generatePkcePair,
+} from "@/lib/oauth";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+import { canUseTauriIpc } from "@/lib/tauri-runtime";
 
 function applyBodyKind(bodyKind: BodyKind) {
   if (bodyKind === "graphql") {
@@ -34,6 +44,7 @@ function applyBodyKind(bodyKind: BodyKind) {
 
 export function RequestTabs() {
   const { request, requestTab, setRequestTab, updateRequest, activeEnvironment } = useApp();
+  const [oauthBusy, setOauthBusy] = useState(false);
 
   const paramCount = request.query.filter((q) => q.enabled && q.key.trim()).length;
   const headerCount = request.headers.filter((h) => h.enabled && h.key.trim()).length;
@@ -112,6 +123,7 @@ export function RequestTabs() {
             </TabsTrigger>
             <TabsTrigger value="body">Body</TabsTrigger>
             <TabsTrigger value="auth">Auth</TabsTrigger>
+            <TabsTrigger value="pre-request">Pre-request</TabsTrigger>
             <TabsTrigger value="tests">Tests</TabsTrigger>
           </TabsList>
         </Tabs>
@@ -351,6 +363,7 @@ export function RequestTabs() {
                     <SelectItem value="bearer">Bearer Token</SelectItem>
                     <SelectItem value="basic">Basic Auth</SelectItem>
                     <SelectItem value="apiKey">API Key</SelectItem>
+                    <SelectItem value="oauth2">OAuth 2.0</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -460,9 +473,262 @@ export function RequestTabs() {
                   </div>
                 </>
               )}
+
+              {request.auth.authType === "oauth2" && (
+                <>
+                  <div className="space-y-2">
+                    <Label>Grant type</Label>
+                    <Select
+                      value={request.auth.oauthGrantType}
+                      onValueChange={(value) =>
+                        updateRequest({
+                          auth: {
+                            ...request.auth,
+                            oauthGrantType: value as typeof request.auth.oauthGrantType,
+                          },
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="client_credentials">Client credentials</SelectItem>
+                        <SelectItem value="authorization_code">Authorization code + PKCE</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>Token URL</Label>
+                    <VariableField
+                      environment={activeEnvironment}
+                      value={request.auth.oauthTokenUrl}
+                      onChange={(oauthTokenUrl) =>
+                        updateRequest({ auth: { ...request.auth, oauthTokenUrl } })
+                      }
+                      placeholder="https://auth.example.com/oauth/token"
+                    />
+                  </div>
+                  {request.auth.oauthGrantType === "authorization_code" && (
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Authorize URL</Label>
+                      <VariableField
+                        environment={activeEnvironment}
+                        value={request.auth.oauthAuthorizeUrl}
+                        onChange={(oauthAuthorizeUrl) =>
+                          updateRequest({ auth: { ...request.auth, oauthAuthorizeUrl } })
+                        }
+                        placeholder="https://auth.example.com/oauth/authorize"
+                      />
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <Label>Client ID</Label>
+                    <VariableField
+                      environment={activeEnvironment}
+                      value={request.auth.oauthClientId}
+                      onChange={(oauthClientId) =>
+                        updateRequest({ auth: { ...request.auth, oauthClientId } })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Client secret</Label>
+                    <VariableField
+                      type="password"
+                      environment={activeEnvironment}
+                      value={request.auth.oauthClientSecret}
+                      onChange={(oauthClientSecret) =>
+                        updateRequest({ auth: { ...request.auth, oauthClientSecret } })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Scope</Label>
+                    <VariableField
+                      environment={activeEnvironment}
+                      value={request.auth.oauthScope}
+                      onChange={(oauthScope) =>
+                        updateRequest({ auth: { ...request.auth, oauthScope } })
+                      }
+                      placeholder="openid profile"
+                    />
+                  </div>
+                  {request.auth.oauthGrantType === "authorization_code" && (
+                    <>
+                      <div className="space-y-2">
+                        <Label>Redirect URI</Label>
+                        <VariableField
+                          environment={activeEnvironment}
+                          value={request.auth.oauthRedirectUri}
+                          onChange={(oauthRedirectUri) =>
+                            updateRequest({ auth: { ...request.auth, oauthRedirectUri } })
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2 md:col-span-2">
+                        <Label>Authorization code / redirect URL</Label>
+                        <VariableField
+                          environment={activeEnvironment}
+                          value={request.auth.oauthAuthCode}
+                          onChange={(oauthAuthCode) =>
+                            updateRequest({ auth: { ...request.auth, oauthAuthCode } })
+                          }
+                          placeholder="Paste code or full redirect URL"
+                        />
+                      </div>
+                    </>
+                  )}
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>Access token</Label>
+                    <VariableField
+                      environment={activeEnvironment}
+                      value={request.auth.bearerToken}
+                      onChange={(bearerToken) =>
+                        updateRequest({ auth: { ...request.auth, bearerToken } })
+                      }
+                      placeholder="Fetched token appears here"
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2 md:col-span-2">
+                    {request.auth.oauthGrantType === "authorization_code" && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={oauthBusy}
+                        onClick={() => {
+                          void (async () => {
+                            try {
+                              const { verifier, challenge } = await generatePkcePair();
+                              updateRequest({
+                                auth: { ...request.auth, oauthCodeVerifier: verifier },
+                              });
+                              const url = buildOAuthAuthorizeUrl({
+                                authorizeUrl: request.auth.oauthAuthorizeUrl,
+                                clientId: request.auth.oauthClientId,
+                                redirectUri: request.auth.oauthRedirectUri,
+                                scope: request.auth.oauthScope,
+                                codeChallenge: challenge,
+                              });
+                              window.open(url, "_blank", "noopener,noreferrer");
+                              toast.success("Opened authorize URL", "Sign in, then paste the redirect URL or code below.");
+                            } catch (error) {
+                              toast.error(
+                                "Could not start PKCE flow",
+                                error instanceof Error ? error.message : undefined,
+                              );
+                            }
+                          })();
+                        }}
+                      >
+                        Open authorize URL
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={oauthBusy || !canUseTauriIpc()}
+                      onClick={() => {
+                        void (async () => {
+                          setOauthBusy(true);
+                          try {
+                            const grant = request.auth.oauthGrantType;
+                            const code =
+                              grant === "authorization_code"
+                                ? extractAuthCodeFromRedirect(request.auth.oauthAuthCode) ??
+                                  request.auth.oauthAuthCode.trim()
+                                : null;
+                            const token = await exchangeOAuthToken({
+                              grantType: grant,
+                              tokenUrl: request.auth.oauthTokenUrl,
+                              clientId: request.auth.oauthClientId,
+                              clientSecret: request.auth.oauthClientSecret || null,
+                              scope: request.auth.oauthScope || null,
+                              code,
+                              redirectUri:
+                                grant === "authorization_code"
+                                  ? request.auth.oauthRedirectUri
+                                  : null,
+                              codeVerifier:
+                                grant === "authorization_code"
+                                  ? request.auth.oauthCodeVerifier
+                                  : null,
+                            });
+                            updateRequest({
+                              auth: {
+                                ...request.auth,
+                                bearerToken: token.accessToken,
+                                oauthRefreshToken:
+                                  token.refreshToken ?? request.auth.oauthRefreshToken,
+                              },
+                            });
+                            toast.success("OAuth token fetched");
+                          } catch (error) {
+                            toast.error(
+                              "Token exchange failed",
+                              error instanceof Error ? error.message : undefined,
+                            );
+                          } finally {
+                            setOauthBusy(false);
+                          }
+                        })();
+                      }}
+                    >
+                      {oauthBusy ? "Fetching…" : "Fetch token"}
+                    </Button>
+                    {request.auth.oauthRefreshToken.trim() && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={oauthBusy || !canUseTauriIpc()}
+                        onClick={() => {
+                          void (async () => {
+                            setOauthBusy(true);
+                            try {
+                              const token = await exchangeOAuthToken({
+                                grantType: "refresh_token",
+                                tokenUrl: request.auth.oauthTokenUrl,
+                                clientId: request.auth.oauthClientId,
+                                clientSecret: request.auth.oauthClientSecret || null,
+                                refreshToken: request.auth.oauthRefreshToken,
+                              });
+                              updateRequest({
+                                auth: {
+                                  ...request.auth,
+                                  bearerToken: token.accessToken,
+                                  oauthRefreshToken:
+                                    token.refreshToken ?? request.auth.oauthRefreshToken,
+                                },
+                              });
+                              toast.success("OAuth token refreshed");
+                            } catch (error) {
+                              toast.error(
+                                "Refresh failed",
+                                error instanceof Error ? error.message : undefined,
+                              );
+                            } finally {
+                              setOauthBusy(false);
+                            }
+                          })();
+                        }}
+                      >
+                        Refresh token
+                      </Button>
+                    )}
+                  </div>
+                  {!canUseTauriIpc() && (
+                    <p className="text-xs text-muted-foreground md:col-span-2">
+                      Token exchange requires the desktop app.
+                    </p>
+                  )}
+                </>
+              )}
             </div>
           )}
 
+          {requestTab === "pre-request" && <PreRequestTabPanel />}
           {requestTab === "tests" && <TestsTabPanel />}
         </div>
       </ScrollAreaWithTop>

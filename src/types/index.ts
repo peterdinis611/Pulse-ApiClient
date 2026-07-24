@@ -8,7 +8,8 @@ export type HttpMethod =
   | "OPTIONS";
 
 export type BodyKind = "none" | "json" | "raw" | "form" | "multipart" | "graphql";
-export type AuthType = "none" | "bearer" | "basic" | "apiKey";
+export type AuthType = "none" | "bearer" | "basic" | "apiKey" | "oauth2";
+export type OAuth2GrantType = "client_credentials" | "authorization_code";
 export type ApiKeyLocation = "header" | "query";
 export type MultipartFieldType = "text" | "file";
 export type SidebarTab = "collections" | "history" | "environments";
@@ -75,6 +76,16 @@ export type AuthConfig = {
   apiKeyKey: string;
   apiKeyValue: string;
   apiKeyIn: ApiKeyLocation;
+  oauthGrantType: OAuth2GrantType;
+  oauthTokenUrl: string;
+  oauthAuthorizeUrl: string;
+  oauthClientId: string;
+  oauthClientSecret: string;
+  oauthScope: string;
+  oauthRedirectUri: string;
+  oauthRefreshToken: string;
+  oauthCodeVerifier: string;
+  oauthAuthCode: string;
 };
 
 export type ApiRequest = {
@@ -94,6 +105,7 @@ export type ApiRequest = {
   multipart: MultipartField[];
   auth: AuthConfig;
   tests: string;
+  preRequestScript: string;
 };
 
 export type HttpResponse = {
@@ -137,7 +149,7 @@ export type AppSettings = HttpSettings & {
 export type CollectionGroup = {
   id: string;
   name: string;
-  source: "pulse" | "postman";
+  source: "pulse" | "postman" | "bruno" | "insomnia";
   folders: string[];
 };
 
@@ -162,7 +174,7 @@ export type HistoryEntry = {
   response?: Pick<HttpResponse, "status" | "elapsedMs" | "sizeBytes">;
 };
 
-export type RequestTab = "params" | "headers" | "body" | "auth" | "tests";
+export type RequestTab = "params" | "headers" | "body" | "auth" | "pre-request" | "tests";
 
 export type TestCaseResult = {
   name: string;

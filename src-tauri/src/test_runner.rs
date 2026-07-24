@@ -1061,6 +1061,59 @@ fn descend_segment<'a>(current: &'a serde_json::Value, segment: &str) -> Option<
     Some(value)
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnvMutation {
+    pub key: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreRequestResult {
+    pub mutations: Vec<EnvMutation>,
+}
+
+static RE_ENV_SET: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"pulse\.(?:environment|variables)\.set\(\s*["']([^"']+)["']\s*,\s*([^)]+?)\s*\)"#,
+    )
+    .unwrap()
+});
+
+pub fn run_pre_request_script(script: &str) -> PreRequestResult {
+    let normalized = normalize_test_script(script);
+    let trimmed = normalized.trim();
+    if trimmed.is_empty() {
+        return PreRequestResult {
+            mutations: Vec::new(),
+        };
+    }
+
+    let mut mutations = Vec::new();
+    for capture in RE_ENV_SET.captures_iter(&normalized) {
+        let key = capture.get(1).map(|m| m.as_str().trim()).unwrap_or("");
+        let raw_value = capture.get(2).map(|m| m.as_str().trim()).unwrap_or("");
+        if key.is_empty() {
+            continue;
+        }
+        let value = parse_literal(raw_value)
+            .map(|v| match v {
+                serde_json::Value::String(s) => s,
+                serde_json::Value::Null => String::new(),
+                other => other.to_string(),
+            })
+            .unwrap_or_else(|| raw_value.trim_matches(['"', '\'']).to_string());
+        mutations.retain(|item: &EnvMutation| item.key != key);
+        mutations.push(EnvMutation {
+            key: key.to_string(),
+            value,
+        });
+    }
+
+    PreRequestResult { mutations }
+}
+
 fn parse_literal(raw: &str) -> Option<serde_json::Value> {
     let trimmed = raw.trim();
     if trimmed == "undefined" || trimmed == "null" {

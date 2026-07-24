@@ -1,4 +1,5 @@
 import type { Environment } from "../types";
+import { createKeyValue } from "./helpers";
 
 const VARIABLE_PATTERN = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
 const VARIABLE_AUTOCOMPLETE_PATTERN = /\{\{\s*([a-zA-Z0-9_.-]*)$/;
@@ -64,4 +65,36 @@ export function unresolvedVariables(input: string | undefined | null): string[] 
   if (!input) return [];
   const matches = [...input.matchAll(VARIABLE_PATTERN)];
   return matches.map((match) => match[1]);
+}
+
+export type EnvMutation = {
+  key: string;
+  value: string;
+};
+
+/** Upsert environment variables from pre-request `pulse.environment.set` mutations. */
+export function applyEnvironmentMutations(
+  environment: Environment,
+  mutations: EnvMutation[],
+): Environment {
+  if (!mutations.length) return environment;
+
+  const variables = [...environment.variables];
+  for (const mutation of mutations) {
+    const key = mutation.key.trim();
+    if (!key) continue;
+    const existing = variables.findIndex((item) => item.key.trim() === key);
+    if (existing >= 0) {
+      variables[existing] = {
+        ...variables[existing]!,
+        key,
+        value: mutation.value,
+        enabled: true,
+      };
+    } else {
+      variables.push(createKeyValue({ key, value: mutation.value, enabled: true }));
+    }
+  }
+
+  return { ...environment, variables };
 }

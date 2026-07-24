@@ -27,3 +27,23 @@ fn clear_cookies_empties_log() {
     state.clear_cookies().expect("clear should succeed");
     assert!(state.list_cookies().is_empty());
 }
+
+#[test]
+fn set_and_delete_cookie_updates_log() {
+    let state = HttpState::default();
+    let cookies = state
+        .set_cookie(StoredCookie {
+            name: "token".into(),
+            value: "abc".into(),
+            domain: Some(".example.com".into()),
+            path: Some("/".into()),
+            url: "https://api.example.com".into(),
+        })
+        .expect("set cookie");
+    assert_eq!(cookies.len(), 1);
+
+    let remaining = state
+        .delete_cookie("token", "https://api.example.com")
+        .expect("delete cookie");
+    assert!(remaining.is_empty());
+}

@@ -195,3 +195,18 @@ fn runs_json_exists_json_assertion() {
     let result = run_http_tests(script, &sample_response(200, r#"{"slug":"demo"}"#, 50));
     assert_eq!(result.passed, 1);
 }
+
+#[test]
+fn extracts_environment_set_mutations() {
+    let script = r#"
+pulse.environment.set("token", "abc123");
+pm.variables.set("page", 2);
+pulse.environment.set("token", "final");
+"#;
+    let result = run_pre_request_script(script);
+    assert_eq!(result.mutations.len(), 2);
+    assert_eq!(result.mutations[0].key, "page");
+    assert_eq!(result.mutations[0].value, "2");
+    assert_eq!(result.mutations[1].key, "token");
+    assert_eq!(result.mutations[1].value, "final");
+}

@@ -102,10 +102,14 @@ fn enabled_pairs(items: &[KeyValue]) -> Vec<(String, String)> {
 fn apply_auth(headers: &mut HeaderMap, auth: &AuthConfig) -> Result<(), String> {
     match auth.auth_type.as_str() {
         "none" => Ok(()),
-        "bearer" => {
+        "bearer" | "oauth2" => {
             let token = auth.bearer_token.as_deref().unwrap_or("").trim();
             if token.is_empty() {
-                return Ok(());
+                return if auth.auth_type == "oauth2" {
+                    Err("OAuth2 access token is empty — fetch a token first".into())
+                } else {
+                    Ok(())
+                };
             }
             headers.insert(
                 HeaderName::from_static("authorization"),

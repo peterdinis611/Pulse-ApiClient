@@ -1,10 +1,11 @@
 import { Effect } from "effect";
 import type { Environment, SavedRequest, TestRunResult } from "@/types";
 import { createId } from "@/lib/helpers";
+import { applyEnvironmentMutations } from "@/lib/env";
 import { runEffectsParallel } from "@/lib/effect/tauri";
 import { runEffect } from "@/lib/effect/run";
-import { runHttpTestsEffect } from "@/lib/http-ipc";
-import { prepareRequest, sendRequest, sendRequestsBatch } from "@/lib/http-client";
+import { runHttpTestsEffect, runPreRequestScriptEffect } from "@/lib/http-ipc";
+import { sendRequest, sendRequestsBatch } from "@/lib/http-client";
 
 export type CollectionRunStep = {
   saved: SavedRequest;
@@ -33,7 +34,7 @@ function failureTestResults(name: string, message: string): TestRunResult {
 
 function evaluateStepEffect(
   saved: SavedRequest,
-  environment: Environment | null,
+  _environment: Environment | null,
   response?: Awaited<ReturnType<typeof sendRequest>>,
   error?: string,
 ): Effect.Effect<CollectionRunStep, never> {
@@ -50,7 +51,7 @@ function evaluateStepEffect(
     return Effect.succeed({ saved, response, error });
   }
 
-  const prepared = prepareRequest(saved.request, environment);
+  const prepared = saved.request;
   if (!prepared.tests.trim()) {
     return Effect.succeed({ saved, response, error });
   }
@@ -110,19 +111,28 @@ export async function runCollection(
     steps: [],
   };
 
+  let activeEnvironment = environment;
+
   for (let index = 0; index < requests.length; index += 1) {
     const saved = requests[index];
     let step: CollectionRunStep = { saved };
 
     try {
-      const prepared = prepareRequest(saved.request, environment);
-      const response = await sendRequest(prepared, environment, {
+      const script = saved.request.preRequestScript?.trim() ?? "";
+      if (script && activeEnvironment) {
+        const pre = await runEffect(runPreRequestScriptEffect(script));
+        if (pre.mutations.length > 0) {
+          activeEnvironment = applyEnvironmentMutations(activeEnvironment, pre.mutations);
+        }
+      }
+
+      const response = await sendRequest(saved.request, activeEnvironment, {
         requestId: createId("collection"),
       });
-      [step] = await evaluateStepsParallel([saved], environment, [{ response }]);
+      [step] = await evaluateStepsParallel([saved], activeEnvironment, [{ response }]);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      [step] = await evaluateStepsParallel([saved], environment, [{ error: message }]);
+      [step] = await evaluateStepsParallel([saved], activeEnvironment, [{ error: message }]);
       result.failed += 1;
       result.totalTests += 1;
     }
@@ -133,6 +143,21 @@ export async function runCollection(
   }
 
   return result;
+}
+
+/** Prefer sequential when any step has a pre-request script so env.set can chain. */
+export async function runCollectionAuto(
+  collectionId: string,
+  collectionName: string,
+  requests: SavedRequest[],
+  environment: Environment | null,
+  onStep?: (step: CollectionRunStep, index: number, total: number) => void,
+): Promise<CollectionRunResult> {
+  const needsSequential = requests.some((item) => item.request.preRequestScript?.trim());
+  if (needsSequential) {
+    return runCollection(collectionId, collectionName, requests, environment, onStep);
+  }
+  return runCollectionParallel(collectionId, collectionName, requests, environment, onStep);
 }
 
 export async function runCollectionParallel(

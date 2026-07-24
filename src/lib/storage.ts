@@ -22,6 +22,8 @@ import {
 } from "./helpers";
 import { defaultCollectionGroup } from "./collections";
 import { importPostmanCollection, isPostmanCollection } from "./postman-import";
+import { importBrunoIntoState, isBrunoCollection } from "./bruno-import";
+import { importInsomniaIntoState, isInsomniaExport } from "./insomnia-import";
 import { exportPulseCollection, importPulseCollection, isPulseCollection } from "./pulse-collection";
 import { isOpenApiSpec, importOpenApiIntoState } from "./openapi-import";
 import { emitWorkspaceUpdated } from "./workspace-sync";
@@ -316,6 +318,10 @@ export function importCollectionJson(
     return importOpenApiIntoState(raw, state);
   }
 
+  if (isInsomniaExport(raw)) {
+    return importInsomniaIntoState(raw, state);
+  }
+
   if (isPostmanCollection(raw)) {
     const imported = importPostmanCollection(raw);
     return {
@@ -323,6 +329,10 @@ export function importCollectionJson(
       collections: [...imported.requests, ...state.collections],
       activeCollectionId: imported.collection.id,
     };
+  }
+
+  if (isBrunoCollection(raw)) {
+    return importBrunoIntoState(raw, state);
   }
 
   if (isPulseCollection(raw)) {
@@ -390,5 +400,19 @@ export function importPostmanIntoState(raw: string, state: PersistedState): Pers
     collectionGroups: [...state.collectionGroups, imported.collection],
     collections: [...imported.requests, ...state.collections],
     activeCollectionId: imported.collection.id,
+  };
+}
+
+export function importBrunoCollectionIntoState(raw: string, state: PersistedState): PersistedState {
+  return {
+    ...state,
+    ...importBrunoIntoState(raw, state),
+  };
+}
+
+export function importInsomniaCollectionIntoState(raw: string, state: PersistedState): PersistedState {
+  return {
+    ...state,
+    ...importInsomniaIntoState(raw, state),
   };
 }

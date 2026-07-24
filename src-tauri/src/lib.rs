@@ -9,6 +9,7 @@ pub mod db;
 pub mod engine;
 pub mod history;
 pub mod http;
+pub mod oauth;
 pub mod search;
 pub mod settings;
 pub mod sql_safety;
@@ -27,7 +28,7 @@ use search::{SearchDocument, SearchMatch};
 use settings::AppSettings;
 use state::HttpState;
 use std::sync::Arc;
-use test_runner::TestRunResult;
+use test_runner::{PreRequestResult, TestRunResult};
 use tauri::{AppHandle, Manager, State};
 use websocket::WsConnectResult;
 use windows::{AppWindowInfo, PendingWindowInit};
@@ -148,6 +149,18 @@ fn run_http_tests(
     response: HttpResponsePayload,
 ) -> Result<TestRunResult, String> {
     Ok(test_runner::run_http_tests(&script, &response))
+}
+
+#[tauri::command]
+fn run_pre_request_script(script: String) -> Result<PreRequestResult, String> {
+    Ok(test_runner::run_pre_request_script(&script))
+}
+
+#[tauri::command]
+async fn exchange_oauth_token(
+    request: oauth::OAuthTokenRequest,
+) -> Result<oauth::OAuthTokenResponse, String> {
+    oauth::exchange_oauth_token(request).await
 }
 
 #[tauri::command]
@@ -366,6 +379,23 @@ fn clear_http_cookies(state: State<'_, HttpState>) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn set_http_cookie(
+    state: State<'_, HttpState>,
+    cookie: cookies::StoredCookie,
+) -> Result<Vec<cookies::StoredCookie>, String> {
+    state.set_cookie(cookie)
+}
+
+#[tauri::command]
+fn delete_http_cookie(
+    state: State<'_, HttpState>,
+    name: String,
+    url: String,
+) -> Result<Vec<cookies::StoredCookie>, String> {
+    state.delete_cookie(&name, &url)
+}
+
+#[tauri::command]
 fn ws_close(ws: State<'_, WsState>, connection_id: String) -> Result<(), String> {
     websocket::close_connection(&ws, &connection_id)
 }
@@ -409,6 +439,8 @@ pub fn run() {
             read_custom_theme_css,
             set_custom_theme_css,
             run_http_tests,
+            run_pre_request_script,
+            exchange_oauth_token,
             db_load_workspace,
             db_save_workspace,
             db_append_history,
@@ -440,6 +472,8 @@ pub fn run() {
             ws_close,
             get_http_cookies,
             clear_http_cookies,
+            set_http_cookie,
+            delete_http_cookie,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

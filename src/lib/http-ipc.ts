@@ -90,6 +90,14 @@ export async function clearHttpCookies(): Promise<void> {
   return runEffect(invokeEffectVoid("clear_http_cookies"));
 }
 
+export async function setHttpCookie(cookie: StoredCookie): Promise<StoredCookie[]> {
+  return runEffect(invokeEffect<StoredCookie[]>("set_http_cookie", { cookie }));
+}
+
+export async function deleteHttpCookie(name: string, url: string): Promise<StoredCookie[]> {
+  return runEffect(invokeEffect<StoredCookie[]>("delete_http_cookie", { name, url }));
+}
+
 export async function getAppSettings(): Promise<AppSettings> {
   return runEffect(getAppSettingsEffect());
 }
@@ -104,4 +112,47 @@ export async function getHttpCookies(): Promise<StoredCookie[]> {
 
 export async function runHttpTests(script: string, response: HttpResponse): Promise<TestRunResult> {
   return runEffect(runHttpTestsEffect(script, response));
+}
+
+export type EnvMutation = {
+  key: string;
+  value: string;
+};
+
+export type PreRequestResult = {
+  mutations: EnvMutation[];
+};
+
+export function runPreRequestScriptEffect(
+  script: string,
+): ReturnType<typeof invokeEffect<PreRequestResult>> {
+  return invokeEffect<PreRequestResult>("run_pre_request_script", { script });
+}
+
+export async function runPreRequestScript(script: string): Promise<PreRequestResult> {
+  return runEffect(runPreRequestScriptEffect(script));
+}
+
+export type OAuthTokenRequest = {
+  grantType: string;
+  tokenUrl: string;
+  clientId: string;
+  clientSecret?: string | null;
+  scope?: string | null;
+  code?: string | null;
+  redirectUri?: string | null;
+  codeVerifier?: string | null;
+  refreshToken?: string | null;
+};
+
+export type OAuthTokenResponse = {
+  accessToken: string;
+  refreshToken?: string | null;
+  tokenType?: string | null;
+  expiresIn?: number | null;
+  scope?: string | null;
+};
+
+export async function exchangeOAuthToken(request: OAuthTokenRequest): Promise<OAuthTokenResponse> {
+  return runEffect(invokeEffect<OAuthTokenResponse>("exchange_oauth_token", { request }));
 }

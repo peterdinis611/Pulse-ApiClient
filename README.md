@@ -16,11 +16,13 @@ Desktop API client built with **Tauri**, **React**, **TypeScript**, **Tailwind C
 
 - HTTP methods: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS
 - Query params, headers, body (none, JSON, raw, form-urlencoded, multipart)
-- Auth: Bearer, Basic, API key (header or query)
+- Auth: Bearer, Basic, API key, OAuth 2.0 (client credentials + authorization code / PKCE)
+- Pre-request scripts with `pulse.environment.set` for collection chaining
 - Response panel: status, timing, size, body (JSON pretty-print), headers
-- Collections: save, duplicate, delete, import/export JSON, Postman & OpenAPI
+- Collections: save, duplicate, delete, import/export JSON, Postman, Bruno, Insomnia & OpenAPI
 - Environments with `{{variable}}` substitution
 - Request history in SQLite with search and pagination
+- Cookie jar editor (add / edit / delete)
 - Custom themes + optional custom CSS overlay
 - WebSocket client, collection runner, fuzzy search
 - Keyboard shortcut: **Cmd/Ctrl + Enter** to send

@@ -122,6 +122,8 @@ export function useApp() {
     },
     importCollections: (raw: string) => send({ type: "IMPORT_COLLECTIONS", raw }),
     importPostmanCollection: (raw: string) => send({ type: "IMPORT_POSTMAN", raw }),
+    importBrunoCollection: (raw: string) => send({ type: "IMPORT_BRUNO", raw }),
+    importInsomniaCollection: (raw: string) => send({ type: "IMPORT_INSOMNIA", raw }),
     importOpenApiCollection: (raw: string) => send({ type: "IMPORT_OPENAPI", raw }),
     importEnvironments: (raw: string) => send({ type: "IMPORT_ENVIRONMENTS", raw }),
     exportEnvironments: () => exportEnvironmentsJson(context.persisted.environments),

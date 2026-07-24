@@ -19,6 +19,7 @@ tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "multipart", "cookies"] }
+url = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
 base64 = "0.22"
 moka = { version = "0.12", features = ["sync"] }

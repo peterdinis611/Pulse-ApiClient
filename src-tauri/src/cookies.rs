@@ -1,8 +1,9 @@
 use reqwest::cookie::Jar;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
+use url::Url;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StoredCookie {
     pub name: String,
@@ -63,6 +64,30 @@ impl CookieJarState {
             .unwrap_or_default()
     }
 
+    pub fn upsert(&self, cookie: StoredCookie) -> Result<Vec<StoredCookie>, String> {
+        let normalized = normalize_cookie(cookie)?;
+        {
+            let Ok(mut log) = self.log.lock() else {
+                return Err("Cookie log lock poisoned".into());
+            };
+            log.retain(|item| !(item.name == normalized.name && item.url == normalized.url));
+            log.push(normalized);
+        }
+        self.rebuild_live_jar()?;
+        Ok(self.list())
+    }
+
+    pub fn remove(&self, name: &str, url: &str) -> Result<Vec<StoredCookie>, String> {
+        {
+            let Ok(mut log) = self.log.lock() else {
+                return Err("Cookie log lock poisoned".into());
+            };
+            log.retain(|item| !(item.name == name && item.url == url));
+        }
+        self.rebuild_live_jar()?;
+        Ok(self.list())
+    }
+
     pub fn reset(&self) -> Arc<Jar> {
         let jar = Arc::new(Jar::default());
         if let Ok(mut stored) = self.jar.lock() {
@@ -73,6 +98,67 @@ impl CookieJarState {
         }
         jar
     }
+
+    fn rebuild_live_jar(&self) -> Result<(), String> {
+        let cookies = self.list();
+        let jar = build_jar_from_cookies(&cookies)?;
+        let Ok(mut stored) = self.jar.lock() else {
+            return Err("Cookie jar lock poisoned".into());
+        };
+        *stored = jar;
+        Ok(())
+    }
+}
+
+fn normalize_cookie(mut cookie: StoredCookie) -> Result<StoredCookie, String> {
+    cookie.name = cookie.name.trim().to_string();
+    cookie.value = cookie.value.trim().to_string();
+    cookie.url = cookie.url.trim().to_string();
+    if cookie.name.is_empty() {
+        return Err("Cookie name is required".into());
+    }
+    if cookie.url.is_empty() {
+        return Err("Cookie URL is required".into());
+    }
+    Url::parse(&cookie.url).map_err(|error| format!("Invalid cookie URL: {error}"))?;
+    if let Some(domain) = cookie.domain.as_mut() {
+        let trimmed = domain.trim().to_string();
+        cookie.domain = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        };
+    }
+    if let Some(path) = cookie.path.as_mut() {
+        let trimmed = path.trim().to_string();
+        cookie.path = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        };
+    }
+    Ok(cookie)
+}
+
+fn cookie_set_header(cookie: &StoredCookie) -> String {
+    let mut line = format!("{}={}", cookie.name, cookie.value);
+    let path = cookie.path.as_deref().unwrap_or("/");
+    line.push_str("; Path=");
+    line.push_str(path);
+    if let Some(domain) = cookie.domain.as_deref() {
+        line.push_str("; Domain=");
+        line.push_str(domain);
+    }
+    line
+}
+
+fn build_jar_from_cookies(cookies: &[StoredCookie]) -> Result<Arc<Jar>, String> {
+    let jar = Arc::new(Jar::default());
+    for cookie in cookies {
+        let parsed = Url::parse(&cookie.url).map_err(|error| format!("Invalid cookie URL: {error}"))?;
+        jar.add_cookie_str(&cookie_set_header(cookie), &parsed);
+    }
+    Ok(jar)
 }
 
 fn parse_set_cookie(value: &str) -> (String, String) {

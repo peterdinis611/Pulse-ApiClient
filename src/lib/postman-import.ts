@@ -229,9 +229,9 @@ function parseBody(
   };
 }
 
-function parsePostmanTests(item: PostmanItem): string | undefined {
-  const testEvent = item.event?.find((entry) => entry.listen === "test");
-  const exec = testEvent?.script?.exec;
+function parsePostmanScript(item: PostmanItem, listen: "test" | "prerequest"): string | undefined {
+  const event = item.event?.find((entry) => entry.listen === listen);
+  const exec = event?.script?.exec;
   if (!exec) return undefined;
   const raw = Array.isArray(exec) ? exec.join("\n") : exec;
   return normalizeTestsToPulse(raw);
@@ -250,7 +250,8 @@ function parsePostmanRequest(item: PostmanItem): ApiRequest | null {
     headers: parseKeyValues(item.request.header),
     query,
     auth: parseAuth(item.request.auth),
-    tests: parsePostmanTests(item),
+    tests: parsePostmanScript(item, "test"),
+    preRequestScript: parsePostmanScript(item, "prerequest") ?? "",
     ...body,
   });
 }

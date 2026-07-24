@@ -26,7 +26,8 @@ import {
 } from "@/lib/helpers";
 import { appendHistoryEntry, clearHistoryStore } from "@/lib/history-client";
 import { emitHistoryUpdated } from "@/lib/history-sync";
-import { cancelHttpRequest, sendRequest } from "@/lib/http-client";
+import { cancelHttpRequest, runPreRequestScript, sendRequest } from "@/lib/http-client";
+import { applyEnvironmentMutations } from "@/lib/env";
 import type { OverviewFilter } from "@/lib/filters";
 import { defaultOverviewFilter } from "@/lib/filters";
 import {
@@ -38,6 +39,8 @@ import {
   defaultPersistedState,
   importCollectionJson,
   importEnvironmentsJson,
+  importBrunoCollectionIntoState,
+  importInsomniaCollectionIntoState,
   importPostmanIntoState,
   savePersistedState,
   type PersistedState,
@@ -255,6 +258,8 @@ export type AppMachineEvent =
   | { type: "DUPLICATE_SAVED_REQUEST"; id: string }
   | { type: "IMPORT_COLLECTIONS"; raw: string }
   | { type: "IMPORT_POSTMAN"; raw: string }
+  | { type: "IMPORT_BRUNO"; raw: string }
+  | { type: "IMPORT_INSOMNIA"; raw: string }
   | { type: "IMPORT_OPENAPI"; raw: string }
   | { type: "IMPORT_ENVIRONMENTS"; raw: string }
   | { type: "ADD_COLLECTION_GROUP"; name: string }
@@ -438,12 +443,42 @@ export const appMachine = setup({
 
       const requestId = createId("http");
       self.send({ type: "SEND_STARTED", tabId: tab.id, requestId });
-      startTabRequest(self, {
-        tabId: tab.id,
-        requestId,
-        request: tab.request,
-        environment: getTabEnvironment(context, tab),
-      });
+
+      void (async () => {
+        let environment = getTabEnvironment(context, tab);
+        const script = tab.request.preRequestScript?.trim() ?? "";
+        if (script) {
+          try {
+            const result = await runPreRequestScript(script);
+            if (result.mutations.length > 0 && environment) {
+              environment = applyEnvironmentMutations(environment, result.mutations);
+              self.send({
+                type: "UPDATE_ENVIRONMENT",
+                id: environment.id,
+                patch: { variables: environment.variables },
+              });
+            }
+          } catch (error) {
+            self.send({
+              type: "SEND_FAILED",
+              tabId: tab.id,
+              requestId,
+              error:
+                error instanceof Error
+                  ? `Pre-request script failed: ${error.message}`
+                  : "Pre-request script failed",
+            });
+            return;
+          }
+        }
+
+        startTabRequest(self, {
+          tabId: tab.id,
+          requestId,
+          request: tab.request,
+          environment,
+        });
+      })();
     },
     startActiveTabWebSocket: ({ context, self }) => {
       const tab = getActiveTab(context);
@@ -683,6 +718,20 @@ export const appMachine = setup({
         IMPORT_POSTMAN: {
           actions: assign(({ context, event }) => {
             const persisted = importPostmanIntoState(event.raw, context.persisted);
+            saveSharedWorkspace(context, persisted);
+            return { persisted };
+          }),
+        },
+        IMPORT_BRUNO: {
+          actions: assign(({ context, event }) => {
+            const persisted = importBrunoCollectionIntoState(event.raw, context.persisted);
+            saveSharedWorkspace(context, persisted);
+            return { persisted };
+          }),
+        },
+        IMPORT_INSOMNIA: {
+          actions: assign(({ context, event }) => {
+            const persisted = importInsomniaCollectionIntoState(event.raw, context.persisted);
             saveSharedWorkspace(context, persisted);
             return { persisted };
           }),

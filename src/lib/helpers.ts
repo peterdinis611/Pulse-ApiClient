@@ -35,6 +35,16 @@ export function defaultAuth(): AuthConfig {
     apiKeyKey: "",
     apiKeyValue: "",
     apiKeyIn: "header",
+    oauthGrantType: "client_credentials",
+    oauthTokenUrl: "",
+    oauthAuthorizeUrl: "",
+    oauthClientId: "",
+    oauthClientSecret: "",
+    oauthScope: "",
+    oauthRedirectUri: "http://127.0.0.1:8080/callback",
+    oauthRefreshToken: "",
+    oauthCodeVerifier: "",
+    oauthAuthCode: "",
   };
 }
 
@@ -51,6 +61,8 @@ function normalizeKeyValues(items: KeyValue[] | undefined, fallback: KeyValue[])
 function normalizeAuth(partial?: Partial<AuthConfig>): AuthConfig {
   const base = defaultAuth();
   return {
+    ...base,
+    ...partial,
     authType: partial?.authType ?? base.authType,
     bearerToken: partial?.bearerToken ?? base.bearerToken,
     basicUsername: partial?.basicUsername ?? base.basicUsername,
@@ -58,6 +70,16 @@ function normalizeAuth(partial?: Partial<AuthConfig>): AuthConfig {
     apiKeyKey: partial?.apiKeyKey ?? base.apiKeyKey,
     apiKeyValue: partial?.apiKeyValue ?? base.apiKeyValue,
     apiKeyIn: partial?.apiKeyIn ?? base.apiKeyIn,
+    oauthGrantType: partial?.oauthGrantType ?? base.oauthGrantType,
+    oauthTokenUrl: partial?.oauthTokenUrl ?? base.oauthTokenUrl,
+    oauthAuthorizeUrl: partial?.oauthAuthorizeUrl ?? base.oauthAuthorizeUrl,
+    oauthClientId: partial?.oauthClientId ?? base.oauthClientId,
+    oauthClientSecret: partial?.oauthClientSecret ?? base.oauthClientSecret,
+    oauthScope: partial?.oauthScope ?? base.oauthScope,
+    oauthRedirectUri: partial?.oauthRedirectUri ?? base.oauthRedirectUri,
+    oauthRefreshToken: partial?.oauthRefreshToken ?? base.oauthRefreshToken,
+    oauthCodeVerifier: partial?.oauthCodeVerifier ?? base.oauthCodeVerifier,
+    oauthAuthCode: partial?.oauthAuthCode ?? base.oauthAuthCode,
   };
 }
 
@@ -103,6 +125,7 @@ export function createRequest(partial?: Partial<ApiRequest>): ApiRequest {
       ],
     auth: normalizeAuth(partial?.auth),
     tests: partial?.tests ?? defaultRequestTests,
+    preRequestScript: partial?.preRequestScript ?? "",
   };
 }
 

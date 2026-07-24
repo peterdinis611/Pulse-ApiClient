@@ -24,7 +24,7 @@ import {
 import { useApp } from "@/machines";
 import { useHistory } from "@/hooks/useHistory";
 import { groupRequestsByFolder, requestsForCollection } from "@/lib/collections";
-import { runCollectionParallel, type CollectionRunResult } from "@/lib/collection-runner";
+import { runCollectionAuto, type CollectionRunResult } from "@/lib/collection-runner";
 import { filterSavedRequests, filterSavedRequestsAsync } from "@/lib/filters";
 import { downloadJson, collectionExportFilename } from "@/lib/download";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
@@ -224,7 +224,7 @@ export function ExplorerPanel() {
     setRunProgress(`Running 0/${items.length}`);
 
     try {
-      const result = await runCollectionParallel(
+      const result = await runCollectionAuto(
         collectionId,
         collectionName,
         items,

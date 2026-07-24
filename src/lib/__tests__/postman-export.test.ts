@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createCollectionGroup } from "@/lib/collections";
-import { createKeyValue, createRequest, createSavedRequest } from "@/lib/helpers";
+import { createKeyValue, createRequest, createSavedRequest, defaultAuth } from "@/lib/helpers";
 import { exportPostmanCollection } from "@/lib/postman-export";
 import { isPostmanCollection } from "@/lib/postman-import";
 import {
@@ -24,13 +24,9 @@ function sampleCollection(): { group: CollectionGroup; requests: SavedRequest[] 
       bodyKind: "json",
       body: '{"email":"user@example.com"}',
       auth: {
+        ...defaultAuth(),
         authType: "bearer",
         bearerToken: "secret",
-        basicUsername: "",
-        basicPassword: "",
-        apiKeyKey: "",
-        apiKeyValue: "",
-        apiKeyIn: "header",
       },
       tests: "expect(response.status).toBe(200);",
     }),

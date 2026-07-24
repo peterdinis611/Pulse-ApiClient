@@ -84,6 +84,22 @@ impl HttpState {
 
     pub fn clear_cookies(&self) -> Result<(), String> {
         let jar = self.inner.cookies.reset();
+        self.replace_client(jar)
+    }
+
+    pub fn set_cookie(&self, cookie: StoredCookie) -> Result<Vec<StoredCookie>, String> {
+        let cookies = self.inner.cookies.upsert(cookie)?;
+        self.replace_client(self.inner.cookies.jar())?;
+        Ok(cookies)
+    }
+
+    pub fn delete_cookie(&self, name: &str, url: &str) -> Result<Vec<StoredCookie>, String> {
+        let cookies = self.inner.cookies.remove(name, url)?;
+        self.replace_client(self.inner.cookies.jar())?;
+        Ok(cookies)
+    }
+
+    fn replace_client(&self, jar: Arc<reqwest::cookie::Jar>) -> Result<(), String> {
         let client = Self::build_client(jar)?;
         *self
             .inner
