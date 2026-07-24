@@ -1,11 +1,21 @@
 export function downloadJson(content: string, filename: string) {
-  const blob = new Blob([content], { type: "application/json" });
+  downloadBlob(new Blob([content], { type: "application/json" }), filename);
+}
+
+export function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+export function downloadBytes(bytes: Uint8Array, mimeType: string, filename: string) {
+  // Copy into a plain ArrayBuffer-backed Uint8Array for BlobPart typing.
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  downloadBlob(new Blob([copy], { type: mimeType }), filename);
 }
 
 export function collectionExportFilename(name: string, suffix: string): string {

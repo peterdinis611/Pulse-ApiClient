@@ -82,6 +82,9 @@ pub struct HttpResponsePayload {
     pub status_text: String,
     pub headers: Vec<ResponseHeader>,
     pub body: String,
+    /// `"utf8"` (default) or `"base64"` for binary/media bodies.
+    #[serde(default = "default_body_encoding")]
+    pub body_encoding: String,
     pub elapsed_ms: u64,
     pub size_bytes: usize,
     pub content_type: Option<String>,
@@ -89,6 +92,37 @@ pub struct HttpResponsePayload {
     pub cache_age_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
+}
+
+fn default_body_encoding() -> String {
+    "utf8".to_string()
+}
+
+fn encode_response_body(bytes: &[u8], content_type: Option<&str>) -> (String, String) {
+    let mime = content_type.unwrap_or("").to_ascii_lowercase();
+    let looks_binary = mime.starts_with("image/")
+        || mime.starts_with("audio/")
+        || mime.starts_with("video/")
+        || mime.contains("application/pdf")
+        || mime.contains("application/zip")
+        || mime.contains("octet-stream")
+        || mime.contains("ms-excel")
+        || mime.contains("spreadsheetml")
+        || mime.contains("officedocument")
+        || mime.contains("application/vnd.ms-")
+        || mime.contains("font/");
+
+    if looks_binary || std::str::from_utf8(bytes).is_err() {
+        (
+            base64::engine::general_purpose::STANDARD.encode(bytes),
+            "base64".to_string(),
+        )
+    } else {
+        (
+            String::from_utf8_lossy(bytes).into_owned(),
+            "utf8".to_string(),
+        )
+    }
 }
 
 fn enabled_pairs(items: &[KeyValue]) -> Vec<(String, String)> {
@@ -470,13 +504,14 @@ async fn perform_request(
         .await
         .map_err(|e| format!("Failed to read response body: {e}"))?;
     let size_bytes = body_bytes.len();
-    let body = String::from_utf8_lossy(&body_bytes).into_owned();
+    let (body, body_encoding) = encode_response_body(&body_bytes, content_type.as_deref());
 
     Ok(HttpResponsePayload {
         status,
         status_text,
         headers: response_headers,
         body,
+        body_encoding,
         elapsed_ms,
         size_bytes,
         content_type,

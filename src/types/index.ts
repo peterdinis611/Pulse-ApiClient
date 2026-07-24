@@ -113,6 +113,8 @@ export type HttpResponse = {
   statusText: string;
   headers: Array<{ key: string; value: string }>;
   body: string;
+  /** `"utf8"` (default) or `"base64"` for binary/media bodies. */
+  bodyEncoding?: "utf8" | "base64" | string | null;
   elapsedMs: number;
   sizeBytes: number;
   contentType?: string | null;

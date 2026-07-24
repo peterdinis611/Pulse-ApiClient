@@ -10,6 +10,7 @@ fn sample_response(status: u16, body: &str, elapsed_ms: u64) -> HttpResponsePayl
             value: "application/json".to_string(),
         }],
         body: body.to_string(),
+        body_encoding: "utf8".to_string(),
         elapsed_ms,
         size_bytes: body.len(),
         content_type: Some("application/json".to_string()),

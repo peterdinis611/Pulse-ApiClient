@@ -1,17 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
-import { Copy } from "lucide-react";
+import { Copy, Download } from "lucide-react";
 import { useApp } from "@/machines";
+import { downloadBytes } from "@/lib/download";
 import { formatBytes } from "@/lib/helpers";
 import { toast } from "@/lib/toast";
 import { parseGraphqlResponse } from "@/lib/graphql";
 import { statusBadgeClass } from "@/lib/method-colors";
 import {
   defaultResponseBodyFormat,
+  decodeResponseBytes,
   formatResponseBody,
+  responseMimeType,
+  suggestedDownloadFilename,
   type ResponseBodyFormat,
 } from "@/lib/response-body";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/EmptyState";
+import {
+  previewKindForResponse,
+  ResponseMediaPreview,
+} from "@/components/ResponseMediaPreview";
 import { TestResultsList } from "@/components/TestResultsList";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,6 +31,13 @@ export function ResponsePanel() {
   const [view, setView] = useState<"body" | "headers" | "tests">("body");
   const [bodyFormat, setBodyFormat] = useState<ResponseBodyFormat>("pretty");
 
+  const previewKind = useMemo(
+    () => (response ? previewKindForResponse(response) : "text"),
+    [response],
+  );
+  const isMediaPreview =
+    previewKind === "image" || previewKind === "pdf" || previewKind === "excel";
+
   const formattedBody = useMemo(() => {
     if (!response) return { text: "", jsonValid: null as boolean | null };
     return formatResponseBody(response.body, response.contentType, bodyFormat);
@@ -30,7 +45,13 @@ export function ResponsePanel() {
 
   const body = formattedBody.text;
 
-  const graphqlErrors = useMemo(() => parseGraphqlResponse(response?.body ?? "")?.errors ?? [], [response]);
+  const graphqlErrors = useMemo(
+    () =>
+      response?.bodyEncoding === "base64"
+        ? []
+        : (parseGraphqlResponse(response?.body ?? "")?.errors ?? []),
+    [response],
+  );
 
   const scrollResetKey = useMemo(
     () =>
@@ -40,8 +61,10 @@ export function ResponsePanel() {
 
   useEffect(() => {
     if (!response) return;
-    setBodyFormat(defaultResponseBodyFormat(response.body, response.contentType));
-  }, [response?.body, response?.contentType, response?.requestId]);
+    setBodyFormat(
+      defaultResponseBodyFormat(response.body, response.contentType, response.bodyEncoding),
+    );
+  }, [response?.body, response?.bodyEncoding, response?.contentType, response?.requestId]);
 
   useEffect(() => {
     if (testResults && testResults.failed > 0) {
@@ -50,18 +73,30 @@ export function ResponsePanel() {
   }, [testResults]);
 
   const copyBody = async () => {
+    if (!response) return;
+    if (response.bodyEncoding === "base64") {
+      toast.info("Binary body", "Use Download to save the file.");
+      return;
+    }
     if (!body) return;
     await navigator.clipboard.writeText(body);
     toast.success("Copied to clipboard");
+  };
+
+  const downloadBody = () => {
+    if (!response) return;
+    const bytes = decodeResponseBytes(response);
+    const mime = responseMimeType(response.contentType, previewKind);
+    const filename = suggestedDownloadFilename(response.contentType, previewKind);
+    downloadBytes(bytes, mime, filename);
+    toast.success("Download started", filename);
   };
 
   const contentTypeShort = response?.contentType?.split(";")[0]?.trim() ?? null;
 
   return (
     <section className="flex h-full min-h-0 flex-col bg-surface-1/30">
-      {/* single-row toolbar */}
       <div className="response-toolbar">
-        {/* left: label + meta */}
         <div className="flex min-w-0 items-center gap-2 overflow-hidden">
           <span className="text-caption shrink-0">Response</span>
           {response && !loading && (
@@ -111,7 +146,6 @@ export function ResponsePanel() {
           )}
         </div>
 
-        {/* right: tabs + copy */}
         {response && !loading && (
           <div className="flex shrink-0 items-center gap-1">
             <Button
@@ -123,6 +157,16 @@ export function ResponsePanel() {
             >
               <Copy className="size-3.5" />
               Copy
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-muted-foreground"
+              onClick={downloadBody}
+            >
+              <Download className="size-3.5" />
+              Download
             </Button>
             <div className="mx-1 h-4 w-px bg-border/60" />
             <Tabs value={view} onValueChange={(value) => setView(value as typeof view)}>
@@ -172,23 +216,44 @@ export function ResponsePanel() {
 
           {!loading && response && view === "body" && (
             <div className="space-y-3">
-              {/* format picker — inline above body, not in the main toolbar */}
               <div className="flex items-center gap-2">
                 <Tabs
                   value={bodyFormat}
                   onValueChange={(value) => setBodyFormat(value as ResponseBodyFormat)}
                 >
                   <TabsList className="h-7 border border-border/60 bg-muted/30">
-                    <TabsTrigger value="pretty" className="h-6 px-2 text-xs">Pretty</TabsTrigger>
-                    <TabsTrigger value="raw" className="h-6 px-2 text-xs">Raw</TabsTrigger>
-                    <TabsTrigger value="json" className="h-6 px-2 text-xs">JSON</TabsTrigger>
+                    {isMediaPreview && (
+                      <TabsTrigger value="preview" className="h-6 px-2 text-xs">
+                        Preview
+                      </TabsTrigger>
+                    )}
+                    <TabsTrigger value="pretty" className="h-6 px-2 text-xs">
+                      Pretty
+                    </TabsTrigger>
+                    <TabsTrigger value="raw" className="h-6 px-2 text-xs">
+                      Raw
+                    </TabsTrigger>
+                    {!isMediaPreview && (
+                      <TabsTrigger value="json" className="h-6 px-2 text-xs">
+                        JSON
+                      </TabsTrigger>
+                    )}
                   </TabsList>
                 </Tabs>
                 {bodyFormat === "json" && formattedBody.jsonValid === false && (
                   <span className="text-xs text-warning">Not valid JSON — showing raw text.</span>
                 )}
               </div>
-              <pre className="ui-code-block">{body || "(empty body)"}</pre>
+
+              {bodyFormat === "preview" && isMediaPreview ? (
+                <ResponseMediaPreview response={response} kind={previewKind} />
+              ) : (
+                <pre className="ui-code-block">
+                  {bodyFormat === "raw" && response.bodyEncoding === "base64"
+                    ? `(base64, ${response.sizeBytes.toLocaleString()} bytes)\n${body.slice(0, 4000)}${body.length > 4000 ? "…" : ""}`
+                    : body || "(empty body)"}
+                </pre>
+              )}
             </div>
           )}
 

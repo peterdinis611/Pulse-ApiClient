@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   canFormatAsJson,
+  defaultResponseBodyFormat,
+  detectPreviewKind,
   formatResponseBody,
   isJsonContentType,
   looksLikeJson,
+  suggestedDownloadFilename,
 } from "../response-body";
 
 describe("response-body", () => {
@@ -51,5 +54,28 @@ describe("response-body", () => {
   it("canFormatAsJson detects json bodies", () => {
     expect(canFormatAsJson('{"x":1}')).toBe(true);
     expect(canFormatAsJson("<p>hi</p>")).toBe(false);
+  });
+
+  it.each([
+    ["image/png", "base64", "image"],
+    ["application/pdf", "base64", "pdf"],
+    ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "base64", "excel"],
+    ["text/csv", "utf8", "excel"],
+    ["application/json", "utf8", "text"],
+    ["application/octet-stream", "base64", "binary"],
+  ] as const)("detectPreviewKind(%j, %j)", (contentType, encoding, expected) => {
+    expect(detectPreviewKind(contentType, encoding)).toBe(expected);
+  });
+
+  it("defaults media responses to preview format", () => {
+    expect(defaultResponseBodyFormat("", "image/jpeg", "base64")).toBe("preview");
+    expect(defaultResponseBodyFormat("", "application/pdf", "base64")).toBe("preview");
+    expect(defaultResponseBodyFormat("a,b\n1,2", "text/csv", "utf8")).toBe("preview");
+  });
+
+  it("suggests download filenames from content type", () => {
+    expect(suggestedDownloadFilename("image/png", "image")).toBe("response.png");
+    expect(suggestedDownloadFilename("application/pdf", "pdf")).toBe("response.pdf");
+    expect(suggestedDownloadFilename("text/csv", "excel")).toBe("response.csv");
   });
 });
