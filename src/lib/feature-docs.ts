@@ -22,7 +22,7 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
     summary: "Build and send requests from the Requests workspace.",
     group: "Workspace",
     items: [
-      "Methods: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS",
+      "Methods: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS, QUERY",
       "Query params, headers, and body: none, JSON, raw, form-urlencoded, multipart",
       "Send with Cmd/Ctrl + Enter (or the Send button)",
       "Protocol switch: HTTP or WebSocket (ws:// / wss://)",

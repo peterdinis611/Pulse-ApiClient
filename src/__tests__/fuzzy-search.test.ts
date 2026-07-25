@@ -6,7 +6,7 @@ import {
   toHistoryDocument,
   toOverviewDocument,
   toSavedRequestDocument,
-} from "../fuzzy-search";
+} from "@/lib/fuzzy-search";
 import { overviewDocuments } from "./test-fixtures";
 
 describe("fuzzy-search", () => {
@@ -40,7 +40,8 @@ describe("fuzzy-search", () => {
     });
 
     expect(saved.meta).toBe("Catalog");
-    expect(history.keywords).toBe("204");
+    expect(history.keywords).toContain("204");
+    expect(history.keywords).toContain("GET");
   });
 
   it("maps overview documents with status keywords", () => {
@@ -53,6 +54,7 @@ describe("fuzzy-search", () => {
       status: 404,
     });
 
-    expect(doc.keywords).toBe("404");
+    expect(doc.keywords).toContain("404");
+    expect(doc.keywords).toContain("api.example.com");
   });
 });

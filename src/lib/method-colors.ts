@@ -3,6 +3,7 @@ import type { HttpMethod } from "@/types";
 export function methodShortLabel(method: HttpMethod | string): string {
   if (method === "DELETE") return "DEL";
   if (method === "OPTIONS") return "OPT";
+  if (method === "QUERY") return "QRY";
   return method;
 }
 
@@ -18,6 +19,8 @@ export function methodTextClass(method: HttpMethod | string): string {
       return "text-method-patch";
     case "DELETE":
       return "text-method-delete";
+    case "QUERY":
+      return "text-method-query";
     default:
       return "text-muted-foreground";
   }
@@ -35,6 +38,8 @@ export function methodBadgeClass(method: HttpMethod | string): string {
       return "method-badge-patch";
     case "DELETE":
       return "method-badge-delete";
+    case "QUERY":
+      return "method-badge-query";
     default:
       return "border-border bg-muted text-muted-foreground";
   }

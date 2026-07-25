@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { importOpenApiCollection, isOpenApiSpec } from "../openapi-import";
+import { importOpenApiCollection, isOpenApiSpec } from "@/lib/openapi-import";
 
 const sampleSpec = JSON.stringify({
   openapi: "3.0.0",

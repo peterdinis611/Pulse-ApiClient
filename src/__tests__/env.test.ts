@@ -5,8 +5,8 @@ import {
   substituteVariables,
   unresolvedVariables,
   variableTemplate,
-} from "../env";
-import { createEnvironment, createKeyValue } from "../helpers";
+} from "@/lib/env";
+import { createEnvironment, createKeyValue } from "@/lib/helpers";
 
 const environment = createEnvironment("Local");
 environment.variables = [

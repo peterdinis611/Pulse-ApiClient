@@ -3,8 +3,8 @@ import {
   defaultRequestTests,
   pulseTestsTemplate,
   testSnippets,
-} from "../default-tests";
-import { normalizeTestsToPulse } from "../test-snippets";
+} from "@/lib/default-tests";
+import { normalizeTestsToPulse } from "@/lib/test-snippets";
 
 describe("test-snippets", () => {
   it("exposes pulse snippets and template", () => {

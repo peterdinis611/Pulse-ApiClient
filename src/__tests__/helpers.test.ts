@@ -4,7 +4,7 @@ import {
   createRequest,
   formatBytes,
   prettyJson,
-} from "../helpers";
+} from "@/lib/helpers";
 
 describe("helpers", () => {
   it.each([

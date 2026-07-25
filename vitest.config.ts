@@ -9,7 +9,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["src/**/__tests__/**/*.test.ts"],
+    include: ["src/__tests__/**/*.test.ts"],
     clearMocks: true,
     pool: "threads",
     sequence: { concurrent: true },

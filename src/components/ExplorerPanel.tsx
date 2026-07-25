@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   ChevronDown,
@@ -18,7 +18,6 @@ import {
   Search,
   SearchX,
   Trash2,
-  Upload,
   X,
 } from "lucide-react";
 import { useApp } from "@/machines";
@@ -33,6 +32,7 @@ import type { FolderTreeNode } from "@/lib/collections";
 import { AddFolderMenu } from "@/components/AddFolderMenu";
 import { CollectionRunResultsPanel } from "@/components/CollectionRunResultsPanel";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { ExplorerTransferMenu } from "@/components/ExplorerTransferMenu";
 import { MethodBadge } from "@/components/MethodBadge";
 import { TooltipIconButton } from "@/components/TooltipIconButton";
 import { Button } from "@/components/ui/button";
@@ -136,7 +136,6 @@ export function ExplorerPanel() {
     setSearchQuery: setHistorySearchQuery,
   } = useHistory();
 
-  const importRef = useRef<HTMLInputElement>(null);
   const [collectionsOpen, setCollectionsOpen] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(true);
   const [openCollections, setOpenCollections] = useState<Record<string, boolean>>({});
@@ -281,31 +280,12 @@ export function ExplorerPanel() {
             >
               <Plus className="size-3.5" />
             </TooltipIconButton>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-7 text-muted-foreground"
-                  aria-label="Import / export"
-                >
-                  <MoreHorizontal className="size-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
-                <DropdownMenuItem onClick={() => importRef.current?.click()}>
-                  <Upload className="size-3.5" />
-                  Import
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => downloadJson(exportCollections(), "pulse-collections.json")}
-                >
-                  <Download className="size-3.5" />
-                  Export all
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <ExplorerTransferMenu
+              collectionCount={collectionGroups.length}
+              requestCount={collections.length}
+              exportCollections={exportCollections}
+              importCollections={importCollections}
+            />
             <TooltipIconButton
               variant="ghost"
               size="icon"
@@ -315,18 +295,6 @@ export function ExplorerPanel() {
             >
               <PanelLeftClose className="size-3.5" />
             </TooltipIconButton>
-            <input
-              ref={importRef}
-              type="file"
-              accept="application/json,.json,.yaml,.yml"
-              hidden
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (!file) return;
-                void file.text().then(importCollections);
-                event.target.value = "";
-              }}
-            />
           </div>
         </div>
 

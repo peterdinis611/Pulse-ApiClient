@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { importBrunoCollection, isBrunoCollection } from "../bruno-import";
-import { importInsomniaCollection, isInsomniaExport } from "../insomnia-import";
+import { importBrunoCollection, isBrunoCollection } from "@/lib/bruno-import";
+import { importInsomniaCollection, isInsomniaExport } from "@/lib/insomnia-import";
 
 const brunoSample = JSON.stringify({
   name: "Bruno Demo",

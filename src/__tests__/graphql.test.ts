@@ -4,7 +4,7 @@ import {
   formatGraphqlResponse,
   parseGraphqlResponse,
   validateGraphqlRequest,
-} from "../graphql";
+} from "@/lib/graphql";
 
 const sampleRequest = {
   graphqlQuery: "query Example { user { id } }",

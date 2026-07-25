@@ -5,7 +5,8 @@ export type HttpMethod =
   | "PATCH"
   | "DELETE"
   | "HEAD"
-  | "OPTIONS";
+  | "OPTIONS"
+  | "QUERY";
 
 export type BodyKind = "none" | "json" | "raw" | "form" | "multipart" | "graphql";
 export type AuthType = "none" | "bearer" | "basic" | "apiKey" | "oauth2";
@@ -199,6 +200,7 @@ export const HTTP_METHODS: HttpMethod[] = [
   "DELETE",
   "HEAD",
   "OPTIONS",
+  "QUERY",
 ];
 
 export const BODY_KINDS: { id: BodyKind; label: string }[] = [

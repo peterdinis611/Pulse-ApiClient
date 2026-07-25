@@ -1,5 +1,5 @@
-import type { FilterableItem } from "../filters";
-import type { SearchDocument } from "../fuzzy-search";
+import type { FilterableItem } from "@/lib/filters";
+import type { SearchDocument } from "@/lib/fuzzy-search";
 
 export function makeFilterableItem(
   partial: Partial<FilterableItem> & Pick<FilterableItem, "id">,

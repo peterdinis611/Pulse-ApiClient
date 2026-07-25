@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { curlToRequest, requestToCurl } from "../curl";
-import { createRequest } from "../helpers";
+import { curlToRequest, requestToCurl } from "@/lib/curl";
+import { createRequest } from "@/lib/helpers";
 
 describe("curl", () => {
   it("exports a GET request", () => {

@@ -9,7 +9,7 @@ import {
   looksLikeJson,
   responseMimeType,
   suggestedDownloadFilename,
-} from "../response-body";
+} from "@/lib/response-body";
 
 describe("response-body", () => {
   it.each([

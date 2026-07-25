@@ -376,7 +376,7 @@ async fn perform_request(
     client: &reqwest::Client,
     payload: HttpRequestPayload,
 ) -> Result<HttpResponsePayload, String> {
-    let method = Method::from_str(payload.method.trim().to_uppercase().as_str())
+    let method = Method::from_bytes(payload.method.trim().to_uppercase().as_bytes())
         .map_err(|e| format!("Invalid HTTP method: {e}"))?;
     let url = build_url(&payload)?;
 

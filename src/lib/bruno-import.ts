@@ -77,6 +77,7 @@ const HTTP_METHODS = new Set<HttpMethod>([
   "DELETE",
   "HEAD",
   "OPTIONS",
+  "QUERY",
 ]);
 
 function asString(value: unknown): string {

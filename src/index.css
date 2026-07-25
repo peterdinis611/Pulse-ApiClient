@@ -69,11 +69,13 @@ html[data-theme="light"] {
   --method-put: oklch(0.5 0.11 230);
   --method-patch: oklch(0.52 0.09 200);
   --method-delete: oklch(0.52 0.18 25);
+  --method-query: oklch(0.5 0.12 285);
   --method-get-bg: oklch(0.48 0.13 155 / 0.11);
   --method-post-bg: oklch(0.58 0.13 55 / 0.11);
   --method-put-bg: oklch(0.5 0.11 230 / 0.11);
   --method-patch-bg: oklch(0.52 0.09 200 / 0.11);
   --method-delete-bg: oklch(0.52 0.18 25 / 0.11);
+  --method-query-bg: oklch(0.5 0.12 285 / 0.11);
   --workspace-gradient: linear-gradient(
     180deg,
     var(--surface-0) 0%,
@@ -145,11 +147,13 @@ html[data-theme="dark"] {
   --method-put: oklch(0.7 0.09 230);
   --method-patch: oklch(0.72 0.07 200);
   --method-delete: oklch(0.66 0.15 25);
+  --method-query: oklch(0.74 0.1 285);
   --method-get-bg: oklch(0.72 0.11 155 / 0.14);
   --method-post-bg: oklch(0.76 0.11 55 / 0.14);
   --method-put-bg: oklch(0.7 0.09 230 / 0.14);
   --method-patch-bg: oklch(0.72 0.07 200 / 0.14);
   --method-delete-bg: oklch(0.66 0.15 25 / 0.14);
+  --method-query-bg: oklch(0.74 0.1 285 / 0.14);
   --workspace-gradient: linear-gradient(
     180deg,
     var(--surface-0) 0%,
@@ -354,6 +358,7 @@ html[data-theme="dark"] {
   .text-method-put { color: var(--method-put); }
   .text-method-patch { color: var(--method-patch); }
   .text-method-delete { color: var(--method-delete); }
+  .text-method-query { color: var(--method-query); }
 
   .method-badge-get {
     border: 1px solid color-mix(in oklch, var(--method-get) 25%, transparent);
@@ -379,6 +384,11 @@ html[data-theme="dark"] {
     border: 1px solid color-mix(in oklch, var(--method-delete) 25%, transparent);
     background: var(--method-delete-bg);
     color: var(--method-delete);
+  }
+  .method-badge-query {
+    border: 1px solid color-mix(in oklch, var(--method-query) 25%, transparent);
+    background: var(--method-query-bg);
+    color: var(--method-query);
   }
 
   .status-badge-success {

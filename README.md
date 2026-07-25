@@ -16,7 +16,7 @@ Desktop API client built with **Tauri**, **React**, **TypeScript**, **Tailwind C
 
 See the full guide in [docs/FEATURES.md](./docs/FEATURES.md) (also available in-app under **Docs** in the left rail).
 
-- HTTP methods: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS
+- HTTP methods: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS, QUERY
 - Query params, headers, body (none, JSON, raw, form-urlencoded, multipart)
 - Auth: Bearer, Basic, API key, OAuth 2.0 (client credentials + authorization code / PKCE)
 - Pre-request scripts with `pulse.environment.set` for collection chaining
@@ -65,6 +65,7 @@ bun run screenshots:readme
 ## Project layout
 
 - `src/` — React UI
+- `src/__tests__/` — Vitest unit tests
 - `src/machines/` — XState app machine + `useApp` hook
 - `src-tauri/src/http.rs` — HTTP engine (reqwest)
 - `src-tauri/src/history.rs` — SQLite request history

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
-import { collectionExportFilename, createDownloadBlob } from "../download";
-import { parseSpreadsheetPreview } from "../spreadsheet-preview";
+import { collectionExportFilename, createDownloadBlob } from "@/lib/download";
+import { parseSpreadsheetPreview } from "@/lib/spreadsheet-preview";
 
 describe("spreadsheet-preview", () => {
   it("parses CSV into rows", () => {

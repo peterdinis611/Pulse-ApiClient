@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Braces,
   ClipboardCopy,
+  Info,
   LoaderCircle,
   MoreHorizontal,
   Plug,
@@ -282,6 +283,19 @@ export function RequestBar() {
           }}
         />
       </div>
+
+      {request.method === "QUERY" && !isWebSocket && (
+        <div className="flex items-start gap-2 border-t border-warning/25 bg-warning/8 px-3 py-2 text-[12px] leading-snug text-foreground/90">
+          <Info className="mt-0.5 size-3.5 shrink-0 text-warning" />
+          <p>
+            <span className="font-medium text-foreground">QUERY is not fully supported everywhere yet.</span>{" "}
+            <span className="text-muted-foreground">
+              RFC 10008 is new — some proxies, WAFs, CDNs, and frameworks may reject or ignore it.
+              Prefer GET/POST for production APIs unless you know the stack allows QUERY.
+            </span>
+          </p>
+        </div>
+      )}
 
       {containsVariables(request.url) && (
         <p className="truncate border-t border-topbar-border/50 px-3 py-0.5 font-mono text-[11px] text-topbar-muted">

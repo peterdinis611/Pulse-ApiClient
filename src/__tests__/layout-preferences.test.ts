@@ -6,7 +6,7 @@ import {
   getExplorerWidthMax,
   loadLayoutPreferences,
   saveLayoutPreferences,
-} from "../layout-preferences";
+} from "@/lib/layout-preferences";
 
 describe("layout-preferences", () => {
   beforeEach(() => {

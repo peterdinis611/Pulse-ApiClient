@@ -2,7 +2,7 @@ import { createCollectionGroup } from "./collections";
 import { createRequest, createSavedRequest } from "./helpers";
 import type { ApiRequest, CollectionGroup, HttpMethod, SavedRequest } from "@/types";
 
-const HTTP_METHODS = new Set(["get", "post", "put", "patch", "delete", "head", "options"]);
+const HTTP_METHODS = new Set(["get", "post", "put", "patch", "delete", "head", "options", "query"]);
 
 type OpenApiSpec = {
   openapi?: string;

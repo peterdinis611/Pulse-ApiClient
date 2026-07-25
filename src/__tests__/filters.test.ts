@@ -16,8 +16,8 @@ import {
   toggleOverviewMethod,
   toggleOverviewSource,
   toggleOverviewStatus,
-} from "../filters";
-import { createHistoryEntry, createRequest, createSavedRequest } from "../helpers";
+} from "@/lib/filters";
+import { createHistoryEntry, createRequest, createSavedRequest } from "@/lib/helpers";
 import { makeFilterableItem } from "./test-fixtures";
 
 describe("filters", () => {

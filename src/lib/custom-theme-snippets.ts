@@ -76,11 +76,13 @@ export const CUSTOM_CSS_SNIPPETS: CustomCssSnippet[] = [
   --method-put: oklch(0.52 0.14 230);
   --method-patch: oklch(0.54 0.12 200);
   --method-delete: oklch(0.52 0.2 25);
+  --method-query: oklch(0.52 0.14 285);
   --method-get-bg: oklch(0.5 0.16 155 / 0.14);
   --method-post-bg: oklch(0.58 0.16 55 / 0.14);
   --method-put-bg: oklch(0.52 0.14 230 / 0.14);
   --method-patch-bg: oklch(0.54 0.12 200 / 0.14);
   --method-delete-bg: oklch(0.52 0.2 25 / 0.14);
+  --method-query-bg: oklch(0.52 0.14 285 / 0.14);
 }`,
   },
   {
@@ -209,6 +211,7 @@ export const CUSTOM_CSS_TOKEN_GROUPS: CustomCssTokenGroup[] = [
       { name: "--method-put", hint: "PUT" },
       { name: "--method-patch", hint: "PATCH" },
       { name: "--method-delete", hint: "DELETE" },
+      { name: "--method-query", hint: "QUERY" },
     ],
   },
   {

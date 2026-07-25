@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { addFolderToCollection, createCollectionGroup, groupRequestsByFolder } from "../collections";
-import { createRequest, createSavedRequest } from "../helpers";
+import { addFolderToCollection, createCollectionGroup, groupRequestsByFolder } from "@/lib/collections";
+import { createRequest, createSavedRequest } from "@/lib/helpers";
 
 describe("collections", () => {
   it("shows empty folders defined on the collection", () => {
