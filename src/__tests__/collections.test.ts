@@ -31,4 +31,10 @@ describe("collections", () => {
 
     expect(collection.folders).toEqual(["Billing", "Billing/Invoices"]);
   });
+
+  it("preserves folder declaration order instead of sorting alphabetically", () => {
+    const grouped = groupRequestsByFolder([], ["Zebra", "Alpha", "Zebra/Nested"]);
+    expect(grouped.folders.map((folder) => folder.path)).toEqual(["Zebra", "Alpha"]);
+    expect(grouped.folders[0]?.children.map((child) => child.path)).toEqual(["Zebra/Nested"]);
+  });
 });

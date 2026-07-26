@@ -138,6 +138,29 @@ export function useApp() {
       send({ type: "DELETE_FOLDER", collectionId, folderPath }),
     moveSavedRequest: (id: string, collectionId: string, folder?: string) =>
       send({ type: "MOVE_SAVED_REQUEST", id, collectionId, folder }),
+    relocateSavedRequest: (
+      id: string,
+      collectionId: string,
+      options: {
+        folder?: string;
+        targetId?: string | null;
+        position?: "before" | "after";
+      } = {},
+    ) =>
+      send({
+        type: "RELOCATE_SAVED_REQUEST",
+        id,
+        collectionId,
+        folder: options.folder,
+        targetId: options.targetId,
+        position: options.position,
+      }),
+    reorderFolder: (
+      collectionId: string,
+      path: string,
+      targetPath: string,
+      position: "before" | "after",
+    ) => send({ type: "REORDER_FOLDER", collectionId, path, targetPath, position }),
     setActiveEnvironmentId: (id: string | null) => send({ type: "SET_ACTIVE_ENVIRONMENT", id }),
     setTabEnvironmentOverrideId: (environmentId: string | null) =>
       send({ type: "SET_TAB_ENVIRONMENT", environmentId }),

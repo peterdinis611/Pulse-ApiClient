@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
 import {
   ArrowLeft,
   ChevronDown,
@@ -26,6 +26,12 @@ import { groupRequestsByFolder, requestsForCollection } from "@/lib/collections"
 import { runCollectionAuto, type CollectionRunResult } from "@/lib/collection-runner";
 import { filterSavedRequests, filterSavedRequestsAsync } from "@/lib/filters";
 import { downloadJson, collectionExportFilename } from "@/lib/download";
+import {
+  COLLECTION_DND_MIME,
+  decodeCollectionDragPayload,
+  encodeCollectionDragPayload,
+  type CollectionDragPayload,
+} from "@/lib/collection-dnd";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import { toast } from "@/lib/toast";
 import type { FolderTreeNode } from "@/lib/collections";
@@ -113,7 +119,8 @@ export function ExplorerPanel() {
     loadSavedRequest,
     deleteSavedRequest,
     duplicateSavedRequest,
-    moveSavedRequest,
+    relocateSavedRequest,
+    reorderFolder,
     loadHistoryEntry,
     clearHistory,
     exportCollections,
@@ -150,7 +157,52 @@ export function ExplorerPanel() {
     | { kind: "folder"; collectionId: string; path: string }
     | null
   >(null);
+  const [pendingMove, setPendingMove] = useState<{
+    id: string;
+    name: string;
+    collectionId: string;
+    fromFolder?: string;
+    toFolder?: string;
+    targetId?: string | null;
+    position?: "before" | "after";
+  } | null>(null);
   const search = useDebouncedSearch(sidebarSearch, { delayMs: 180 });
+
+  const folderDestinationLabel = (folder?: string) =>
+    folder?.trim() ? folder : "collection root (no folder)";
+
+  const sameFolder = (a?: string, b?: string) => (a ?? undefined) === (b ?? undefined);
+
+  const requestFolderChange = (
+    id: string,
+    collectionId: string,
+    toFolder: string | undefined,
+    extras?: { targetId?: string | null; position?: "before" | "after" },
+  ) => {
+    const item = collections.find((entry) => entry.id === id);
+    if (!item || item.collectionId !== collectionId) return;
+
+    if (sameFolder(item.folder, toFolder)) {
+      if (extras?.targetId) {
+        relocateSavedRequest(id, collectionId, {
+          folder: toFolder,
+          targetId: extras.targetId,
+          position: extras.position,
+        });
+      }
+      return;
+    }
+
+    setPendingMove({
+      id,
+      name: item.name || item.request.name || "Untitled Request",
+      collectionId,
+      fromFolder: item.folder,
+      toFolder,
+      targetId: extras?.targetId,
+      position: extras?.position,
+    });
+  };
 
   // Instant fuse.js on live query — authoritative while typing / when async is stale
   const instantCollections = useMemo(() => {
@@ -486,6 +538,7 @@ export function ExplorerPanel() {
                                   collectionId={group.id}
                                   collectionName={group.name}
                                   folders={group.folders}
+                                  dndEnabled={!isSearchMode}
                                   onOpen={loadSavedRequest}
                                   onPreview={(item) =>
                                     openPreview({ kind: "collection", item })
@@ -502,32 +555,56 @@ export function ExplorerPanel() {
                                     })
                                   }
                                   onMove={(id, targetFolder) =>
-                                    moveSavedRequest(id, group.id, targetFolder)
+                                    requestFolderChange(id, group.id, targetFolder)
+                                  }
+                                  onRelocateRequest={(id, options) =>
+                                    requestFolderChange(id, group.id, options.folder, {
+                                      targetId: options.targetId,
+                                      position: options.position,
+                                    })
+                                  }
+                                  onReorderFolder={(path, targetPath, position) =>
+                                    reorderFolder(group.id, path, targetPath, position)
                                   }
                                   activeSignature={activeSignature}
                                 />
                               ))}
-                              {grouped.root.map((item) => (
-                                <CollectionItem
-                                  key={item.id}
-                                  item={item}
-                                  folders={group.folders}
-                                  selected={requestSignature(item.request) === activeSignature}
-                                  onOpen={() => loadSavedRequest(item)}
-                                  onPreview={() => openPreview({ kind: "collection", item })}
-                                  onDuplicate={() => duplicateSavedRequest(item.id)}
-                                  onDelete={() =>
-                                    setPendingDelete({
-                                      kind: "request",
-                                      id: item.id,
-                                      name: item.name,
-                                    })
-                                  }
-                                  onMove={(targetFolder) =>
-                                    moveSavedRequest(item.id, group.id, targetFolder)
-                                  }
-                                />
-                              ))}
+                              <CollectionDropRoot
+                                collectionId={group.id}
+                                dndEnabled={!isSearchMode}
+                                onDropRequest={(id) =>
+                                  requestFolderChange(id, group.id, undefined)
+                                }
+                              >
+                                {grouped.root.map((item) => (
+                                  <CollectionItem
+                                    key={item.id}
+                                    item={item}
+                                    folders={group.folders}
+                                    dndEnabled={!isSearchMode}
+                                    selected={requestSignature(item.request) === activeSignature}
+                                    onOpen={() => loadSavedRequest(item)}
+                                    onPreview={() => openPreview({ kind: "collection", item })}
+                                    onDuplicate={() => duplicateSavedRequest(item.id)}
+                                    onDelete={() =>
+                                      setPendingDelete({
+                                        kind: "request",
+                                        id: item.id,
+                                        name: item.name,
+                                      })
+                                    }
+                                    onMove={(targetFolder) =>
+                                      requestFolderChange(item.id, group.id, targetFolder)
+                                    }
+                                    onRelocate={(draggedId, position) =>
+                                      requestFolderChange(draggedId, group.id, undefined, {
+                                        targetId: item.id,
+                                        position,
+                                      })
+                                    }
+                                  />
+                                ))}
+                              </CollectionDropRoot>
                               {items.length === 0 && grouped.folders.length === 0 && (
                                 <p className="px-2 py-1.5 text-[11px] text-muted-foreground">
                                   No requests
@@ -709,6 +786,34 @@ export function ExplorerPanel() {
             toast.success("Folder deleted", pendingDelete.path);
           }
           setPendingDelete(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={pendingMove != null}
+        onOpenChange={(open) => {
+          if (!open) setPendingMove(null);
+        }}
+        title="Move request?"
+        description={
+          pendingMove
+            ? `Move “${pendingMove.name}” from ${folderDestinationLabel(pendingMove.fromFolder)} to ${folderDestinationLabel(pendingMove.toFolder)}?`
+            : "Move this request to another folder?"
+        }
+        confirmLabel="Move"
+        destructive={false}
+        onConfirm={() => {
+          if (!pendingMove) return;
+          relocateSavedRequest(pendingMove.id, pendingMove.collectionId, {
+            folder: pendingMove.toFolder,
+            targetId: pendingMove.targetId,
+            position: pendingMove.position,
+          });
+          toast.success(
+            "Request moved",
+            `${pendingMove.name} → ${folderDestinationLabel(pendingMove.toFolder)}`,
+          );
+          setPendingMove(null);
         }}
       />
     </aside>
@@ -1057,11 +1162,64 @@ function folderIsEmpty(folder: FolderTreeNode): boolean {
   return folder.children.every(folderIsEmpty);
 }
 
+function dropPositionFromEvent(event: DragEvent<HTMLElement>): "before" | "after" {
+  const rect = event.currentTarget.getBoundingClientRect();
+  return event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+}
+
+function readDragPayload(event: DragEvent): CollectionDragPayload | null {
+  return decodeCollectionDragPayload(event.dataTransfer.getData(COLLECTION_DND_MIME));
+}
+
+function CollectionDropRoot({
+  collectionId,
+  dndEnabled,
+  onDropRequest,
+  children,
+}: {
+  collectionId: string;
+  dndEnabled: boolean;
+  onDropRequest: (id: string) => void;
+  children: ReactNode;
+}) {
+  const [over, setOver] = useState(false);
+
+  if (!dndEnabled) return <>{children}</>;
+
+  return (
+    <div
+      className={cn(
+        "min-h-6 space-y-0.5 rounded-md transition-colors",
+        over && "bg-primary/8 ring-1 ring-inset ring-primary/30",
+      )}
+      onDragOver={(event) => {
+        const types = [...event.dataTransfer.types];
+        if (!types.includes(COLLECTION_DND_MIME)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(event) => {
+        event.preventDefault();
+        setOver(false);
+        const payload = readDragPayload(event);
+        if (!payload || payload.kind !== "request") return;
+        if (payload.collectionId !== collectionId) return;
+        onDropRequest(payload.id);
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 function FolderBranch({
   folder,
   collectionId,
   collectionName,
   folders,
+  dndEnabled,
   activeSignature,
   onOpen,
   onPreview,
@@ -1069,11 +1227,14 @@ function FolderBranch({
   onDelete,
   onDeleteFolder,
   onMove,
+  onRelocateRequest,
+  onReorderFolder,
 }: {
   folder: FolderTreeNode;
   collectionId: string;
   collectionName: string;
   folders: string[];
+  dndEnabled: boolean;
   activeSignature: string;
   onOpen: (item: SavedRequest) => void;
   onPreview?: (item: SavedRequest) => void;
@@ -1081,13 +1242,72 @@ function FolderBranch({
   onDelete: (id: string, name: string) => void;
   onDeleteFolder: (folderPath: string) => void;
   onMove: (id: string, folder?: string) => void;
+  onRelocateRequest: (
+    id: string,
+    options: { folder?: string; targetId?: string | null; position?: "before" | "after" },
+  ) => void;
+  onReorderFolder: (path: string, targetPath: string, position: "before" | "after") => void;
 }) {
   const [open, setOpen] = useState(true);
+  const [dropEdge, setDropEdge] = useState<"before" | "after" | "into" | null>(null);
   const isEmpty = folderIsEmpty(folder);
 
   return (
     <div className="space-y-0.5">
-      <div className="group/folder flex items-center gap-0.5 rounded-md">
+      <div
+        className={cn(
+          "group/folder relative flex items-center gap-0.5 rounded-md",
+          dropEdge === "into" && "bg-primary/10 ring-1 ring-inset ring-primary/35",
+          dropEdge === "before" && "before:absolute before:inset-x-1 before:top-0 before:h-0.5 before:rounded-full before:bg-primary",
+          dropEdge === "after" && "after:absolute after:inset-x-1 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary",
+        )}
+        draggable={dndEnabled}
+        onDragStart={(event) => {
+          if (!dndEnabled) return;
+          event.dataTransfer.setData(
+            COLLECTION_DND_MIME,
+            encodeCollectionDragPayload({
+              kind: "folder",
+              path: folder.path,
+              collectionId,
+            }),
+          );
+          event.dataTransfer.effectAllowed = "move";
+        }}
+        onDragOver={(event) => {
+          if (!dndEnabled) return;
+          const types = [...event.dataTransfer.types];
+          if (!types.includes(COLLECTION_DND_MIME)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          event.dataTransfer.dropEffect = "move";
+          const rect = event.currentTarget.getBoundingClientRect();
+          const y = event.clientY - rect.top;
+          if (y < rect.height * 0.25) setDropEdge("before");
+          else if (y > rect.height * 0.75) setDropEdge("after");
+          else setDropEdge("into");
+        }}
+        onDragLeave={() => setDropEdge(null)}
+        onDrop={(event) => {
+          if (!dndEnabled) return;
+          event.preventDefault();
+          event.stopPropagation();
+          const payload = readDragPayload(event);
+          const edge = dropEdge;
+          setDropEdge(null);
+          if (!payload || payload.collectionId !== collectionId) return;
+
+          if (payload.kind === "request") {
+            onRelocateRequest(payload.id, { folder: folder.path });
+            setOpen(true);
+            return;
+          }
+
+          if (payload.kind === "folder" && payload.path !== folder.path && edge && edge !== "into") {
+            onReorderFolder(payload.path, folder.path, edge);
+          }
+        }}
+      >
         <button
           type="button"
           className="explorer-tree-row min-w-0 flex-1 text-muted-foreground"
@@ -1143,12 +1363,20 @@ function FolderBranch({
               key={item.id}
               item={item}
               folders={folders}
+              dndEnabled={dndEnabled}
               selected={requestSignature(item.request) === activeSignature}
               onOpen={() => onOpen(item)}
               onPreview={onPreview ? () => onPreview(item) : undefined}
               onDuplicate={() => onDuplicate(item.id)}
               onDelete={() => onDelete(item.id, item.name)}
               onMove={(targetFolder) => onMove(item.id, targetFolder)}
+              onRelocate={(draggedId, position) =>
+                onRelocateRequest(draggedId, {
+                  folder: folder.path,
+                  targetId: item.id,
+                  position,
+                })
+              }
             />
           ))}
           {folder.children.map((child) => (
@@ -1158,6 +1386,7 @@ function FolderBranch({
               collectionId={collectionId}
               collectionName={collectionName}
               folders={folders}
+              dndEnabled={dndEnabled}
               activeSignature={activeSignature}
               onOpen={onOpen}
               onPreview={onPreview}
@@ -1165,6 +1394,8 @@ function FolderBranch({
               onDelete={onDelete}
               onDeleteFolder={onDeleteFolder}
               onMove={onMove}
+              onRelocateRequest={onRelocateRequest}
+              onReorderFolder={onReorderFolder}
             />
           ))}
         </div>
@@ -1176,24 +1407,73 @@ function FolderBranch({
 function CollectionItem({
   item,
   folders,
+  dndEnabled,
   selected,
   onOpen,
   onPreview,
   onDuplicate,
   onDelete,
   onMove,
+  onRelocate,
 }: {
   item: SavedRequest;
   folders: string[];
+  dndEnabled: boolean;
   selected?: boolean;
   onOpen: () => void;
   onPreview?: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
   onMove: (folder?: string) => void;
+  onRelocate?: (draggedId: string, position: "before" | "after") => void;
 }) {
+  const [dropEdge, setDropEdge] = useState<"before" | "after" | null>(null);
+
   return (
-    <div className="group/item flex items-center gap-0.5 rounded-md">
+    <div
+      className={cn(
+        "group/item relative flex items-center gap-0.5 rounded-md",
+        dropEdge === "before" &&
+          "before:absolute before:inset-x-1 before:top-0 before:h-0.5 before:rounded-full before:bg-primary",
+        dropEdge === "after" &&
+          "after:absolute after:inset-x-1 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary",
+      )}
+      draggable={dndEnabled}
+      onDragStart={(event) => {
+        if (!dndEnabled) return;
+        event.dataTransfer.setData(
+          COLLECTION_DND_MIME,
+          encodeCollectionDragPayload({
+            kind: "request",
+            id: item.id,
+            collectionId: item.collectionId,
+          }),
+        );
+        event.dataTransfer.effectAllowed = "move";
+      }}
+      onDragOver={(event) => {
+        if (!dndEnabled || !onRelocate) return;
+        const types = [...event.dataTransfer.types];
+        if (!types.includes(COLLECTION_DND_MIME)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        event.dataTransfer.dropEffect = "move";
+        setDropEdge(dropPositionFromEvent(event));
+      }}
+      onDragLeave={() => setDropEdge(null)}
+      onDrop={(event) => {
+        if (!dndEnabled || !onRelocate) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const payload = readDragPayload(event);
+        const edge = dropEdge ?? dropPositionFromEvent(event);
+        setDropEdge(null);
+        if (!payload || payload.kind !== "request") return;
+        if (payload.id === item.id) return;
+        if (payload.collectionId !== item.collectionId) return;
+        onRelocate(payload.id, edge);
+      }}
+    >
       <button
         type="button"
         className={cn("explorer-tree-row min-w-0 flex-1", selected && "explorer-tree-row--active")}

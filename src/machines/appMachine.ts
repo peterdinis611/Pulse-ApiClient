@@ -16,6 +16,7 @@ import {
   createCollectionGroup,
   removeFolderFromCollection,
 } from "@/lib/collections";
+import { applyFolderReorder, relocateSavedRequest } from "@/lib/collection-dnd";
 import {
   createHistoryEntry,
   createId,
@@ -269,6 +270,21 @@ export type AppMachineEvent =
   | { type: "ADD_FOLDER"; collectionId: string; folderPath: string }
   | { type: "DELETE_FOLDER"; collectionId: string; folderPath: string }
   | { type: "MOVE_SAVED_REQUEST"; id: string; collectionId: string; folder?: string }
+  | {
+      type: "RELOCATE_SAVED_REQUEST";
+      id: string;
+      collectionId: string;
+      folder?: string;
+      targetId?: string | null;
+      position?: "before" | "after";
+    }
+  | {
+      type: "REORDER_FOLDER";
+      collectionId: string;
+      path: string;
+      targetPath: string;
+      position: "before" | "after";
+    }
   | { type: "SET_ACTIVE_ENVIRONMENT"; id: string | null }
   | { type: "SET_TAB_ENVIRONMENT"; environmentId: string | null }
   | { type: "ADD_ENVIRONMENT" }
@@ -857,6 +873,37 @@ export const appMachine = setup({
                       folder: event.folder,
                     }
                   : item,
+              ),
+            };
+            saveSharedWorkspace(context, persisted);
+            return { persisted };
+          }),
+        },
+        RELOCATE_SAVED_REQUEST: {
+          actions: assign(({ context, event }) => {
+            const persisted = {
+              ...context.persisted,
+              collections: relocateSavedRequest(context.persisted.collections, event.id, {
+                collectionId: event.collectionId,
+                folder: event.folder,
+                targetId: event.targetId,
+                position: event.position,
+              }),
+            };
+            saveSharedWorkspace(context, persisted);
+            return { persisted };
+          }),
+        },
+        REORDER_FOLDER: {
+          actions: assign(({ context, event }) => {
+            const persisted = {
+              ...context.persisted,
+              collectionGroups: applyFolderReorder(
+                context.persisted.collectionGroups,
+                event.collectionId,
+                event.path,
+                event.targetPath,
+                event.position,
               ),
             };
             saveSharedWorkspace(context, persisted);

@@ -67,10 +67,18 @@ export function groupRequestsByFolder(
     if (normalized) ensureNode(normalized);
   }
 
+  const orderIndex = new Map(folderPaths.map((path, index) => [path, index]));
+  const byFolderOrder = (a: FolderTreeNode, b: FolderTreeNode) => {
+    const ai = orderIndex.get(a.path) ?? Number.MAX_SAFE_INTEGER;
+    const bi = orderIndex.get(b.path) ?? Number.MAX_SAFE_INTEGER;
+    if (ai !== bi) return ai - bi;
+    return a.name.localeCompare(b.name);
+  };
+
   const topLevel = [...nodeMap.values()].filter((node) => !node.path.includes("/"));
-  topLevel.sort((a, b) => a.name.localeCompare(b.name));
+  topLevel.sort(byFolderOrder);
   for (const node of nodeMap.values()) {
-    node.children.sort((a, b) => a.name.localeCompare(b.name));
+    node.children.sort(byFolderOrder);
   }
 
   return { root, folders: topLevel };
@@ -80,15 +88,14 @@ export function addFolderToCollection(collection: CollectionGroup, folderPath: s
   const normalized = folderPath.trim().replace(/^\/+|\/+$/g, "");
   if (!normalized) return collection;
 
-  const folders = new Set(collection.folders);
-  folders.add(normalized);
-
+  const folders = [...collection.folders];
   const parts = normalized.split("/");
-  for (let index = 1; index < parts.length; index += 1) {
-    folders.add(parts.slice(0, index).join("/"));
+  for (let index = 1; index <= parts.length; index += 1) {
+    const path = parts.slice(0, index).join("/");
+    if (!folders.includes(path)) folders.push(path);
   }
 
-  return { ...collection, folders: [...folders].sort() };
+  return { ...collection, folders };
 }
 
 export function removeFolderFromCollection(collection: CollectionGroup, folderPath: string): CollectionGroup {
