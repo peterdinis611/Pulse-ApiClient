@@ -9,6 +9,7 @@ import {
   Eye,
   Folder,
   FolderPlus,
+  GripVertical,
   History,
   LoaderCircle,
   MoreHorizontal,
@@ -28,8 +29,10 @@ import { filterSavedRequests, filterSavedRequestsAsync } from "@/lib/filters";
 import { downloadJson, collectionExportFilename } from "@/lib/download";
 import {
   COLLECTION_DND_MIME,
-  decodeCollectionDragPayload,
   encodeCollectionDragPayload,
+  getActiveCollectionDrag,
+  readCollectionDragPayload,
+  setActiveCollectionDrag,
   type CollectionDragPayload,
 } from "@/lib/collection-dnd";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
@@ -146,6 +149,14 @@ export function ExplorerPanel() {
   const [collectionsOpen, setCollectionsOpen] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(true);
   const [openCollections, setOpenCollections] = useState<Record<string, boolean>>({});
+  const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
+
+  const folderOpenKey = (collectionId: string, path: string) => `${collectionId}:${path}`;
+  const isFolderOpen = (collectionId: string, path: string) =>
+    openFolders[folderOpenKey(collectionId, path)] ?? true;
+  const setFolderOpen = (collectionId: string, path: string, open: boolean) => {
+    setOpenFolders((current) => ({ ...current, [folderOpenKey(collectionId, path)]: open }));
+  };
   const [runningCollectionId, setRunningCollectionId] = useState<string | null>(null);
   const [collectionRun, setCollectionRun] = useState<CollectionRunResult | null>(null);
   const [runProgress, setRunProgress] = useState<string | null>(null);
@@ -539,6 +550,8 @@ export function ExplorerPanel() {
                                   collectionName={group.name}
                                   folders={group.folders}
                                   dndEnabled={!isSearchMode}
+                                  isFolderOpen={isFolderOpen}
+                                  setFolderOpen={setFolderOpen}
                                   onOpen={loadSavedRequest}
                                   onPreview={(item) =>
                                     openPreview({ kind: "collection", item })
@@ -1167,8 +1180,22 @@ function dropPositionFromEvent(event: DragEvent<HTMLElement>): "before" | "after
   return event.clientY < rect.top + rect.height / 2 ? "before" : "after";
 }
 
-function readDragPayload(event: DragEvent): CollectionDragPayload | null {
-  return decodeCollectionDragPayload(event.dataTransfer.getData(COLLECTION_DND_MIME));
+function isCollectionDragEvent(event: DragEvent): boolean {
+  if (getActiveCollectionDrag()) return true;
+  const types = Array.from(event.dataTransfer?.types ?? []);
+  return types.includes("text/plain") || types.includes("text") || types.includes(COLLECTION_DND_MIME);
+}
+
+function beginCollectionDrag(event: DragEvent, payload: CollectionDragPayload): void {
+  setActiveCollectionDrag(payload);
+  const encoded = encodeCollectionDragPayload(payload);
+  event.dataTransfer.setData("text/plain", encoded);
+  event.dataTransfer.setData("text", encoded);
+  event.dataTransfer.effectAllowed = "move";
+}
+
+function endCollectionDrag(): void {
+  setActiveCollectionDrag(null);
 }
 
 function CollectionDropRoot({
@@ -1193,8 +1220,9 @@ function CollectionDropRoot({
         over && "bg-primary/8 ring-1 ring-inset ring-primary/30",
       )}
       onDragOver={(event) => {
-        const types = [...event.dataTransfer.types];
-        if (!types.includes(COLLECTION_DND_MIME)) return;
+        if (!isCollectionDragEvent(event)) return;
+        const active = getActiveCollectionDrag();
+        if (active && (active.kind !== "request" || active.collectionId !== collectionId)) return;
         event.preventDefault();
         event.dataTransfer.dropEffect = "move";
         setOver(true);
@@ -1203,7 +1231,8 @@ function CollectionDropRoot({
       onDrop={(event) => {
         event.preventDefault();
         setOver(false);
-        const payload = readDragPayload(event);
+        const payload = readCollectionDragPayload(event.dataTransfer);
+        endCollectionDrag();
         if (!payload || payload.kind !== "request") return;
         if (payload.collectionId !== collectionId) return;
         onDropRequest(payload.id);
@@ -1221,6 +1250,8 @@ function FolderBranch({
   folders,
   dndEnabled,
   activeSignature,
+  isFolderOpen,
+  setFolderOpen,
   onOpen,
   onPreview,
   onDuplicate,
@@ -1236,6 +1267,8 @@ function FolderBranch({
   folders: string[];
   dndEnabled: boolean;
   activeSignature: string;
+  isFolderOpen: (collectionId: string, path: string) => boolean;
+  setFolderOpen: (collectionId: string, path: string, open: boolean) => void;
   onOpen: (item: SavedRequest) => void;
   onPreview?: (item: SavedRequest) => void;
   onDuplicate: (id: string) => void;
@@ -1248,36 +1281,27 @@ function FolderBranch({
   ) => void;
   onReorderFolder: (path: string, targetPath: string, position: "before" | "after") => void;
 }) {
-  const [open, setOpen] = useState(true);
+  const open = isFolderOpen(collectionId, folder.path);
   const [dropEdge, setDropEdge] = useState<"before" | "after" | "into" | null>(null);
   const isEmpty = folderIsEmpty(folder);
 
   return (
-    <div className="space-y-0.5">
+    <Collapsible
+      open={open}
+      onOpenChange={(value) => setFolderOpen(collectionId, folder.path, value)}
+      className="space-y-0.5"
+    >
       <div
         className={cn(
           "group/folder relative flex items-center gap-0.5 rounded-md",
           dropEdge === "into" && "bg-primary/10 ring-1 ring-inset ring-primary/35",
-          dropEdge === "before" && "before:absolute before:inset-x-1 before:top-0 before:h-0.5 before:rounded-full before:bg-primary",
-          dropEdge === "after" && "after:absolute after:inset-x-1 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary",
+          dropEdge === "before" &&
+            "before:absolute before:inset-x-1 before:top-0 before:h-0.5 before:rounded-full before:bg-primary",
+          dropEdge === "after" &&
+            "after:absolute after:inset-x-1 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary",
         )}
-        draggable={dndEnabled}
-        onDragStart={(event) => {
-          if (!dndEnabled) return;
-          event.dataTransfer.setData(
-            COLLECTION_DND_MIME,
-            encodeCollectionDragPayload({
-              kind: "folder",
-              path: folder.path,
-              collectionId,
-            }),
-          );
-          event.dataTransfer.effectAllowed = "move";
-        }}
         onDragOver={(event) => {
-          if (!dndEnabled) return;
-          const types = [...event.dataTransfer.types];
-          if (!types.includes(COLLECTION_DND_MIME)) return;
+          if (!dndEnabled || !isCollectionDragEvent(event)) return;
           event.preventDefault();
           event.stopPropagation();
           event.dataTransfer.dropEffect = "move";
@@ -1292,14 +1316,15 @@ function FolderBranch({
           if (!dndEnabled) return;
           event.preventDefault();
           event.stopPropagation();
-          const payload = readDragPayload(event);
+          const payload = readCollectionDragPayload(event.dataTransfer);
           const edge = dropEdge;
           setDropEdge(null);
+          endCollectionDrag();
           if (!payload || payload.collectionId !== collectionId) return;
 
           if (payload.kind === "request") {
             onRelocateRequest(payload.id, { folder: folder.path });
-            setOpen(true);
+            setFolderOpen(collectionId, folder.path, true);
             return;
           }
 
@@ -1308,20 +1333,45 @@ function FolderBranch({
           }
         }}
       >
-        <button
-          type="button"
-          className="explorer-tree-row min-w-0 flex-1 text-muted-foreground"
-          onClick={() => setOpen((value) => !value)}
-        >
-          {open ? (
-            <ChevronDown className="size-3.5 shrink-0" />
-          ) : (
-            <ChevronRight className="size-3.5 shrink-0" />
-          )}
-          <Folder className="size-3.5 shrink-0 text-primary/70" />
-          <span className="min-w-0 flex-1 truncate text-left">{folder.name}</span>
-          {isEmpty && <span className="explorer-count-badge">Empty</span>}
-        </button>
+        {dndEnabled && (
+          <button
+            type="button"
+            className="flex size-7 shrink-0 cursor-grab items-center justify-center text-muted-foreground active:cursor-grabbing"
+            draggable
+            title="Drag folder"
+            aria-label="Drag folder"
+            onClick={(event) => event.preventDefault()}
+            onPointerDown={(event) => event.stopPropagation()}
+            onDragStart={(event) => {
+              event.stopPropagation();
+              beginCollectionDrag(event, {
+                kind: "folder",
+                path: folder.path,
+                collectionId,
+              });
+            }}
+            onDragEnd={() => endCollectionDrag()}
+          >
+            <GripVertical className="size-3.5" />
+          </button>
+        )}
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            draggable={false}
+            className="explorer-tree-row min-w-0 flex-1 text-muted-foreground"
+            onDragStart={(event) => event.preventDefault()}
+          >
+            {open ? (
+              <ChevronDown className="size-3.5 shrink-0" />
+            ) : (
+              <ChevronRight className="size-3.5 shrink-0" />
+            )}
+            <Folder className="size-3.5 shrink-0 text-primary/70" />
+            <span className="min-w-0 flex-1 truncate text-left">{folder.name}</span>
+            {isEmpty && <span className="explorer-count-badge">Empty</span>}
+          </button>
+        </CollapsibleTrigger>
         <AddFolderMenu
           collectionId={collectionId}
           collectionName={collectionName}
@@ -1356,51 +1406,51 @@ function FolderBranch({
           </TooltipIconButton>
         )}
       </div>
-      {open && (
-        <div className="explorer-tree-nested space-y-0.5">
-          {folder.requests.map((item) => (
-            <CollectionItem
-              key={item.id}
-              item={item}
-              folders={folders}
-              dndEnabled={dndEnabled}
-              selected={requestSignature(item.request) === activeSignature}
-              onOpen={() => onOpen(item)}
-              onPreview={onPreview ? () => onPreview(item) : undefined}
-              onDuplicate={() => onDuplicate(item.id)}
-              onDelete={() => onDelete(item.id, item.name)}
-              onMove={(targetFolder) => onMove(item.id, targetFolder)}
-              onRelocate={(draggedId, position) =>
-                onRelocateRequest(draggedId, {
-                  folder: folder.path,
-                  targetId: item.id,
-                  position,
-                })
-              }
-            />
-          ))}
-          {folder.children.map((child) => (
-            <FolderBranch
-              key={child.path}
-              folder={child}
-              collectionId={collectionId}
-              collectionName={collectionName}
-              folders={folders}
-              dndEnabled={dndEnabled}
-              activeSignature={activeSignature}
-              onOpen={onOpen}
-              onPreview={onPreview}
-              onDuplicate={onDuplicate}
-              onDelete={onDelete}
-              onDeleteFolder={onDeleteFolder}
-              onMove={onMove}
-              onRelocateRequest={onRelocateRequest}
-              onReorderFolder={onReorderFolder}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+      <CollapsibleContent className="explorer-tree-nested space-y-0.5">
+        {folder.requests.map((item) => (
+          <CollectionItem
+            key={item.id}
+            item={item}
+            folders={folders}
+            dndEnabled={dndEnabled}
+            selected={requestSignature(item.request) === activeSignature}
+            onOpen={() => onOpen(item)}
+            onPreview={onPreview ? () => onPreview(item) : undefined}
+            onDuplicate={() => onDuplicate(item.id)}
+            onDelete={() => onDelete(item.id, item.name)}
+            onMove={(targetFolder) => onMove(item.id, targetFolder)}
+            onRelocate={(draggedId, position) =>
+              onRelocateRequest(draggedId, {
+                folder: folder.path,
+                targetId: item.id,
+                position,
+              })
+            }
+          />
+        ))}
+        {folder.children.map((child) => (
+          <FolderBranch
+            key={child.path}
+            folder={child}
+            collectionId={collectionId}
+            collectionName={collectionName}
+            folders={folders}
+            dndEnabled={dndEnabled}
+            activeSignature={activeSignature}
+            isFolderOpen={isFolderOpen}
+            setFolderOpen={setFolderOpen}
+            onOpen={onOpen}
+            onPreview={onPreview}
+            onDuplicate={onDuplicate}
+            onDelete={onDelete}
+            onDeleteFolder={onDeleteFolder}
+            onMove={onMove}
+            onRelocateRequest={onRelocateRequest}
+            onReorderFolder={onReorderFolder}
+          />
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -1438,23 +1488,8 @@ function CollectionItem({
         dropEdge === "after" &&
           "after:absolute after:inset-x-1 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary",
       )}
-      draggable={dndEnabled}
-      onDragStart={(event) => {
-        if (!dndEnabled) return;
-        event.dataTransfer.setData(
-          COLLECTION_DND_MIME,
-          encodeCollectionDragPayload({
-            kind: "request",
-            id: item.id,
-            collectionId: item.collectionId,
-          }),
-        );
-        event.dataTransfer.effectAllowed = "move";
-      }}
       onDragOver={(event) => {
-        if (!dndEnabled || !onRelocate) return;
-        const types = [...event.dataTransfer.types];
-        if (!types.includes(COLLECTION_DND_MIME)) return;
+        if (!dndEnabled || !onRelocate || !isCollectionDragEvent(event)) return;
         event.preventDefault();
         event.stopPropagation();
         event.dataTransfer.dropEffect = "move";
@@ -1465,19 +1500,44 @@ function CollectionItem({
         if (!dndEnabled || !onRelocate) return;
         event.preventDefault();
         event.stopPropagation();
-        const payload = readDragPayload(event);
+        const payload = readCollectionDragPayload(event.dataTransfer);
         const edge = dropEdge ?? dropPositionFromEvent(event);
         setDropEdge(null);
+        endCollectionDrag();
         if (!payload || payload.kind !== "request") return;
         if (payload.id === item.id) return;
         if (payload.collectionId !== item.collectionId) return;
         onRelocate(payload.id, edge);
       }}
     >
+      {dndEnabled && (
+        <button
+          type="button"
+          className="flex size-7 shrink-0 cursor-grab items-center justify-center text-muted-foreground opacity-70 hover:opacity-100 active:cursor-grabbing"
+          draggable
+          title="Drag request"
+          aria-label="Drag request"
+          onClick={(event) => event.preventDefault()}
+          onPointerDown={(event) => event.stopPropagation()}
+          onDragStart={(event) => {
+            event.stopPropagation();
+            beginCollectionDrag(event, {
+              kind: "request",
+              id: item.id,
+              collectionId: item.collectionId,
+            });
+          }}
+          onDragEnd={() => endCollectionDrag()}
+        >
+          <GripVertical className="size-3.5" />
+        </button>
+      )}
       <button
         type="button"
+        draggable={false}
         className={cn("explorer-tree-row min-w-0 flex-1", selected && "explorer-tree-row--active")}
         onClick={onOpen}
+        onDragStart={(event) => event.preventDefault()}
       >
         <span className={cn("explorer-method", methodTextClass(item.request.method))}>
           {methodShortLabel(item.request.method)}

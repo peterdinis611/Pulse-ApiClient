@@ -4,8 +4,10 @@ import {
   areSiblingFolders,
   decodeCollectionDragPayload,
   encodeCollectionDragPayload,
+  readCollectionDragPayload,
   relocateSavedRequest,
   reorderFolders,
+  setActiveCollectionDrag,
 } from "@/lib/collection-dnd";
 import { createCollectionGroup } from "@/lib/collections";
 import { createRequest, createSavedRequest } from "@/lib/helpers";
@@ -15,6 +17,14 @@ describe("collection-dnd", () => {
     const payload = { kind: "request" as const, id: "req_1", collectionId: "col_1" };
     expect(decodeCollectionDragPayload(encodeCollectionDragPayload(payload))).toEqual(payload);
     expect(decodeCollectionDragPayload("nope")).toBeNull();
+  });
+
+  it("prefers in-memory active drag over dataTransfer", () => {
+    const payload = { kind: "folder" as const, path: "Auth", collectionId: "col_1" };
+    setActiveCollectionDrag(payload);
+    expect(readCollectionDragPayload(null)).toEqual(payload);
+    setActiveCollectionDrag(null);
+    expect(readCollectionDragPayload(null)).toBeNull();
   });
 
   it("reorders sibling folders and ignores nested targets", () => {

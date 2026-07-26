@@ -508,12 +508,13 @@ html[data-theme="dark"] {
   }
 
   .explorer-action-btn {
-    @apply size-7 shrink-0 opacity-0 transition-opacity hover:opacity-100 data-[state=open]:opacity-100;
+    @apply pointer-events-none size-7 shrink-0 opacity-0 transition-opacity data-[state=open]:pointer-events-auto data-[state=open]:opacity-100;
   }
 
   .explorer-collection-row:hover .explorer-action-btn,
   .group\/folder:hover .explorer-action-btn,
   .group\/item:hover .explorer-action-btn {
+    pointer-events: auto;
     opacity: 1;
   }
 

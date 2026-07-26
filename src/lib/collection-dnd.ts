@@ -6,7 +6,18 @@ export type CollectionDragPayload =
   | { kind: "request"; id: string; collectionId: string }
   | { kind: "folder"; path: string; collectionId: string };
 
-export const COLLECTION_DND_MIME = "application/x-pulse-collection-dnd";
+export const COLLECTION_DND_MIME = "text/plain";
+
+/** Active drag tracked in-memory — WebKit often hides custom/dataTransfer types during dragover. */
+let activeCollectionDrag: CollectionDragPayload | null = null;
+
+export function setActiveCollectionDrag(payload: CollectionDragPayload | null): void {
+  activeCollectionDrag = payload;
+}
+
+export function getActiveCollectionDrag(): CollectionDragPayload | null {
+  return activeCollectionDrag;
+}
 
 export function encodeCollectionDragPayload(payload: CollectionDragPayload): string {
   return JSON.stringify(payload);
@@ -22,6 +33,16 @@ export function decodeCollectionDragPayload(raw: string | undefined | null): Col
   } catch {
     return null;
   }
+}
+
+export function readCollectionDragPayload(dataTransfer: DataTransfer | null): CollectionDragPayload | null {
+  const fromMemory = getActiveCollectionDrag();
+  if (fromMemory) return fromMemory;
+  if (!dataTransfer) return null;
+  return (
+    decodeCollectionDragPayload(dataTransfer.getData("text/plain")) ??
+    decodeCollectionDragPayload(dataTransfer.getData("text"))
+  );
 }
 
 export function folderParentPath(path: string): string | null {
