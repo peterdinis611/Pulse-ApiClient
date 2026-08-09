@@ -24,6 +24,8 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
     items: [
       "Methods: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS, QUERY",
       "Query params, headers, and body: none, JSON, raw, form-urlencoded, multipart",
+      "Headers tab includes CORS/browser presets (Origin, Referer, AC-Request-*)",
+      "Desktop engine is not limited by browser CORS — set any header you need",
       "Send with Cmd/Ctrl + Enter (or the Send button)",
       "Protocol switch: HTTP or WebSocket (ws:// / wss://)",
       "Tabs for parallel requests; duplicate and rename from the explorer",
@@ -154,7 +156,25 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
     items: [
       "Settings → Cookie jar — list, add, edit, delete",
       "Clear entire jar",
-      "Cookies persist with the desktop HTTP engine (reqwest)",
+      "Settings → HTTP engine — send/store cookie toggles",
+      "Cookies live with the desktop HTTP engine for the app session",
+    ],
+  },
+  {
+    id: "http-engine",
+    title: "HTTP engine & CORS probing",
+    summary: "Native reqwest client — CORS does not apply; configure TLS, proxy, redirects, and default Origin/Referer.",
+    group: "Data",
+    items: [
+      "Settings → HTTP engine — concurrency, timeouts, cache",
+      "TLS verify on/off (self-signed / local HTTPS)",
+      "HTTP(S) or SOCKS proxy URL",
+      "Follow redirects + max redirects",
+      "Default User-Agent, Origin, Referer",
+      "Send / store cookies toggles",
+    ],
+    tips: [
+      "Pulse is not a browser: there is no CORS preflight. Use Origin/Referer headers (or Settings defaults) to reproduce what a browser would send.",
     ],
   },
   {

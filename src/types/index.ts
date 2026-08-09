@@ -142,6 +142,16 @@ export type HttpSettings = {
   httpCacheEnabled: boolean;
   httpCacheTtlSec: number;
   httpCacheDiskEnabled: boolean;
+  httpSslVerify: boolean;
+  httpProxy: string | null;
+  httpFollowRedirects: boolean;
+  httpMaxRedirects: number;
+  httpUserAgent: string | null;
+  httpSendCookies: boolean;
+  httpStoreCookies: boolean;
+  httpConnectTimeoutMs: number;
+  httpDefaultOrigin: string | null;
+  httpDefaultReferer: string | null;
 };
 
 export type AppSettings = HttpSettings & {

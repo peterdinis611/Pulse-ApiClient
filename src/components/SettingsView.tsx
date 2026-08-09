@@ -121,6 +121,19 @@ const SETTINGS_NAV = [
   { id: "folders", label: "Folders" },
 ] as const;
 
+const HTTP_SETTINGS_DEFAULTS = {
+  httpSslVerify: true,
+  httpProxy: "",
+  httpFollowRedirects: true,
+  httpMaxRedirects: "10",
+  httpUserAgent: "",
+  httpSendCookies: true,
+  httpStoreCookies: true,
+  httpConnectTimeoutSec: "10",
+  httpDefaultOrigin: "",
+  httpDefaultReferer: "",
+};
+
 function SettingsNav({
   activeId,
   onSelect,
@@ -191,6 +204,24 @@ export function SettingsView() {
   const [httpCacheEnabled, setHttpCacheEnabled] = useState(true);
   const [httpCacheTtlMin, setHttpCacheTtlMin] = useState("15");
   const [httpCacheDiskEnabled, setHttpCacheDiskEnabled] = useState(true);
+  const [httpSslVerify, setHttpSslVerify] = useState(HTTP_SETTINGS_DEFAULTS.httpSslVerify);
+  const [httpProxy, setHttpProxy] = useState(HTTP_SETTINGS_DEFAULTS.httpProxy);
+  const [httpFollowRedirects, setHttpFollowRedirects] = useState(
+    HTTP_SETTINGS_DEFAULTS.httpFollowRedirects,
+  );
+  const [httpMaxRedirects, setHttpMaxRedirects] = useState(HTTP_SETTINGS_DEFAULTS.httpMaxRedirects);
+  const [httpUserAgent, setHttpUserAgent] = useState(HTTP_SETTINGS_DEFAULTS.httpUserAgent);
+  const [httpSendCookies, setHttpSendCookies] = useState(HTTP_SETTINGS_DEFAULTS.httpSendCookies);
+  const [httpStoreCookies, setHttpStoreCookies] = useState(HTTP_SETTINGS_DEFAULTS.httpStoreCookies);
+  const [httpConnectTimeoutSec, setHttpConnectTimeoutSec] = useState(
+    HTTP_SETTINGS_DEFAULTS.httpConnectTimeoutSec,
+  );
+  const [httpDefaultOrigin, setHttpDefaultOrigin] = useState(
+    HTTP_SETTINGS_DEFAULTS.httpDefaultOrigin,
+  );
+  const [httpDefaultReferer, setHttpDefaultReferer] = useState(
+    HTTP_SETTINGS_DEFAULTS.httpDefaultReferer,
+  );
   const [engineStats, setEngineStats] = useState<Awaited<ReturnType<typeof getHttpEngineStats>> | null>(
     null,
   );
@@ -241,6 +272,18 @@ export function SettingsView() {
         setHttpCacheEnabled(settings.httpCacheEnabled);
         setHttpCacheTtlMin(String(Math.round(settings.httpCacheTtlSec / 60)));
         setHttpCacheDiskEnabled(settings.httpCacheDiskEnabled);
+        setHttpSslVerify(settings.httpSslVerify ?? true);
+        setHttpProxy(settings.httpProxy ?? "");
+        setHttpFollowRedirects(settings.httpFollowRedirects ?? true);
+        setHttpMaxRedirects(String(settings.httpMaxRedirects ?? 10));
+        setHttpUserAgent(settings.httpUserAgent ?? "");
+        setHttpSendCookies(settings.httpSendCookies ?? true);
+        setHttpStoreCookies(settings.httpStoreCookies ?? true);
+        setHttpConnectTimeoutSec(
+          String(Math.round((settings.httpConnectTimeoutMs ?? 10_000) / 1000)),
+        );
+        setHttpDefaultOrigin(settings.httpDefaultOrigin ?? "");
+        setHttpDefaultReferer(settings.httpDefaultReferer ?? "");
         setEngineStats(stats);
         setCookies(cookies);
         setDatabasePath(databasePath);
@@ -284,6 +327,8 @@ export function SettingsView() {
     const maxConcurrent = Number.parseInt(httpMaxConcurrent, 10);
     const timeoutSec = Number.parseInt(httpTimeoutSec, 10);
     const cacheTtlMin = Number.parseInt(httpCacheTtlMin, 10);
+    const maxRedirects = Number.parseInt(httpMaxRedirects, 10);
+    const connectTimeoutSec = Number.parseInt(httpConnectTimeoutSec, 10);
     if (!Number.isFinite(maxConcurrent) || maxConcurrent < 1 || maxConcurrent > 256) {
       toast.error("Invalid value", "Concurrent requests must be between 1 and 256.");
       return;
@@ -296,20 +341,48 @@ export function SettingsView() {
       toast.error("Invalid value", "Cache TTL must be between 1 and 1440 minutes.");
       return;
     }
+    if (!Number.isFinite(maxRedirects) || maxRedirects < 0 || maxRedirects > 50) {
+      toast.error("Invalid value", "Max redirects must be between 0 and 50.");
+      return;
+    }
+    if (!Number.isFinite(connectTimeoutSec) || connectTimeoutSec < 1 || connectTimeoutSec > 120) {
+      toast.error("Invalid value", "Connect timeout must be between 1 and 120 seconds.");
+      return;
+    }
 
     try {
-      const saved = await setHttpSettings(
-        maxConcurrent,
-        timeoutSec * 1000,
+      const saved = await setHttpSettings({
+        httpMaxConcurrent: maxConcurrent,
+        httpTimeoutMs: timeoutSec * 1000,
         httpCacheEnabled,
-        cacheTtlMin * 60,
+        httpCacheTtlSec: cacheTtlMin * 60,
         httpCacheDiskEnabled,
-      );
+        httpSslVerify,
+        httpProxy: httpProxy.trim() || null,
+        httpFollowRedirects,
+        httpMaxRedirects: maxRedirects,
+        httpUserAgent: httpUserAgent.trim() || null,
+        httpSendCookies,
+        httpStoreCookies,
+        httpConnectTimeoutMs: connectTimeoutSec * 1000,
+        httpDefaultOrigin: httpDefaultOrigin.trim() || null,
+        httpDefaultReferer: httpDefaultReferer.trim() || null,
+      });
       setHttpMaxConcurrent(String(saved.httpMaxConcurrent));
       setHttpTimeoutSec(String(Math.round(saved.httpTimeoutMs / 1000)));
       setHttpCacheEnabled(saved.httpCacheEnabled);
       setHttpCacheTtlMin(String(Math.round(saved.httpCacheTtlSec / 60)));
       setHttpCacheDiskEnabled(saved.httpCacheDiskEnabled);
+      setHttpSslVerify(saved.httpSslVerify);
+      setHttpProxy(saved.httpProxy ?? "");
+      setHttpFollowRedirects(saved.httpFollowRedirects);
+      setHttpMaxRedirects(String(saved.httpMaxRedirects));
+      setHttpUserAgent(saved.httpUserAgent ?? "");
+      setHttpSendCookies(saved.httpSendCookies);
+      setHttpStoreCookies(saved.httpStoreCookies);
+      setHttpConnectTimeoutSec(String(Math.round(saved.httpConnectTimeoutMs / 1000)));
+      setHttpDefaultOrigin(saved.httpDefaultOrigin ?? "");
+      setHttpDefaultReferer(saved.httpDefaultReferer ?? "");
       setEngineStats(await getHttpEngineStats());
       toast.success("HTTP settings saved");
     } catch {
@@ -597,8 +670,16 @@ export function SettingsView() {
         <SettingsSection
           id="http"
           title="HTTP engine"
-          description="Concurrency, timeouts, and response caching."
+          description="Desktop requests use the native engine (not browser fetch), so CORS does not apply. Use these knobs to probe TLS, proxies, redirects, cookies, and browser-like headers."
         >
+          <div className="rounded-lg border border-border/70 bg-muted/10 p-3 text-[13px] text-muted-foreground">
+            Pulse sends requests from Rust/reqwest. You can set{" "}
+            <span className="font-medium text-foreground">Origin</span>,{" "}
+            <span className="font-medium text-foreground">Referer</span>,{" "}
+            <span className="font-medium text-foreground">Cookie</span>, and other headers freely —
+            including ones browsers normally block.
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="http-max-concurrent">Max concurrent requests</Label>
@@ -621,6 +702,148 @@ export function SettingsView() {
                 value={httpTimeoutSec}
                 onChange={(event) => setHttpTimeoutSec(event.target.value)}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="http-connect-timeout">Connect timeout (seconds)</Label>
+              <Input
+                id="http-connect-timeout"
+                type="number"
+                min={1}
+                max={120}
+                value={httpConnectTimeoutSec}
+                onChange={(event) => setHttpConnectTimeoutSec(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="http-user-agent">Default User-Agent</Label>
+              <Input
+                id="http-user-agent"
+                placeholder="Pulse/1.0 (leave empty for reqwest default)"
+                value={httpUserAgent}
+                onChange={(event) => setHttpUserAgent(event.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-4 rounded-lg border border-border/70 bg-muted/10 p-4">
+            <div>
+              <h3 className="text-sm font-medium">TLS & proxy</h3>
+              <p className="text-sm text-muted-foreground">
+                Useful for local HTTPS, self-signed certs, and debugging through a proxy.
+              </p>
+            </div>
+
+            <label className="flex items-start gap-3 text-sm">
+              <Checkbox
+                checked={httpSslVerify}
+                onCheckedChange={(checked) => setHttpSslVerify(checked === true)}
+                className="mt-0.5"
+              />
+              <div>
+                <p className="font-medium">Verify TLS certificates</p>
+                <p className="text-xs text-muted-foreground">
+                  Turn off only for local/dev servers with self-signed or broken certs.
+                </p>
+              </div>
+            </label>
+
+            {!httpSslVerify && (
+              <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-800 dark:text-amber-200">
+                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                <span>
+                  Certificate verification is disabled. Do not use this against untrusted networks.
+                </span>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="http-proxy">HTTP(S) / SOCKS proxy</Label>
+              <Input
+                id="http-proxy"
+                placeholder="http://127.0.0.1:8080 or socks5://127.0.0.1:1080"
+                value={httpProxy}
+                onChange={(event) => setHttpProxy(event.target.value)}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Leave empty for direct connections. Applies to all requests from the engine.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-4 rounded-lg border border-border/70 bg-muted/10 p-4">
+            <div>
+              <h3 className="text-sm font-medium">Redirects & cookies</h3>
+              <p className="text-sm text-muted-foreground">
+                Control redirect following and whether the cookie jar is used.
+              </p>
+            </div>
+
+            <label className="flex items-center gap-3 text-sm">
+              <Checkbox
+                checked={httpFollowRedirects}
+                onCheckedChange={(checked) => setHttpFollowRedirects(checked === true)}
+              />
+              Follow redirects
+            </label>
+
+            <div className="space-y-2">
+              <Label htmlFor="http-max-redirects">Max redirects</Label>
+              <Input
+                id="http-max-redirects"
+                type="number"
+                min={0}
+                max={50}
+                disabled={!httpFollowRedirects}
+                value={httpMaxRedirects}
+                onChange={(event) => setHttpMaxRedirects(event.target.value)}
+              />
+            </div>
+
+            <label className="flex items-center gap-3 text-sm">
+              <Checkbox
+                checked={httpSendCookies}
+                onCheckedChange={(checked) => setHttpSendCookies(checked === true)}
+              />
+              Send cookies from jar
+            </label>
+
+            <label className="flex items-center gap-3 text-sm">
+              <Checkbox
+                checked={httpStoreCookies}
+                onCheckedChange={(checked) => setHttpStoreCookies(checked === true)}
+              />
+              Store Set-Cookie responses in jar
+            </label>
+          </div>
+
+          <div className="space-y-4 rounded-lg border border-border/70 bg-muted/10 p-4">
+            <div>
+              <h3 className="text-sm font-medium">Default CORS-like headers</h3>
+              <p className="text-sm text-muted-foreground">
+                Injected on every request unless the request already sets the same header. Handy for
+                reproducing browser preflight / Origin checks on the server side.
+              </p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="http-default-origin">Default Origin</Label>
+                <Input
+                  id="http-default-origin"
+                  placeholder="https://app.example.com"
+                  value={httpDefaultOrigin}
+                  onChange={(event) => setHttpDefaultOrigin(event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="http-default-referer">Default Referer</Label>
+                <Input
+                  id="http-default-referer"
+                  placeholder="https://app.example.com/page"
+                  value={httpDefaultReferer}
+                  onChange={(event) => setHttpDefaultReferer(event.target.value)}
+                />
+              </div>
             </div>
           </div>
 

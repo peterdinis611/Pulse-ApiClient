@@ -4,7 +4,7 @@ import { KeyValueEditor } from "@/components/KeyValueEditor";
 import { TestsTabPanel } from "@/components/TestsTabPanel";
 import { PreRequestTabPanel } from "@/components/PreRequestTabPanel";
 import { BODY_KINDS } from "@/types";
-import type { BodyKind, MultipartField } from "@/types";
+import type { BodyKind, KeyValue, MultipartField } from "@/types";
 import { Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { TooltipIconButton } from "@/components/TooltipIconButton";
@@ -31,6 +31,33 @@ import {
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { canUseTauriIpc } from "@/lib/tauri-runtime";
+
+const CORS_HEADER_PRESETS: Array<{ key: string; value: string; label: string }> = [
+  { key: "Origin", value: "http://localhost:5173", label: "Origin" },
+  { key: "Referer", value: "http://localhost:5173/", label: "Referer" },
+  { key: "User-Agent", value: "Mozilla/5.0 (compatible; PulseAPI/1.0)", label: "User-Agent" },
+  {
+    key: "Access-Control-Request-Method",
+    value: "POST",
+    label: "AC-Request-Method",
+  },
+  {
+    key: "Access-Control-Request-Headers",
+    value: "content-type, authorization",
+    label: "AC-Request-Headers",
+  },
+  { key: "Cookie", value: "session=", label: "Cookie" },
+];
+
+function upsertHeader(rows: KeyValue[], key: string, value: string): KeyValue[] {
+  const existing = rows.find((row) => row.key.toLowerCase() === key.toLowerCase());
+  if (existing) {
+    return rows.map((row) =>
+      row.id === existing.id ? { ...row, key, value, enabled: true } : row,
+    );
+  }
+  return [...rows, { id: crypto.randomUUID(), key, value, enabled: true }];
+}
 
 function applyBodyKind(bodyKind: BodyKind) {
   if (bodyKind === "graphql") {
@@ -141,12 +168,41 @@ export function RequestTabs() {
           )}
 
           {requestTab === "headers" && (
-            <KeyValueEditor
-              rows={request.headers}
-              environment={activeEnvironment}
-              onChange={(headers) => updateRequest({ headers })}
-              keyPlaceholder="Header"
-            />
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  CORS / browser presets
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {CORS_HEADER_PRESETS.map((preset) => (
+                    <Button
+                      key={preset.key}
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2 text-[11px]"
+                      onClick={() =>
+                        updateRequest({
+                          headers: upsertHeader(request.headers, preset.key, preset.value),
+                        })
+                      }
+                    >
+                      {preset.label}
+                    </Button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Desktop engine is not limited by browser CORS — these headers help reproduce what a
+                  browser would send.
+                </p>
+              </div>
+              <KeyValueEditor
+                rows={request.headers}
+                environment={activeEnvironment}
+                onChange={(headers) => updateRequest({ headers })}
+                keyPlaceholder="Header"
+              />
+            </div>
           )}
 
           {requestTab === "body" && (

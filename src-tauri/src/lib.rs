@@ -99,27 +99,22 @@ fn get_app_settings(app: AppHandle) -> Result<AppSettings, String> {
 fn set_http_settings(
     app: AppHandle,
     state: State<'_, HttpState>,
-    http_max_concurrent: u32,
-    http_timeout_ms: u64,
-    http_cache_enabled: bool,
-    http_cache_ttl_sec: u64,
-    http_cache_disk_enabled: bool,
+    settings: settings::HttpSettingsInput,
 ) -> Result<AppSettings, String> {
-    let mut settings = settings::load_settings(&app)?;
-    settings.http_max_concurrent = http_max_concurrent.clamp(1, 256);
-    settings.http_timeout_ms = http_timeout_ms.clamp(1_000, 600_000);
-    settings.http_cache_enabled = http_cache_enabled;
-    settings.http_cache_ttl_sec = http_cache_ttl_sec.clamp(30, 86_400);
-    settings.http_cache_disk_enabled = http_cache_disk_enabled;
-    settings::save_settings(&app, &settings)?;
+    let mut current = settings::load_settings(&app)?;
+    current.apply_http_input(settings);
+    settings::save_settings(&app, &current)?;
     state.inner().apply_engine_settings(
-        settings.http_max_concurrent as usize,
-        settings.http_timeout_ms,
+        current.http_max_concurrent as usize,
+        current.http_timeout_ms,
     );
     state
         .inner()
-        .apply_cache_settings(CacheConfig::from_settings(&settings));
-    Ok(settings)
+        .apply_cache_settings(CacheConfig::from_settings(&current));
+    state
+        .inner()
+        .apply_client_settings(current.client_config())?;
+    Ok(current)
 }
 
 #[tauri::command]
@@ -412,6 +407,7 @@ pub fn run() {
                 settings.http_max_concurrent as usize,
                 settings.http_timeout_ms,
                 CacheConfig::from_settings(&settings),
+                settings.client_config(),
             )
             .map_err(|error| error.to_string())?;
 

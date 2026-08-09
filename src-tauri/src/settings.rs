@@ -20,8 +20,67 @@ pub struct AppSettings {
     pub http_cache_ttl_sec: u64,
     #[serde(default = "default_http_cache_disk_enabled")]
     pub http_cache_disk_enabled: bool,
+    #[serde(default = "default_http_ssl_verify")]
+    pub http_ssl_verify: bool,
+    #[serde(default)]
+    pub http_proxy: Option<String>,
+    #[serde(default = "default_http_follow_redirects")]
+    pub http_follow_redirects: bool,
+    #[serde(default = "default_http_max_redirects")]
+    pub http_max_redirects: u32,
+    #[serde(default)]
+    pub http_user_agent: Option<String>,
+    #[serde(default = "default_true")]
+    pub http_send_cookies: bool,
+    #[serde(default = "default_true")]
+    pub http_store_cookies: bool,
+    #[serde(default = "default_http_connect_timeout_ms")]
+    pub http_connect_timeout_ms: u64,
+    #[serde(default)]
+    pub http_default_origin: Option<String>,
+    #[serde(default)]
+    pub http_default_referer: Option<String>,
     #[serde(default)]
     pub custom_theme_css_path: Option<String>,
+}
+
+/// Payload accepted by `set_http_settings` (camelCase from the UI).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HttpSettingsInput {
+    pub http_max_concurrent: u32,
+    pub http_timeout_ms: u64,
+    pub http_cache_enabled: bool,
+    pub http_cache_ttl_sec: u64,
+    pub http_cache_disk_enabled: bool,
+    pub http_ssl_verify: bool,
+    pub http_proxy: Option<String>,
+    pub http_follow_redirects: bool,
+    pub http_max_redirects: u32,
+    pub http_user_agent: Option<String>,
+    pub http_send_cookies: bool,
+    pub http_store_cookies: bool,
+    pub http_connect_timeout_ms: u64,
+    pub http_default_origin: Option<String>,
+    pub http_default_referer: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct HttpClientConfig {
+    pub ssl_verify: bool,
+    pub proxy: Option<String>,
+    pub follow_redirects: bool,
+    pub max_redirects: u32,
+    pub user_agent: Option<String>,
+    pub send_cookies: bool,
+    pub store_cookies: bool,
+    pub connect_timeout_ms: u64,
+    pub default_origin: Option<String>,
+    pub default_referer: Option<String>,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn default_http_cache_enabled() -> bool {
@@ -36,6 +95,22 @@ fn default_http_cache_disk_enabled() -> bool {
     true
 }
 
+fn default_http_ssl_verify() -> bool {
+    true
+}
+
+fn default_http_follow_redirects() -> bool {
+    true
+}
+
+fn default_http_max_redirects() -> u32 {
+    10
+}
+
+fn default_http_connect_timeout_ms() -> u64 {
+    10_000
+}
+
 fn default_http_max_concurrent() -> u32 {
     32
 }
@@ -48,6 +123,47 @@ fn default_theme() -> String {
     "system".to_string()
 }
 
+fn normalize_optional_string(value: Option<String>) -> Option<String> {
+    value
+        .map(|raw| raw.trim().to_string())
+        .filter(|raw| !raw.is_empty())
+}
+
+impl AppSettings {
+    pub fn apply_http_input(&mut self, input: HttpSettingsInput) {
+        self.http_max_concurrent = input.http_max_concurrent.clamp(1, 256);
+        self.http_timeout_ms = input.http_timeout_ms.clamp(1_000, 600_000);
+        self.http_cache_enabled = input.http_cache_enabled;
+        self.http_cache_ttl_sec = input.http_cache_ttl_sec.clamp(30, 86_400);
+        self.http_cache_disk_enabled = input.http_cache_disk_enabled;
+        self.http_ssl_verify = input.http_ssl_verify;
+        self.http_proxy = normalize_optional_string(input.http_proxy);
+        self.http_follow_redirects = input.http_follow_redirects;
+        self.http_max_redirects = input.http_max_redirects.clamp(0, 50);
+        self.http_user_agent = normalize_optional_string(input.http_user_agent);
+        self.http_send_cookies = input.http_send_cookies;
+        self.http_store_cookies = input.http_store_cookies;
+        self.http_connect_timeout_ms = input.http_connect_timeout_ms.clamp(500, 120_000);
+        self.http_default_origin = normalize_optional_string(input.http_default_origin);
+        self.http_default_referer = normalize_optional_string(input.http_default_referer);
+    }
+
+    pub fn client_config(&self) -> HttpClientConfig {
+        HttpClientConfig {
+            ssl_verify: self.http_ssl_verify,
+            proxy: self.http_proxy.clone(),
+            follow_redirects: self.http_follow_redirects,
+            max_redirects: self.http_max_redirects,
+            user_agent: self.http_user_agent.clone(),
+            send_cookies: self.http_send_cookies,
+            store_cookies: self.http_store_cookies,
+            connect_timeout_ms: self.http_connect_timeout_ms,
+            default_origin: self.http_default_origin.clone(),
+            default_referer: self.http_default_referer.clone(),
+        }
+    }
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -57,6 +173,16 @@ impl Default for AppSettings {
             http_cache_enabled: default_http_cache_enabled(),
             http_cache_ttl_sec: default_http_cache_ttl_sec(),
             http_cache_disk_enabled: default_http_cache_disk_enabled(),
+            http_ssl_verify: default_http_ssl_verify(),
+            http_proxy: None,
+            http_follow_redirects: default_http_follow_redirects(),
+            http_max_redirects: default_http_max_redirects(),
+            http_user_agent: None,
+            http_send_cookies: true,
+            http_store_cookies: true,
+            http_connect_timeout_ms: default_http_connect_timeout_ms(),
+            http_default_origin: None,
+            http_default_referer: None,
             custom_theme_css_path: None,
         }
     }

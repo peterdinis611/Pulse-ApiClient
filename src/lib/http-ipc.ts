@@ -1,4 +1,4 @@
-import type { AppSettings, HttpEngineStats, HttpResponse, TestRunResult } from "../types";
+import type { AppSettings, HttpEngineStats, HttpResponse, HttpSettings, TestRunResult } from "../types";
 import { invokeEffect, invokeEffectVoid } from "./effect/tauri";
 import { runEffect, runParallelAll } from "./effect/run";
 
@@ -64,20 +64,10 @@ export async function cancelAllHttpRequests(): Promise<number> {
   return runEffect(invokeEffect<number>("cancel_all_http_requests"));
 }
 
-export async function setHttpSettings(
-  httpMaxConcurrent: number,
-  httpTimeoutMs: number,
-  httpCacheEnabled: boolean,
-  httpCacheTtlSec: number,
-  httpCacheDiskEnabled: boolean,
-): Promise<AppSettings> {
+export async function setHttpSettings(settings: HttpSettings): Promise<AppSettings> {
   return runEffect(
     invokeEffect<AppSettings>("set_http_settings", {
-      httpMaxConcurrent,
-      httpTimeoutMs,
-      httpCacheEnabled,
-      httpCacheTtlSec,
-      httpCacheDiskEnabled,
+      settings,
     }),
   );
 }
