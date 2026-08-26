@@ -1,0 +1,13 @@
+{
+  "title": "Workspace",
+  "pages": [
+    "overview",
+    "requests",
+    "path-params",
+    "auth",
+    "inherit",
+    "code-snippets",
+    "response",
+    "websocket"
+  ]
+}

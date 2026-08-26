@@ -1,0 +1,22 @@
+---
+title: "HTTP engine & CORS probing"
+description: "Native reqwest client — CORS does not apply; configure TLS, proxy, redirects, and default Origin/Referer."
+---
+
+Native reqwest client — CORS does not apply; configure TLS, proxy, redirects, and default Origin/Referer.
+
+## Capabilities
+
+- Settings → HTTP engine — concurrency, timeouts, cache (memory + disk)
+- TLS verify on/off (self-signed / local HTTPS)
+- HTTP(S) or SOCKS proxy URL
+- Follow redirects + max redirects
+- Default User-Agent, Origin, Referer
+- Send / store cookies toggles
+- Engine stats: active, completed, failed, cache hits
+
+<Callout title="Tip">
+
+Pulse is not a browser: there is no CORS preflight. Use Origin/Referer headers (or Settings defaults) to reproduce what a browser would send.
+
+</Callout>

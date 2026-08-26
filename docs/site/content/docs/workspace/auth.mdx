@@ -1,0 +1,29 @@
+---
+title: "Authentication"
+description: "Configure auth on the Auth tab of a request, or inherit it from a parent."
+---
+
+Configure auth on the Auth tab of a request, or inherit it from a parent.
+
+## Capabilities
+
+- Inherit from collection or folder (default on new requests)
+- No Auth — send nothing extra
+- Bearer token
+- Basic username / password
+- API key (header or query)
+- OAuth 2.0 — client credentials
+- OAuth 2.0 — authorization code with PKCE
+- OAuth 2.0 — refresh token flow
+
+## How to
+
+1. On a request, open Auth and pick a type. Inherit shows which parent supplies the credentials.
+2. OAuth 2.0 stays on the request (not on collection/folder settings) — exchange the token there.
+3. To override a collection Bearer for one call, switch that request off Inherit and set its own auth.
+
+<Callout title="Tip">
+
+Set Bearer once on the collection (explorer → ⋯ → Edit settings). Requests left on Inherit pick it up.
+
+</Callout>

@@ -3,6 +3,7 @@ import {
   FEATURE_DOC_GROUPS,
   FEATURE_DOC_SECTIONS,
   featureDocsMarkdown,
+  featureDocsFumadocsFiles,
 } from "@/lib/feature-docs";
 
 describe("feature-docs", () => {
@@ -84,6 +85,16 @@ describe("feature-docs", () => {
     expect(md).toContain("In-app: open **Docs**");
   });
 
+  it("emits a Fumadocs page for every feature section", () => {
+    const files = featureDocsFumadocsFiles();
+    const paths = files.map((file) => file.path);
+    expect(paths).toContain("index.mdx");
+    expect(paths).toContain("meta.json");
+    for (const section of FEATURE_DOC_SECTIONS) {
+      expect(paths.some((path) => path.endsWith(`/${section.id}.mdx`))).toBe(true);
+    }
+  });
+
   it("includes every section title in generated markdown", () => {
     const md = featureDocsMarkdown();
     for (const section of FEATURE_DOC_SECTIONS) {
@@ -107,5 +118,16 @@ describe("feature-docs", () => {
     const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
     const onDisk = readFileSync(resolve(root, "docs/FEATURES.md"), "utf8");
     expect(onDisk).toBe(featureDocsMarkdown());
+  });
+
+  it("keeps docs/site MDX in sync with featureDocsFumadocsFiles()", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { dirname, resolve } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+    for (const file of featureDocsFumadocsFiles()) {
+      const onDisk = readFileSync(resolve(root, "docs/site/content/docs", file.path), "utf8");
+      expect(onDisk, file.path).toBe(file.contents);
+    }
   });
 });

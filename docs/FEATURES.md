@@ -1,6 +1,6 @@
 # Pulse feature guide
 
-In-app: open **Docs** from the left rail. This file is generated from the same source (`src/lib/feature-docs.ts`).
+In-app: open **Docs** from the left rail. Generated from `src/lib/feature-docs.ts`. Fumadocs site: `bun run docs:dev`.
 
 ## Workspace
 

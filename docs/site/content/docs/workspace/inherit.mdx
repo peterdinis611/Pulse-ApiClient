@@ -1,0 +1,28 @@
+---
+title: "Collection & folder inheritance"
+description: "Auth, variables, pre-request, and tests on a parent apply to every child that Inherits."
+---
+
+Auth, variables, pre-request, and tests on a parent apply to every child that Inherits.
+
+## Capabilities
+
+- Collection settings: auth, variables, pre-request, tests
+- Folder settings: same fields, plus Inherit from the parent collection/folder
+- Auth resolution: nearest folder with a concrete type, else the collection, else none
+- Pre-request runs collection → folders (outer to inner) → request
+- Tests run request → folders (inner to outer) → collection
+- Folder variables layer after collection variables and before the environment
+- New requests default to Inherit so you do not copy Bearer onto every call
+
+## How to
+
+1. Explorer → collection ⋯ → Edit settings. Choose Bearer (or Basic / API key) and Save.
+2. On a folder row, click the settings icon to set folder-only auth or extra scripts.
+3. Keep request Auth on Inherit. The Auth tab shows which parent is used.
+
+<Callout title="Tip">
+
+A folder set to No Auth stops looking further up — children inherit “none”, not the collection token.
+
+</Callout>

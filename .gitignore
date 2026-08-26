@@ -11,6 +11,9 @@ node_modules
 dist
 dist-ssr
 *.local
+docs/site/.next
+docs/site/out
+docs/site/.source
 
 # Editor directories and files
 .vscode/*

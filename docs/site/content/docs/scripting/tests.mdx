@@ -1,0 +1,18 @@
+---
+title: "Tests"
+description: "Assert on the last response with pulse.test scripts."
+---
+
+Assert on the last response with pulse.test scripts.
+
+## Capabilities
+
+- pulse.test("name", function () \{ ... \})
+- pulse.response.to.have.status(200) · to.be.ok · clientError · serverError
+- pulse.response.to.have.header("Content-Type")
+- pulse.expect(value).to.eql / include / be.above / match / have.property
+- pulse.response.json() · text() · responseTime
+- pm.test / pm.expect syntax is auto-normalized to pulse.*
+- After Send, tests on the request run, then folder tests (inner → outer), then collection tests
+- Collection runner reports passed/failed per request
+- Snippets on the Tests tab cover status, headers, body, JSON, GraphQL, and timing

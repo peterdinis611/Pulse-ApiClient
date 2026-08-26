@@ -14,7 +14,7 @@ Desktop API client built with **Tauri**, **React**, **TypeScript**, **Tailwind C
 
 ## Features
 
-See the full guide in [docs/FEATURES.md](./docs/FEATURES.md) (also available in-app under **Docs** in the left rail).
+See the full guide in [docs/FEATURES.md](./docs/FEATURES.md) (in-app under **Docs**, or `bun run docs:dev` for the Fumadocs site).
 
 - HTTP methods: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS, QUERY
 - Path params (`:id` / `{id}`), query params, headers, body (JSON, raw, form, multipart, GraphQL)
@@ -55,6 +55,14 @@ bun run tauri dev
 bun run tauri build
 ```
 
+## Docs site (Fumadocs)
+
+```bash
+bun run docs:dev
+```
+
+Opens a Fumadocs site at http://localhost:3000. Content is generated from `src/lib/feature-docs.ts` into `docs/site/content/docs`. `bun run docs:sync` rewrites `docs/FEATURES.md` and those MDX files.
+
 ## Regenerate README screenshots
 
 ```bash
@@ -73,6 +81,7 @@ bun run screenshots:readme
 - `src-tauri/src/lib.rs` — Tauri commands
 - `docs/screenshots/` — README screenshots
 - `docs/FEATURES.md` — feature guide (synced with in-app Docs)
+- `docs/site/` — Fumadocs Next.js site (`bun run docs:dev`)
 - `examples/pulse-theme-override.example.css` — sample custom CSS (all theme tokens + UI hooks)
 
 ## Custom theme CSS

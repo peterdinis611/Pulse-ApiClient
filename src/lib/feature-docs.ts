@@ -370,7 +370,7 @@ export function featureDocsMarkdown(): string {
   const lines: string[] = [
     "# Pulse feature guide",
     "",
-    "In-app: open **Docs** from the left rail. This file is generated from the same source (`src/lib/feature-docs.ts`).",
+    "In-app: open **Docs** from the left rail. Generated from `src/lib/feature-docs.ts`. Fumadocs site: `bun run docs:dev`.",
     "",
   ];
 
@@ -401,3 +401,114 @@ export function featureDocsMarkdown(): string {
 
   return `${lines.join("\n").trimEnd()}\n`;
 }
+
+function yamlString(value: string): string {
+  return JSON.stringify(value);
+}
+
+/** Escape `{` / `}` so MDX does not treat them as JSX. Leave fenced/inline code intact. */
+function escapeMdx(text: string): string {
+  return text.replace(/`[^`]*`|[{}]/g, (chunk) => {
+    if (chunk.startsWith("`")) return chunk;
+    return chunk === "{" ? "\\{" : "\\}";
+  });
+}
+
+function groupSlug(group: FeatureDocGroup): string {
+  return group.toLowerCase();
+}
+
+export type GeneratedDocFile = {
+  path: string;
+  contents: string;
+};
+
+/** MDX + meta.json for the Fumadocs site under `docs/site/content/docs`. */
+export function featureDocsFumadocsFiles(): GeneratedDocFile[] {
+  const files: GeneratedDocFile[] = [];
+
+  files.push({
+    path: "meta.json",
+    contents: `${JSON.stringify(
+      {
+        title: "Pulse",
+        pages: ["index", ...FEATURE_DOC_GROUPS.map(groupSlug)],
+      },
+      null,
+      2,
+    )}\n`,
+  });
+
+  const cards = FEATURE_DOC_GROUPS.map((group) => {
+    const first = FEATURE_DOC_SECTIONS.find((section) => section.group === group);
+    if (!first) return "";
+    return `  <Card title="${group}" href="/docs/${groupSlug(group)}/${first.id}" />`;
+  }).join("\n");
+
+  files.push({
+    path: "index.mdx",
+    contents: `---
+title: ${yamlString("Pulse feature guide")}
+description: ${yamlString("Local-first API client docs — same content as in-app Docs.")}
+---
+
+Pulse is a desktop API client. This site is generated from \`src/lib/feature-docs.ts\`, the same source as **Docs** in the app rail and \`docs/FEATURES.md\`.
+
+<Cards>
+${cards}
+</Cards>
+`,
+  });
+
+  for (const group of FEATURE_DOC_GROUPS) {
+    const sections = FEATURE_DOC_SECTIONS.filter((section) => section.group === group);
+    const folder = groupSlug(group);
+
+    files.push({
+      path: `${folder}/meta.json`,
+      contents: `${JSON.stringify(
+        {
+          title: group,
+          pages: sections.map((section) => section.id),
+        },
+        null,
+        2,
+      )}\n`,
+    });
+
+    for (const section of sections) {
+      const lines: string[] = [
+        "---",
+        `title: ${yamlString(section.title)}`,
+        `description: ${yamlString(section.summary)}`,
+        "---",
+        "",
+        escapeMdx(section.summary),
+        "",
+        "## Capabilities",
+        "",
+      ];
+      for (const item of section.items) {
+        lines.push(`- ${escapeMdx(item)}`);
+      }
+      if (section.howTo?.length) {
+        lines.push("", "## How to", "");
+        section.howTo.forEach((step, index) => {
+          lines.push(`${index + 1}. ${escapeMdx(step)}`);
+        });
+      }
+      if (section.tips?.length) {
+        for (const tip of section.tips) {
+          lines.push("", "<Callout title=\"Tip\">", "", escapeMdx(tip), "", "</Callout>", "");
+        }
+      }
+      files.push({
+        path: `${folder}/${section.id}.mdx`,
+        contents: `${lines.join("\n").trimEnd()}\n`,
+      });
+    }
+  }
+
+  return files;
+}
+

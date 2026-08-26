@@ -1,0 +1,27 @@
+---
+title: "Path parameters"
+description: "Tokens in the URL path become a Path table — like Postman’s Path tab."
+---
+
+Tokens in the URL path become a Path table — like Postman’s Path tab.
+
+## Capabilities
+
+- Write `:id` or `{id}` in the path, e.g. `https://api.example.com/users/:id/orders/{orderId}`
+- Params → Path lists each name automatically; keys are read-only
+- Enabled values replace the tokens on Send (and in the resolved URL preview)
+- Query params stay on Params → Query — they are not mixed with path tokens
+- `https:` and ports like `:3000` are not treated as params
+- OpenAPI `{petId}` paths import as path params; Postman `url.variable` round-trips
+
+## How to
+
+1. Type the token in the URL bar, then open Params → Path and fill the value.
+2. Leave a value empty to keep the token in the request (useful while drafting).
+3. Path values can themselves contain `{{variables}}`.
+
+<Callout title="Tip">
+
+Prefer `:id` in the path and keep filters (`?status=active`) on the Query table.
+
+</Callout>

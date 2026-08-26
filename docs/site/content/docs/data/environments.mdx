@@ -1,0 +1,30 @@
+---
+title: "Variables & environments"
+description: "Layered values: globals → collection → folder → environment. Later layers win on the same name."
+---
+
+Layered values: globals → collection → folder → environment. Later layers win on the same name.
+
+## Capabilities
+
+- Globals — lowest precedence, shared across collections (Environments view, first chip)
+- Collection and folder variables — set in Edit settings
+- Environment variables — Local / staging / production; switch from the explorer or status bar
+- Active environment wins when the same key exists in an earlier layer
+- Secret — mask the current value in the UI (bullets)
+- Initial vs current — snapshot plus Reset current from initial
+- \{\{name\}\} substitution in URL, path, query, headers, auth, and body
+- Autocomplete and the `{ }` picker list the merged enabled variables
+- pulse.environment.set updates the real environment (current value), not globals
+
+## How to
+
+1. Open Environments in the rail. Edit Globals, or select an environment chip.
+2. Mark tokens and passwords as secret. Fill Initial once, then change Current per session.
+3. Put `baseUrl` on the environment and `{{baseUrl}}/users/:id` on the request.
+
+<Callout title="Tip">
+
+Do not type secrets into collection JSON you plan to export and share — use environment or secret globals locally.
+
+</Callout>
