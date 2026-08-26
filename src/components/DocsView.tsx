@@ -3,14 +3,19 @@ import {
   BookOpen,
   ChevronLeft,
   ChevronRight,
+  Code2,
   Cookie,
+  Cpu,
   Database,
   FileCode2,
   FlaskConical,
+  GitBranch,
   Globe2,
   History,
   Keyboard,
+  LayoutGrid,
   Lightbulb,
+  Link2,
   Lock,
   Palette,
   Radio,
@@ -32,8 +37,12 @@ import {
 import { cn } from "@/lib/utils";
 
 const SECTION_ICONS: Record<string, LucideIcon> = {
+  overview: LayoutGrid,
   requests: Send,
+  "path-params": Link2,
   auth: Lock,
+  inherit: GitBranch,
+  "code-snippets": Code2,
   response: Sparkles,
   websocket: Radio,
   "pre-request": FileCode2,
@@ -43,6 +52,7 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
   environments: Globe2,
   history: History,
   cookies: Cookie,
+  "http-engine": Cpu,
   themes: Palette,
   search: Keyboard,
   data: Database,
@@ -92,6 +102,7 @@ export function DocsView() {
         section.summary,
         section.group,
         ...section.items,
+        ...(section.howTo ?? []),
         ...(section.tips ?? []),
       ]
         .join(" ")
@@ -130,8 +141,8 @@ export function DocsView() {
             <p className="text-caption text-primary">Feature guide</p>
             <h2 className="text-heading">Everything Pulse can do</h2>
             <p className="max-w-xl text-body text-muted-foreground">
-              Browse {FEATURE_DOC_SECTIONS.length} topics across requests, scripting, data, and
-              appearance — or search to jump straight to a capability.
+              Browse {FEATURE_DOC_SECTIONS.length} topics — requests, path params, inheritance,
+              variables, snippets, scripting, and more — or search to jump straight in.
             </p>
           </div>
           <div className="relative w-full sm:max-w-xs">
@@ -201,6 +212,7 @@ export function DocsView() {
                           </span>
                           <span className="block truncate text-[11px] text-muted-foreground">
                             {section.items.length} points
+                            {section.howTo?.length ? ` · ${section.howTo.length} steps` : ""}
                           </span>
                         </span>
                       </button>
@@ -300,6 +312,29 @@ function DocArticle({
             </li>
           ))}
         </ol>
+
+        {section.howTo && section.howTo.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              How to
+            </p>
+            <ol className="space-y-2">
+              {section.howTo.map((step, index) => (
+                <li
+                  key={step}
+                  className="flex gap-3 rounded-lg border border-primary/15 bg-primary/4 px-3 py-2.5"
+                >
+                  <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-primary/12 text-[11px] font-semibold tabular-nums text-primary">
+                    {index + 1}
+                  </span>
+                  <p className="min-w-0 text-body leading-relaxed text-foreground/90">
+                    <DocInlineText text={step} />
+                  </p>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
 
         {section.tips?.map((tip) => (
           <div

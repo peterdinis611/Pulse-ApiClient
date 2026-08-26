@@ -10,8 +10,12 @@ describe("feature-docs", () => {
     const ids = FEATURE_DOC_SECTIONS.map((section) => section.id);
     expect(ids).toEqual(
       expect.arrayContaining([
+        "overview",
         "requests",
+        "path-params",
         "auth",
+        "inherit",
+        "code-snippets",
         "pre-request",
         "tests",
         "collections",
@@ -36,6 +40,7 @@ describe("feature-docs", () => {
       expect(section.title.trim().length).toBeGreaterThan(0);
       expect(section.summary.trim().length).toBeGreaterThan(0);
       expect(section.items.every((item) => item.trim().length > 0)).toBe(true);
+      expect((section.howTo ?? []).every((step) => step.trim().length > 0)).toBe(true);
     }
   });
 
@@ -48,15 +53,23 @@ describe("feature-docs", () => {
     }
   });
 
-  it("documents scripting and theme capabilities with useful detail", () => {
+  it("documents scripting, inheritance, and theme capabilities with useful detail", () => {
     const preRequest = FEATURE_DOC_SECTIONS.find((section) => section.id === "pre-request");
     const themes = FEATURE_DOC_SECTIONS.find((section) => section.id === "themes");
     const tests = FEATURE_DOC_SECTIONS.find((section) => section.id === "tests");
+    const inherit = FEATURE_DOC_SECTIONS.find((section) => section.id === "inherit");
+    const pathParams = FEATURE_DOC_SECTIONS.find((section) => section.id === "path-params");
+    const snippets = FEATURE_DOC_SECTIONS.find((section) => section.id === "code-snippets");
+    const environments = FEATURE_DOC_SECTIONS.find((section) => section.id === "environments");
 
     expect(preRequest?.items.some((item) => item.includes("pulse.environment.set"))).toBe(true);
     expect(preRequest?.tips?.length).toBeGreaterThan(0);
     expect(themes?.items.some((item) => item.toLowerCase().includes("css"))).toBe(true);
     expect(tests?.items.some((item) => item.includes("pulse.test"))).toBe(true);
+    expect(inherit?.howTo?.length).toBeGreaterThan(0);
+    expect(pathParams?.items.some((item) => item.includes(":id"))).toBe(true);
+    expect(snippets?.items.some((item) => item.toLowerCase().includes("axios"))).toBe(true);
+    expect(environments?.summary.toLowerCase()).toContain("globals");
   });
 
   it("renders markdown for the docs folder", () => {
@@ -76,5 +89,23 @@ describe("feature-docs", () => {
     for (const section of FEATURE_DOC_SECTIONS) {
       expect(md).toContain(`### ${section.title}`);
     }
+  });
+
+  it("includes How to steps in generated markdown", () => {
+    const md = featureDocsMarkdown();
+    expect(md).toContain("**How to**");
+    expect(md).toContain("### Path parameters");
+    expect(md).toContain("### Collection & folder inheritance");
+    expect(md).toContain("### Code snippets");
+    expect(md).toContain("### Overview");
+  });
+
+  it("keeps docs/FEATURES.md in sync with featureDocsMarkdown()", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { dirname, resolve } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+    const onDisk = readFileSync(resolve(root, "docs/FEATURES.md"), "utf8");
+    expect(onDisk).toBe(featureDocsMarkdown());
   });
 });

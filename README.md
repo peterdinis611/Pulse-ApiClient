@@ -17,17 +17,18 @@ Desktop API client built with **Tauri**, **React**, **TypeScript**, **Tailwind C
 See the full guide in [docs/FEATURES.md](./docs/FEATURES.md) (also available in-app under **Docs** in the left rail).
 
 - HTTP methods: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS, QUERY
-- Query params, headers, body (none, JSON, raw, form-urlencoded, multipart)
-- Auth: Bearer, Basic, API key, OAuth 2.0 (client credentials + authorization code / PKCE)
+- Path params (`:id` / `{id}`), query params, headers, body (JSON, raw, form, multipart, GraphQL)
+- Auth: Inherit (collection/folder), Bearer, Basic, API key, OAuth 2.0 (client credentials + PKCE)
+- Variables: globals → collection → folder → environment; secrets and initial vs current
+- Code snippets: cURL, fetch, Axios, HTTPie, Python requests, Go
 - Pre-request scripts with `pulse.environment.set` for collection chaining
 - Response panel: status, timing, size, body (JSON pretty-print), headers; preview for images, PDF, Excel/CSV + download
-- Collections: save, duplicate, delete, import/export JSON, Postman, Bruno, Insomnia & OpenAPI
-- Environments with `{{variable}}` substitution
+- Collections: save, folders, inheritance, runner, import/export Pulse, Postman, Bruno, Insomnia & OpenAPI
 - Request history in SQLite with search and pagination
 - Cookie jar editor (add / edit / delete)
 - Custom themes + optional custom CSS overlay
 - WebSocket client, collection runner, fuzzy search
-- In-app **Docs** covering every feature
+- In-app **Docs** covering every feature (How to steps included)
 - Keyboard shortcuts: **Cmd/Ctrl + Enter** send, **T** new tab, **W** close tab, **L** focus URL, **F** search, **B** explorer
 
 ## Screenshots
