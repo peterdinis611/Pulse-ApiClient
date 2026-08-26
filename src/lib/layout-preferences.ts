@@ -13,7 +13,7 @@ export const EXPLORER_WIDTH_MAX = 1400;
 export const EXPLORER_WIDTH_DEFAULT = 300;
 export const RAIL_WIDTH = 48;
 /** Minimum width reserved for the main workspace when dragging the explorer. */
-export const MAIN_CONTENT_MIN_WIDTH = 320;
+export const MAIN_CONTENT_MIN_WIDTH = 240;
 
 export const CONSOLE_HEIGHT_MIN = 100;
 /** Absolute ceiling; effective max is also capped by viewport. */

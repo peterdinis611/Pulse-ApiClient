@@ -36,6 +36,12 @@ import {
   type CollectionDragPayload,
 } from "@/lib/collection-dnd";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
+import {
+  collapseConsecutiveHistory,
+  formatElapsedMs,
+  groupHistoryByDay,
+  type HistoryCluster,
+} from "@/lib/history-ui";
 import { toast } from "@/lib/toast";
 import type { FolderTreeNode } from "@/lib/collections";
 import { AddFolderMenu } from "@/components/AddFolderMenu";
@@ -664,16 +670,13 @@ export function ExplorerPanel() {
                         <Trash2 className="size-3.5" />
                       </TooltipIconButton>
                     </div>
-                    <CollapsibleContent className="mt-0.5 space-y-0.5">
-                      {historyEntries.map((entry) => (
-                        <HistoryRow
-                          key={entry.id}
-                          entry={entry}
-                          active={requestSignature(entry.request) === activeSignature}
-                          onClick={() => loadHistoryEntry(entry)}
-                          onPreview={() => openPreview({ kind: "history", entry })}
-                        />
-                      ))}
+                    <CollapsibleContent className="mt-0.5 space-y-2">
+                      <HistoryList
+                        entries={historyEntries}
+                        activeSignature={activeSignature}
+                        onOpen={loadHistoryEntry}
+                        onPreview={(entry) => openPreview({ kind: "history", entry })}
+                      />
                       {historyEntries.length === 0 && (
                         <p className="px-2 py-1.5 text-[11px] text-muted-foreground">
                           No history yet
@@ -684,7 +687,7 @@ export function ExplorerPanel() {
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="mt-1 h-7 w-full text-xs text-muted-foreground"
+                          className="h-7 w-full text-xs text-muted-foreground"
                           disabled={historyLoadingMore}
                           onClick={() => void loadMoreHistory()}
                         >
@@ -1062,50 +1065,187 @@ function ResultRow({
   );
 }
 
+function HistoryList({
+  entries,
+  activeSignature,
+  onOpen,
+  onPreview,
+}: {
+  entries: HistoryEntry[];
+  activeSignature: string;
+  onOpen: (entry: HistoryEntry) => void;
+  onPreview: (entry: HistoryEntry) => void;
+}) {
+  const dayGroups = useMemo(() => groupHistoryByDay(entries), [entries]);
+  const activeMarked = useMemo(() => {
+    const match = entries.find((entry) => requestSignature(entry.request) === activeSignature);
+    return match?.id ?? null;
+  }, [entries, activeSignature]);
+
+  if (entries.length === 0) return null;
+
+  return (
+    <div className="space-y-2.5">
+      {dayGroups.map((group) => {
+        const clusters = collapseConsecutiveHistory(group.entries);
+        return (
+          <div key={group.id} className="space-y-0.5">
+            <p className="explorer-history-day">{group.label}</p>
+            <div className="space-y-px">
+              {clusters.map((cluster) => (
+                <HistoryClusterRow
+                  key={cluster.entries[0]!.id}
+                  cluster={cluster}
+                  activeId={activeMarked}
+                  onOpen={onOpen}
+                  onPreview={onPreview}
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function HistoryClusterRow({
+  cluster,
+  activeId,
+  onOpen,
+  onPreview,
+}: {
+  cluster: HistoryCluster;
+  activeId: string | null;
+  onOpen: (entry: HistoryEntry) => void;
+  onPreview: (entry: HistoryEntry) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const latest = cluster.entries[0]!;
+  const count = cluster.entries.length;
+  const showStack = count > 1;
+
+  if (!showStack || !expanded) {
+    return (
+      <HistoryRow
+        entry={latest}
+        active={latest.id === activeId}
+        count={showStack ? count : undefined}
+        onExpand={showStack ? () => setExpanded(true) : undefined}
+        onClick={() => onOpen(latest)}
+        onPreview={() => onPreview(latest)}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-px rounded-md bg-sidebar-accent/25 p-0.5 ring-1 ring-sidebar-border/50">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground"
+        onClick={() => setExpanded(false)}
+      >
+        <span>
+          {count} runs · collapse
+        </span>
+        <ChevronDown className="size-3" />
+      </button>
+      {cluster.entries.map((entry) => (
+        <HistoryRow
+          key={entry.id}
+          entry={entry}
+          active={entry.id === activeId}
+          stacked
+          onClick={() => onOpen(entry)}
+          onPreview={() => onPreview(entry)}
+        />
+      ))}
+    </div>
+  );
+}
+
 function HistoryRow({
   entry,
   active,
+  count,
+  stacked,
+  onExpand,
   onClick,
   onPreview,
 }: {
   entry: HistoryEntry;
   active: boolean;
+  count?: number;
+  stacked?: boolean;
+  onExpand?: () => void;
   onClick: () => void;
   onPreview?: () => void;
 }) {
   const name = requestDisplayName(entry.request);
-  const { title, host, hasQuery } = shortUrlParts(entry.request.url);
+  const { title, host } = shortUrlParts(entry.request.url);
   const primary = name ?? title;
-  const secondary = [host, hasQuery ? "query" : null, entry.response ? `${entry.response.elapsedMs} ms` : null, relativeTime(entry.sentAt)]
-    .filter(Boolean)
-    .join(" · ");
+  const elapsed = formatElapsedMs(entry.response?.elapsedMs);
 
   return (
-    <div className={cn("explorer-row group/item", active && "explorer-row--active")}>
-      <button type="button" className="explorer-row__main" onClick={onClick}>
-        <span className={cn("explorer-method", methodTextClass(entry.request.method))}>
+    <div
+      className={cn(
+        "explorer-history-row group/item",
+        active && "explorer-history-row--active",
+        stacked && "explorer-history-row--stacked",
+      )}
+    >
+      <button type="button" className="explorer-history-row__main" onClick={onClick}>
+        <span className={cn("explorer-method !pt-0", methodTextClass(entry.request.method))}>
           {methodShortLabel(entry.request.method)}
         </span>
         <span className="min-w-0 flex-1 overflow-hidden">
-          <span className="block truncate text-[13px] font-medium text-foreground/90">{primary}</span>
-          <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{secondary}</span>
-        </span>
-        {entry.response && (
-          <span
-            className={cn(
-              "shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-semibold",
-              statusBadgeClass(entry.response.status),
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate text-[12px] font-medium leading-tight text-foreground/90">
+              {primary}
+            </span>
+            {count != null && count > 1 && (
+              <button
+                type="button"
+                className="explorer-history-count"
+                title={`${count} consecutive runs — click to expand`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onExpand?.();
+                }}
+              >
+                ×{count}
+              </button>
             )}
-          >
-            {entry.response.status}
           </span>
-        )}
+          <span className="mt-px flex min-w-0 items-center gap-1.5 text-[10px] leading-tight text-muted-foreground">
+            {host ? <span className="truncate">{host}</span> : null}
+            {host ? <span className="opacity-40">·</span> : null}
+            <span className="shrink-0 tabular-nums">{elapsed}</span>
+          </span>
+        </span>
+        <span className="flex shrink-0 flex-col items-end gap-0.5">
+          {entry.response ? (
+            <span
+              className={cn(
+                "rounded px-1 py-px font-mono text-[10px] font-semibold leading-none",
+                statusBadgeClass(entry.response.status),
+              )}
+            >
+              {entry.response.status}
+            </span>
+          ) : (
+            <span className="font-mono text-[10px] text-muted-foreground">—</span>
+          )}
+          <span className="text-[9px] tabular-nums text-muted-foreground/80">
+            {relativeTime(entry.sentAt)}
+          </span>
+        </span>
       </button>
       {onPreview && (
         <TooltipIconButton
           variant="ghost"
           size="icon"
-          className="explorer-row__preview"
+          className="explorer-history-row__preview"
           label="View details"
           onClick={(e) => {
             e.stopPropagation();
@@ -1596,6 +1736,30 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function TruncatedMonoValue({ value }: { value: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const long = value.length > 72;
+
+  if (!value) {
+    return <span className="italic opacity-40">empty</span>;
+  }
+
+  return (
+    <span className="min-w-0 text-muted-foreground">
+      <span className={cn("break-all", !expanded && long && "line-clamp-2")}>{value}</span>
+      {long && (
+        <button
+          type="button"
+          className="mt-0.5 block text-[10px] font-medium text-primary hover:underline"
+          onClick={() => setExpanded((current) => !current)}
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      )}
+    </span>
+  );
+}
+
 function PreviewSection({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="space-y-1">
@@ -1691,9 +1855,7 @@ function RequestPreviewPanel({
                 {enabledHeaders.slice(0, 10).map((h) => (
                   <div key={h.id} className="flex min-w-0 gap-1.5 font-mono text-[11px]">
                     <span className="shrink-0 font-medium text-foreground/80">{h.key}:</span>
-                    <span className="min-w-0 break-all text-muted-foreground">
-                      {h.value || <span className="italic opacity-40">empty</span>}
-                    </span>
+                    <TruncatedMonoValue value={h.value} />
                   </div>
                 ))}
                 {enabledHeaders.length > 10 && (
