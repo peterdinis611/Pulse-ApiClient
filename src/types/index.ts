@@ -9,7 +9,7 @@ export type HttpMethod =
   | "QUERY";
 
 export type BodyKind = "none" | "json" | "raw" | "form" | "multipart" | "graphql";
-export type AuthType = "none" | "bearer" | "basic" | "apiKey" | "oauth2";
+export type AuthType = "none" | "inherit" | "bearer" | "basic" | "apiKey" | "oauth2";
 export type OAuth2GrantType = "client_credentials" | "authorization_code";
 export type ApiKeyLocation = "header" | "query";
 export type MultipartFieldType = "text" | "file";
@@ -44,6 +44,10 @@ export type RequestTabState = {
   request: ApiRequest;
   /** When set, this tab uses the environment instead of the workspace default. */
   environmentId?: string | null;
+  /** Collection this tab inherits from (auth, scripts, variables). */
+  collectionId?: string | null;
+  /** Folder path within the collection, if any. */
+  folder?: string | null;
   response: HttpResponse | null;
   error: string | null;
   loading: boolean;
@@ -57,6 +61,10 @@ export type KeyValue = {
   key: string;
   value: string;
   enabled: boolean;
+  /** Mask the current value in the UI. */
+  secret?: boolean;
+  /** Snapshot used by Reset — Postman-style initial vs current. */
+  initialValue?: string;
 };
 
 export type MultipartField = {
@@ -104,6 +112,7 @@ export type ApiRequest = {
   graphqlOperationName: string;
   form: KeyValue[];
   multipart: MultipartField[];
+  pathParams: KeyValue[];
   auth: AuthConfig;
   tests: string;
   preRequestScript: string;
@@ -159,11 +168,24 @@ export type AppSettings = HttpSettings & {
   customThemeCssPath?: string | null;
 };
 
+export type FolderConfig = {
+  path: string;
+  auth?: AuthConfig;
+  variables?: KeyValue[];
+  preRequestScript?: string;
+  tests?: string;
+};
+
 export type CollectionGroup = {
   id: string;
   name: string;
   source: "pulse" | "postman" | "bruno" | "insomnia";
   folders: string[];
+  auth?: AuthConfig;
+  variables?: KeyValue[];
+  preRequestScript?: string;
+  tests?: string;
+  folderConfigs?: FolderConfig[];
 };
 
 export type SavedRequest = {
@@ -187,7 +209,7 @@ export type HistoryEntry = {
   response?: Pick<HttpResponse, "status" | "elapsedMs" | "sizeBytes">;
 };
 
-export type RequestTab = "params" | "headers" | "body" | "auth" | "pre-request" | "tests";
+export type RequestTab = "params" | "headers" | "body" | "auth" | "pre-request" | "tests" | "code";
 
 export type TestCaseResult = {
   name: string;

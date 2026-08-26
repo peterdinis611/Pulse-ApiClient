@@ -8,6 +8,7 @@ import type {
   CollectionGroup,
   Environment,
   HistoryEntry,
+  KeyValue,
   MainView,
   RequestTab,
   RequestTabState,
@@ -51,6 +52,7 @@ export type PersistedState = {
   history: HistoryEntry[];
   lastRequest: ReturnType<typeof createRequest>;
   windowSessions: Record<string, WindowSessionState>;
+  globals: KeyValue[];
 };
 
 export function clearLegacyPersistedState(): void {
@@ -70,6 +72,7 @@ export function defaultPersistedState(): PersistedState {
     history: [],
     lastRequest: createRequest(),
     windowSessions: {},
+    globals: [],
   };
 }
 
@@ -153,6 +156,7 @@ function migratePersistedState(parsed: Partial<PersistedState>): PersistedState 
     history: [],
     lastRequest: normalizeRequest(parsed.lastRequest),
     windowSessions,
+    globals: parsed.globals ?? [],
   };
 }
 

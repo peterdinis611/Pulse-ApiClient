@@ -103,4 +103,34 @@ describe("exportPostmanCollection", () => {
     const health = parsed.item.find((item) => item.name === "Health");
     expect(health?.request?.method).toBe("GET");
   });
+
+  it("round-trips collection auth, variables, and path params", () => {
+    const { group, requests } = sampleCollection();
+    group.auth = { ...defaultAuth(), authType: "bearer", bearerToken: "{{token}}" };
+    group.variables = [createKeyValue({ key: "baseUrl", value: "https://api.example.com" })];
+    requests[1] = createSavedRequest(
+      createRequest({
+        name: "User",
+        url: "https://api.example.com/users/:id",
+        pathParams: [createKeyValue({ key: "id", value: "42" })],
+      }),
+      { collectionId: group.id, name: "User" },
+    );
+
+    const raw = exportPostmanCollection(group, requests);
+    const parsed = JSON.parse(raw) as {
+      auth?: { type?: string };
+      variable?: Array<{ key: string }>;
+      item: Array<{
+        name: string;
+        request?: { auth?: { type?: string }; url?: { variable?: Array<{ key: string; value: string }> } };
+      }>;
+    };
+
+    expect(parsed.auth?.type).toBe("bearer");
+    expect(parsed.variable?.some((item) => item.key === "baseUrl")).toBe(true);
+    const user = parsed.item.find((item) => item.name === "User");
+    expect(user?.request?.auth?.type).toBe("inherit");
+    expect(user?.request?.url?.variable?.[0]).toMatchObject({ key: "id", value: "42" });
+  });
 });

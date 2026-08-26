@@ -1,18 +1,18 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Download, Plus, Trash2, Upload } from "lucide-react";
 import { useApp } from "@/machines";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { KeyValueEditor } from "@/components/KeyValueEditor";
 import { PageShell, PageToolbar } from "@/components/PageShell";
 import { TooltipIconButton } from "@/components/TooltipIconButton";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Panel, PanelBody, PanelHeader } from "@/components/ui/panel";
 import { Separator } from "@/components/ui/separator";
-import { isKeyValueBlank } from "@/lib/helpers";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+
+const GLOBALS_ID = "__globals__";
 
 export function EnvironmentsView() {
   const {
@@ -21,31 +21,23 @@ export function EnvironmentsView() {
     setActiveEnvironmentId,
     updateEnvironment,
     deleteEnvironment,
-    updateEnvironmentVariable,
-    addEnvironmentVariable,
-    removeEnvironmentVariable,
     exportEnvironments,
     importEnvironments,
     addEnvironment,
+    globals,
+    setGlobals,
   } = useApp();
 
   const importRef = useRef<HTMLInputElement>(null);
   const [selectedId, setSelectedId] = useState(
-    () => activeEnvironmentId ?? environments[0]?.id ?? "",
+    () => activeEnvironmentId ?? environments[0]?.id ?? GLOBALS_ID,
   );
   const [deleteEnvOpen, setDeleteEnvOpen] = useState(false);
 
-  const selectedEnv =
-    environments.find((env) => env.id === selectedId) ?? environments[0] ?? null;
-  const lastVariable = selectedEnv?.variables[selectedEnv.variables.length - 1];
-  const needsTrailingVariable = Boolean(
-    selectedEnv && (!lastVariable || !isKeyValueBlank(lastVariable)),
-  );
-
-  useEffect(() => {
-    if (!selectedEnv || !needsTrailingVariable) return;
-    addEnvironmentVariable(selectedEnv.id);
-  }, [needsTrailingVariable, selectedEnv?.id]);
+  const selectedGlobals = selectedId === GLOBALS_ID;
+  const selectedEnv = selectedGlobals
+    ? null
+    : (environments.find((env) => env.id === selectedId) ?? environments[0] ?? null);
 
   return (
     <PageShell resetKey="environments">
@@ -97,9 +89,21 @@ export function EnvironmentsView() {
       </PageToolbar>
 
       <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setSelectedId(GLOBALS_ID)}
+          className={cn(
+            "inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-body transition-colors",
+            selectedGlobals
+              ? "border-primary/40 bg-primary/10 text-foreground shadow-sm"
+              : "border-border/70 bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+          )}
+        >
+          <span className="font-medium">Globals</span>
+        </button>
         {environments.map((env) => {
           const active = env.id === activeEnvironmentId;
-          const selected = env.id === selectedEnv?.id;
+          const selected = env.id === selectedEnv?.id && !selectedGlobals;
           return (
             <button
               key={env.id}
@@ -123,7 +127,28 @@ export function EnvironmentsView() {
         })}
       </div>
 
-      {selectedEnv && (
+      {selectedGlobals && (
+        <Panel>
+          <PanelHeader title="Globals" />
+          <PanelBody className="space-y-2">
+            <KeyValueEditor
+              rows={globals}
+              onChange={setGlobals}
+              showSecretToggle
+              showInitial
+              keyPlaceholder="Variable"
+              valuePlaceholder="Current value"
+            />
+            <Separator />
+            <p className="text-body text-muted-foreground">
+              Resolution order: globals → collection → folder → environment. Mark secrets to mask
+              values. Initial is the snapshot; current is what Send uses.
+            </p>
+          </PanelBody>
+        </Panel>
+      )}
+
+      {selectedEnv && !selectedGlobals && (
         <Panel>
           <PanelHeader
             actions={
@@ -157,68 +182,19 @@ export function EnvironmentsView() {
           </PanelHeader>
 
           <PanelBody className="space-y-2">
-            <div className="grid grid-cols-[32px_1fr_1fr_32px] gap-2 px-1 text-caption">
-              <span />
-              <Label>Variable</Label>
-              <Label>Value</Label>
-              <span />
-            </div>
-            {selectedEnv.variables.map((variable) => (
-              <div
-                key={variable.id}
-                className="grid grid-cols-[32px_1fr_1fr_32px] items-center gap-2 rounded-md px-1 py-0.5 hover:bg-muted/40"
-              >
-                <Checkbox
-                  checked={variable.enabled}
-                  onCheckedChange={(checked) =>
-                    updateEnvironmentVariable(selectedEnv.id, variable.id, {
-                      enabled: checked === true,
-                    })
-                  }
-                />
-                <Input
-                  value={variable.key}
-                  placeholder="Variable"
-                  className="h-8 font-mono text-[13px]"
-                  onChange={(event) =>
-                    updateEnvironmentVariable(selectedEnv.id, variable.id, {
-                      key: event.target.value,
-                    })
-                  }
-                />
-                <Input
-                  value={variable.value}
-                  placeholder="Value"
-                  className="h-8 font-mono text-[13px]"
-                  onChange={(event) =>
-                    updateEnvironmentVariable(selectedEnv.id, variable.id, {
-                      value: event.target.value,
-                    })
-                  }
-                />
-                <TooltipIconButton
-                  variant="ghost"
-                  size="icon"
-                  className="size-8"
-                  label="Remove variable"
-                  onClick={() => removeEnvironmentVariable(selectedEnv.id, variable.id)}
-                >
-                  <Trash2 className="size-4" />
-                </TooltipIconButton>
-              </div>
-            ))}
-            <Button
-              type="button"
-              variant="link"
-              className="h-auto px-0"
-              onClick={() => addEnvironmentVariable(selectedEnv.id)}
-            >
-              + Add variable
-            </Button>
+            <KeyValueEditor
+              rows={selectedEnv.variables}
+              onChange={(variables) => updateEnvironment(selectedEnv.id, { variables })}
+              showSecretToggle
+              showInitial
+              keyPlaceholder="Variable"
+              valuePlaceholder="Current value"
+            />
             <Separator />
             <p className="text-body text-muted-foreground">
               Use {"{{variableName}}"} in URLs, headers, and bodies. Enabled variables are substituted
-              automatically when you send requests.
+              automatically when you send requests. Environment values override collection and
+              globals of the same name.
             </p>
           </PanelBody>
         </Panel>

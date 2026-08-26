@@ -3,6 +3,7 @@ import { useApp } from "@/machines";
 import { KeyValueEditor } from "@/components/KeyValueEditor";
 import { TestsTabPanel } from "@/components/TestsTabPanel";
 import { PreRequestTabPanel } from "@/components/PreRequestTabPanel";
+import { CodeSnippetPanel } from "@/components/CodeSnippetPanel";
 import { BODY_KINDS } from "@/types";
 import type { BodyKind, KeyValue, MultipartField } from "@/types";
 import { Trash2 } from "lucide-react";
@@ -70,10 +71,19 @@ function applyBodyKind(bodyKind: BodyKind) {
 }
 
 export function RequestTabs() {
-  const { request, requestTab, setRequestTab, updateRequest, activeEnvironment } = useApp();
+  const {
+    request,
+    requestTab,
+    setRequestTab,
+    updateRequest,
+    variableEnvironment,
+    inheritedAuth,
+    tabCollectionId,
+  } = useApp();
   const [oauthBusy, setOauthBusy] = useState(false);
 
   const paramCount = request.query.filter((q) => q.enabled && q.key.trim()).length;
+  const pathCount = request.pathParams.filter((p) => p.enabled && p.key.trim()).length;
   const headerCount = request.headers.filter((h) => h.enabled && h.key.trim()).length;
 
   const updateMultipart = (rows: MultipartField[]) => {
@@ -134,9 +144,9 @@ export function RequestTabs() {
           <TabsList className="h-9 bg-transparent p-0.5">
             <TabsTrigger value="params">
               Params
-              {paramCount > 0 && (
+              {paramCount + pathCount > 0 && (
                 <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
-                  {paramCount}
+                  {paramCount + pathCount}
                 </Badge>
               )}
             </TabsTrigger>
@@ -152,6 +162,7 @@ export function RequestTabs() {
             <TabsTrigger value="auth">Auth</TabsTrigger>
             <TabsTrigger value="pre-request">Pre-request</TabsTrigger>
             <TabsTrigger value="tests">Tests</TabsTrigger>
+            <TabsTrigger value="code">Code</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
@@ -159,12 +170,53 @@ export function RequestTabs() {
       <ScrollAreaWithTop className="min-h-0 flex-1" resetKey={requestTab}>
         <div className="p-3">
           {requestTab === "params" && (
-            <KeyValueEditor
-              rows={request.query}
-              environment={activeEnvironment}
-              onChange={(query) => updateRequest({ query })}
-              keyPlaceholder="Query param"
-            />
+            <div className="space-y-6">
+              <section className="space-y-2">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Path
+                    {pathCount > 0 && (
+                      <span className="ml-1.5 font-mono normal-case text-foreground/70">{pathCount}</span>
+                    )}
+                  </p>
+                  <p className="text-[12px] text-muted-foreground">
+                    Use <code className="rounded bg-muted px-1 font-mono text-[11px]">:id</code> or{" "}
+                    <code className="rounded bg-muted px-1 font-mono text-[11px]">{"{id}"}</code> in
+                    the URL. Values are filled here.
+                  </p>
+                </div>
+                {request.pathParams.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-border/70 px-3 py-4 text-[13px] text-muted-foreground">
+                    No path params yet. Try{" "}
+                    <span className="font-mono text-foreground/80">
+                      {`{{baseUrl}}/users/:id`}
+                    </span>
+                  </p>
+                ) : (
+                  <KeyValueEditor
+                    rows={request.pathParams}
+                    environment={variableEnvironment}
+                    onChange={(pathParams) => updateRequest({ pathParams })}
+                    autoBlank={false}
+                    allowAdd={false}
+                    keyReadOnly
+                    valuePlaceholder="Path value"
+                    valueLabel="Value"
+                  />
+                )}
+              </section>
+              <section className="space-y-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Query
+                </p>
+                <KeyValueEditor
+                  rows={request.query}
+                  environment={variableEnvironment}
+                  onChange={(query) => updateRequest({ query })}
+                  keyPlaceholder="Query param"
+                />
+              </section>
+            </div>
           )}
 
           {requestTab === "headers" && (
@@ -198,7 +250,7 @@ export function RequestTabs() {
               </div>
               <KeyValueEditor
                 rows={request.headers}
-                environment={activeEnvironment}
+                environment={variableEnvironment}
                 onChange={(headers) => updateRequest({ headers })}
                 keyPlaceholder="Header"
               />
@@ -231,7 +283,7 @@ export function RequestTabs() {
                     <Label htmlFor="graphql-operation">Operation name</Label>
                     <VariableField
                       id="graphql-operation"
-                      environment={activeEnvironment}
+                      environment={variableEnvironment}
                       value={request.graphqlOperationName}
                       onChange={(graphqlOperationName) =>
                         updateRequest({ graphqlOperationName })
@@ -244,7 +296,7 @@ export function RequestTabs() {
                     <VariableField
                       id="graphql-query"
                       multiline
-                      environment={activeEnvironment}
+                      environment={variableEnvironment}
                       value={request.graphqlQuery}
                       onChange={(graphqlQuery) => updateRequest({ graphqlQuery })}
                       inputClassName="min-h-[220px]"
@@ -256,7 +308,7 @@ export function RequestTabs() {
                     <VariableField
                       id="graphql-variables"
                       multiline
-                      environment={activeEnvironment}
+                      environment={variableEnvironment}
                       value={request.graphqlVariables}
                       onChange={(graphqlVariables) => updateRequest({ graphqlVariables })}
                       inputClassName="min-h-[120px]"
@@ -269,7 +321,7 @@ export function RequestTabs() {
               {(request.bodyKind === "json" || request.bodyKind === "raw") && (
                 <VariableField
                   multiline
-                  environment={activeEnvironment}
+                  environment={variableEnvironment}
                   value={request.body}
                   onChange={(body) => updateRequest({ body })}
                   inputClassName="min-h-[180px]"
@@ -284,7 +336,7 @@ export function RequestTabs() {
               {request.bodyKind === "form" && (
                 <KeyValueEditor
                   rows={request.form}
-                  environment={activeEnvironment}
+                  environment={variableEnvironment}
                   onChange={(form) => updateRequest({ form })}
                 />
               )}
@@ -415,6 +467,9 @@ export function RequestTabs() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="inherit">
+                      Inherit{tabCollectionId ? " from parent" : ""}
+                    </SelectItem>
                     <SelectItem value="none">No Auth</SelectItem>
                     <SelectItem value="bearer">Bearer Token</SelectItem>
                     <SelectItem value="basic">Basic Auth</SelectItem>
@@ -424,12 +479,23 @@ export function RequestTabs() {
                 </Select>
               </div>
 
+              {request.auth.authType === "inherit" && (
+                <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2.5 text-[13px] md:col-span-2">
+                  <p className="font-medium text-foreground">Using {inheritedAuth.label}</p>
+                  <p className="mt-0.5 text-muted-foreground">
+                    {inheritedAuth.auth.authType === "none"
+                      ? "Parent has no auth. Set Bearer (or other) on the collection or folder."
+                      : `Resolved type: ${inheritedAuth.auth.authType}`}
+                  </p>
+                </div>
+              )}
+
               {request.auth.authType === "bearer" && (
                 <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="bearer-token">Token</Label>
                   <VariableField
                     id="bearer-token"
-                    environment={activeEnvironment}
+                    environment={variableEnvironment}
                     value={request.auth.bearerToken}
                     onChange={(bearerToken) =>
                       updateRequest({
@@ -447,7 +513,7 @@ export function RequestTabs() {
                     <Label htmlFor="basic-user">Username</Label>
                     <VariableField
                       id="basic-user"
-                      environment={activeEnvironment}
+                      environment={variableEnvironment}
                       value={request.auth.basicUsername}
                       onChange={(basicUsername) =>
                         updateRequest({
@@ -462,7 +528,7 @@ export function RequestTabs() {
                     <VariableField
                       id="basic-pass"
                       type="password"
-                      environment={activeEnvironment}
+                      environment={variableEnvironment}
                       value={request.auth.basicPassword}
                       onChange={(basicPassword) =>
                         updateRequest({
@@ -481,7 +547,7 @@ export function RequestTabs() {
                     <Label htmlFor="api-key-name">Key name</Label>
                     <VariableField
                       id="api-key-name"
-                      environment={activeEnvironment}
+                      environment={variableEnvironment}
                       value={request.auth.apiKeyKey}
                       onChange={(apiKeyKey) =>
                         updateRequest({
@@ -495,7 +561,7 @@ export function RequestTabs() {
                     <Label htmlFor="api-key-value">Value</Label>
                     <VariableField
                       id="api-key-value"
-                      environment={activeEnvironment}
+                      environment={variableEnvironment}
                       value={request.auth.apiKeyValue}
                       onChange={(apiKeyValue) =>
                         updateRequest({
@@ -557,7 +623,7 @@ export function RequestTabs() {
                   <div className="space-y-2 md:col-span-2">
                     <Label>Token URL</Label>
                     <VariableField
-                      environment={activeEnvironment}
+                      environment={variableEnvironment}
                       value={request.auth.oauthTokenUrl}
                       onChange={(oauthTokenUrl) =>
                         updateRequest({ auth: { ...request.auth, oauthTokenUrl } })
@@ -569,7 +635,7 @@ export function RequestTabs() {
                     <div className="space-y-2 md:col-span-2">
                       <Label>Authorize URL</Label>
                       <VariableField
-                        environment={activeEnvironment}
+                        environment={variableEnvironment}
                         value={request.auth.oauthAuthorizeUrl}
                         onChange={(oauthAuthorizeUrl) =>
                           updateRequest({ auth: { ...request.auth, oauthAuthorizeUrl } })
@@ -581,7 +647,7 @@ export function RequestTabs() {
                   <div className="space-y-2">
                     <Label>Client ID</Label>
                     <VariableField
-                      environment={activeEnvironment}
+                      environment={variableEnvironment}
                       value={request.auth.oauthClientId}
                       onChange={(oauthClientId) =>
                         updateRequest({ auth: { ...request.auth, oauthClientId } })
@@ -592,7 +658,7 @@ export function RequestTabs() {
                     <Label>Client secret</Label>
                     <VariableField
                       type="password"
-                      environment={activeEnvironment}
+                      environment={variableEnvironment}
                       value={request.auth.oauthClientSecret}
                       onChange={(oauthClientSecret) =>
                         updateRequest({ auth: { ...request.auth, oauthClientSecret } })
@@ -602,7 +668,7 @@ export function RequestTabs() {
                   <div className="space-y-2">
                     <Label>Scope</Label>
                     <VariableField
-                      environment={activeEnvironment}
+                      environment={variableEnvironment}
                       value={request.auth.oauthScope}
                       onChange={(oauthScope) =>
                         updateRequest({ auth: { ...request.auth, oauthScope } })
@@ -615,7 +681,7 @@ export function RequestTabs() {
                       <div className="space-y-2">
                         <Label>Redirect URI</Label>
                         <VariableField
-                          environment={activeEnvironment}
+                          environment={variableEnvironment}
                           value={request.auth.oauthRedirectUri}
                           onChange={(oauthRedirectUri) =>
                             updateRequest({ auth: { ...request.auth, oauthRedirectUri } })
@@ -625,7 +691,7 @@ export function RequestTabs() {
                       <div className="space-y-2 md:col-span-2">
                         <Label>Authorization code / redirect URL</Label>
                         <VariableField
-                          environment={activeEnvironment}
+                          environment={variableEnvironment}
                           value={request.auth.oauthAuthCode}
                           onChange={(oauthAuthCode) =>
                             updateRequest({ auth: { ...request.auth, oauthAuthCode } })
@@ -638,7 +704,7 @@ export function RequestTabs() {
                   <div className="space-y-2 md:col-span-2">
                     <Label>Access token</Label>
                     <VariableField
-                      environment={activeEnvironment}
+                      environment={variableEnvironment}
                       value={request.auth.bearerToken}
                       onChange={(bearerToken) =>
                         updateRequest({ auth: { ...request.auth, bearerToken } })
@@ -786,6 +852,7 @@ export function RequestTabs() {
 
           {requestTab === "pre-request" && <PreRequestTabPanel />}
           {requestTab === "tests" && <TestsTabPanel />}
+          {requestTab === "code" && <CodeSnippetPanel />}
         </div>
       </ScrollAreaWithTop>
     </section>

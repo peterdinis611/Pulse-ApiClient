@@ -18,6 +18,7 @@ import {
   Plus,
   Search,
   SearchX,
+  Settings2,
   Trash2,
   X,
 } from "lucide-react";
@@ -45,6 +46,7 @@ import {
 import { toast } from "@/lib/toast";
 import type { FolderTreeNode } from "@/lib/collections";
 import { AddFolderMenu } from "@/components/AddFolderMenu";
+import { InheritSettingsDialog, folderInheritDefaults } from "@/components/InheritSettingsDialog";
 import { CollectionRunResultsPanel } from "@/components/CollectionRunResultsPanel";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ExplorerTransferMenu } from "@/components/ExplorerTransferMenu";
@@ -63,7 +65,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { ApiRequest, HistoryEntry, SavedRequest } from "@/types";
+import type { ApiRequest, CollectionGroup, Environment, FolderConfig, HistoryEntry, SavedRequest } from "@/types";
 import { methodShortLabel, methodTextClass, statusBadgeClass } from "@/lib/method-colors";
 import { cn } from "@/lib/utils";
 
@@ -121,6 +123,7 @@ export function ExplorerPanel() {
     toggleExplorerCollapsed,
     collectionGroups,
     collections,
+    globals,
     environments,
     activeEnvironmentId,
     workspaceEnvironment,
@@ -137,6 +140,8 @@ export function ExplorerPanel() {
     importCollections,
     addEnvironment,
     deleteFolder,
+    patchCollectionGroup,
+    patchFolderConfig,
     activeEnvironment,
     request,
     newRequestTab,
@@ -156,6 +161,9 @@ export function ExplorerPanel() {
   const [historyOpen, setHistoryOpen] = useState(true);
   const [openCollections, setOpenCollections] = useState<Record<string, boolean>>({});
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
+  const [inheritTarget, setInheritTarget] = useState<
+    { kind: "collection"; id: string } | { kind: "folder"; collectionId: string; path: string } | null
+  >(null);
 
   const folderOpenKey = (collectionId: string, path: string) => `${collectionId}:${path}`;
   const isFolderOpen = (collectionId: string, path: string) =>
@@ -299,6 +307,10 @@ export function ExplorerPanel() {
         activeEnvironment,
         (_step, index, total) => {
           setRunProgress(`Running ${index + 1}/${total}`);
+        },
+        {
+          collection: collectionGroups.find((group) => group.id === collectionId) ?? null,
+          globals,
         },
       );
       setCollectionRun(result);
@@ -546,6 +558,9 @@ export function ExplorerPanel() {
                                 collectionId={group.id}
                                 collectionName={group.name}
                                 exportCollection={exportCollection}
+                                onEditSettings={() =>
+                                  setInheritTarget({ kind: "collection", id: group.id })
+                                }
                               />
                             </div>
                             <CollapsibleContent className="explorer-tree-nested space-y-0.5">
@@ -585,6 +600,13 @@ export function ExplorerPanel() {
                                   }
                                   onReorderFolder={(path, targetPath, position) =>
                                     reorderFolder(group.id, path, targetPath, position)
+                                  }
+                                  onEditSettings={(path) =>
+                                    setInheritTarget({
+                                      kind: "folder",
+                                      collectionId: group.id,
+                                      path,
+                                    })
                                   }
                                   activeSignature={activeSignature}
                                 />
@@ -840,7 +862,79 @@ export function ExplorerPanel() {
           setPendingMove(null);
         }}
       />
+
+      <InheritSettingsHost
+        target={inheritTarget}
+        collectionGroups={collectionGroups}
+        environment={activeEnvironment}
+        onOpenChange={(open) => {
+          if (!open) setInheritTarget(null);
+        }}
+        patchCollectionGroup={patchCollectionGroup}
+        patchFolderConfig={patchFolderConfig}
+      />
     </aside>
+  );
+}
+
+function InheritSettingsHost({
+  target,
+  collectionGroups,
+  environment,
+  onOpenChange,
+  patchCollectionGroup,
+  patchFolderConfig,
+}: {
+  target:
+    | { kind: "collection"; id: string }
+    | { kind: "folder"; collectionId: string; path: string }
+    | null;
+  collectionGroups: CollectionGroup[];
+  environment: Environment | null;
+  onOpenChange: (open: boolean) => void;
+  patchCollectionGroup: (id: string, patch: Partial<CollectionGroup>) => void;
+  patchFolderConfig: (collectionId: string, path: string, patch: Partial<FolderConfig>) => void;
+}) {
+  const group =
+    target?.kind === "collection"
+      ? collectionGroups.find((item) => item.id === target.id)
+      : target
+        ? collectionGroups.find((item) => item.id === target.collectionId)
+        : undefined;
+  const folderConfig =
+    target?.kind === "folder"
+      ? group?.folderConfigs?.find((item) => item.path === target.path)
+      : undefined;
+  const folderValues = folderInheritDefaults(folderConfig);
+
+  return (
+    <InheritSettingsDialog
+      open={target != null && group != null}
+      onOpenChange={onOpenChange}
+      title={
+        target?.kind === "folder"
+          ? `Folder · ${target.path}`
+          : `Collection · ${group?.name ?? ""}`
+      }
+      allowInheritAuth={target?.kind === "folder"}
+      auth={target?.kind === "folder" ? folderValues.auth : group?.auth}
+      variables={target?.kind === "folder" ? folderValues.variables : group?.variables}
+      preRequestScript={
+        target?.kind === "folder" ? folderValues.preRequestScript : group?.preRequestScript
+      }
+      tests={target?.kind === "folder" ? folderValues.tests : group?.tests}
+      environment={environment}
+      onSave={(patch) => {
+        if (!target) return;
+        if (target.kind === "collection") {
+          patchCollectionGroup(target.id, patch);
+          toast.success("Collection settings saved");
+          return;
+        }
+        patchFolderConfig(target.collectionId, target.path, patch);
+        toast.success("Folder settings saved", target.path);
+      }}
+    />
   );
 }
 
@@ -1271,10 +1365,12 @@ function CollectionActionsMenu({
   collectionId,
   collectionName,
   exportCollection,
+  onEditSettings,
 }: {
   collectionId: string;
   collectionName: string;
   exportCollection: (collectionId: string, format: "pulse" | "postman") => string | null;
+  onEditSettings: () => void;
 }) {
   const exportAs = (format: "pulse" | "postman") => {
     const content = exportCollection(collectionId, format);
@@ -1305,6 +1401,11 @@ function CollectionActionsMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuItem onClick={onEditSettings}>
+          <Settings2 className="size-3.5" />
+          Edit settings
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => exportAs("pulse")}>
           <Download className="size-3.5" />
           Export Pulse
@@ -1408,6 +1509,7 @@ function FolderBranch({
   onMove,
   onRelocateRequest,
   onReorderFolder,
+  onEditSettings,
 }: {
   folder: FolderTreeNode;
   collectionId: string;
@@ -1428,6 +1530,7 @@ function FolderBranch({
     options: { folder?: string; targetId?: string | null; position?: "before" | "after" },
   ) => void;
   onReorderFolder: (path: string, targetPath: string, position: "before" | "after") => void;
+  onEditSettings: (path: string) => void;
 }) {
   const open = isFolderOpen(collectionId, folder.path);
   const [dropEdge, setDropEdge] = useState<"before" | "after" | "into" | null>(null);
@@ -1520,6 +1623,18 @@ function FolderBranch({
             {isEmpty && <span className="explorer-count-badge">Empty</span>}
           </button>
         </CollapsibleTrigger>
+        <TooltipIconButton
+          variant="ghost"
+          size="icon"
+          className="explorer-action-btn"
+          label="Folder settings"
+          onClick={(event) => {
+            event.stopPropagation();
+            onEditSettings(folder.path);
+          }}
+        >
+          <Settings2 className="size-3.5" />
+        </TooltipIconButton>
         <AddFolderMenu
           collectionId={collectionId}
           collectionName={collectionName}
@@ -1595,6 +1710,7 @@ function FolderBranch({
             onMove={onMove}
             onRelocateRequest={onRelocateRequest}
             onReorderFolder={onReorderFolder}
+            onEditSettings={onEditSettings}
           />
         ))}
       </CollapsibleContent>

@@ -23,10 +23,11 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
     group: "Workspace",
     items: [
       "Methods: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS, QUERY",
-      "Query params, headers, and body: none, JSON, raw, form-urlencoded, multipart",
+      "Query params, path params (`:id` / `{id}`), headers, and body: none, JSON, raw, form-urlencoded, multipart",
       "Headers tab includes CORS/browser presets (Origin, Referer, AC-Request-*)",
       "Desktop engine is not limited by browser CORS — set any header you need",
       "Send with Cmd/Ctrl + Enter (or the Send button)",
+      "Code tab — copy as cURL, fetch, Axios, HTTPie, Python requests, or Go",
       "Protocol switch: HTTP or WebSocket (ws:// / wss://)",
       "Tabs for parallel requests; duplicate and rename from the explorer",
     ],
@@ -40,12 +41,16 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
     summary: "Configure auth on the Auth tab of a request.",
     group: "Workspace",
     items: [
+      "Inherit from collection or folder (default on new requests)",
       "Bearer token",
       "Basic username / password",
       "API key (header or query)",
       "OAuth 2.0 — client credentials",
       "OAuth 2.0 — authorization code with PKCE",
       "OAuth 2.0 — refresh token flow",
+    ],
+    tips: [
+      "Set Bearer once on the collection (explorer → collection menu → Edit settings). Requests left on Inherit pick it up.",
     ],
   },
   {
@@ -119,8 +124,9 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
     group: "Data",
     items: [
       "Save, duplicate, delete requests and folders",
+      "Auth, variables, pre-request, and tests on a collection or folder — requests Inherit them",
       "Import / export Pulse JSON",
-      "Import Postman, Bruno, Insomnia, and OpenAPI",
+      "Import Postman, Bruno, Insomnia, and OpenAPI (including collection/folder auth and variables)",
       "Collection runner — sequential Send with pre-request scripts and tests",
       "Export menus for sharing collections",
     ],
@@ -128,10 +134,12 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
   {
     id: "environments",
     title: "Environments",
-    summary: "Named sets of variables for local / staging / production.",
+    summary: "Layered variables: globals, collection, folder, then environment.",
     group: "Data",
     items: [
       "Create and switch environments from the Environments view or status bar",
+      "Globals, collection, and folder variables — environment wins on name clash",
+      "Secret values masked with bullets; initial vs current with Reset",
       "{{name}} substitution in URL, params, headers, auth, and body",
       "Variables can be updated at runtime via pre-request scripts",
     ],

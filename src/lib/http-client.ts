@@ -1,5 +1,6 @@
 import type { ApiRequest, Environment, HttpResponse } from "../types";
 import { substituteVariables } from "./env";
+import { applyPathParams } from "./path-params";
 import { buildGraphqlBody } from "./graphql";
 import { normalizeRequest } from "./helpers";
 import { runEffect } from "./effect/run";
@@ -57,9 +58,15 @@ function enabledPairs(items: Array<{ key: string; value: string; enabled: boolea
 
 export function prepareRequest(request: ApiRequest, environment: Environment | null): ApiRequest {
   const normalized = normalizeRequest(request);
+  const pathParams = normalized.pathParams.map((item) => ({
+    ...item,
+    key: substituteVariables(item.key, environment),
+    value: substituteVariables(item.value, environment),
+  }));
   const prepared: ApiRequest = {
     ...normalized,
-    url: substituteVariables(normalized.url, environment),
+    url: applyPathParams(substituteVariables(normalized.url, environment), pathParams),
+    pathParams,
     headers: normalized.headers.map((item) => ({
       ...item,
       key: substituteVariables(item.key, environment),
@@ -129,7 +136,7 @@ function buildPayload(prepared: ApiRequest, options?: { requestId?: string; time
         mimeType: item.mimeType ?? null,
       })),
     auth: {
-      authType: prepared.auth.authType,
+      authType: prepared.auth.authType === "inherit" ? "none" : prepared.auth.authType,
       bearerToken: prepared.auth.bearerToken,
       basicUsername: prepared.auth.basicUsername,
       basicPassword: prepared.auth.basicPassword,

@@ -1,9 +1,12 @@
 import { assign, raise, setup } from "xstate";
 import type {
   ApiRequest,
+  CollectionGroup,
   Environment,
+  FolderConfig,
   HistoryEntry,
   HttpResponse,
+  KeyValue,
   MainView,
   RequestTab,
   RequestTabState,
@@ -55,13 +58,21 @@ import {
 import { loadThemeMode, saveThemeMode, type ThemeMode } from "@/lib/theme";
 import { defaultWebSocketSession, inferProtocolFromUrl } from "@/lib/protocol";
 import { toast } from "@/lib/toast";
+import { syncPathParams } from "@/lib/path-params";
+import { resolveRequestForSend } from "@/lib/resolve-request";
+import { upsertFolderConfig } from "@/lib/inherit";
 import { importOpenApiIntoState } from "@/lib/openapi-import";
 import { wsClose, wsConnect, wsPing, wsSend } from "@/lib/ws-client";
 
-export function createTabState(request = createRequest()): RequestTabState {
+export function createTabState(
+  request = createRequest(),
+  extras?: { collectionId?: string | null; folder?: string | null },
+): RequestTabState {
   return {
     id: createId("tab"),
     request: normalizeRequest(request),
+    collectionId: extras?.collectionId,
+    folder: extras?.folder,
     response: null,
     error: null,
     loading: false,
@@ -99,8 +110,15 @@ function patchRequest(request: ApiRequest, patch: Partial<ApiRequest>): ApiReque
   const next = { ...request, ...patch };
   if (patch.url !== undefined) {
     next.protocol = inferProtocolFromUrl(patch.url);
+    next.pathParams = syncPathParams(patch.url, patch.pathParams ?? request.pathParams);
   }
   return next;
+}
+
+function collectionForTab(context: AppMachineContext, tab: RequestTabState | undefined) {
+  const collectionId = tab?.collectionId ?? context.persisted.activeCollectionId;
+  if (!collectionId) return null;
+  return context.persisted.collectionGroups.find((group) => group.id === collectionId) ?? null;
 }
 
 function appendWsMessage(
@@ -208,7 +226,7 @@ export type AppMachineEvent =
   | { type: "SET_CONSOLE_OPEN"; open: boolean }
   | { type: "SET_RESPONSE_PANEL_OPEN"; open: boolean }
   | { type: "UPDATE_REQUEST"; patch: Partial<ApiRequest> }
-  | { type: "OPEN_REQUEST_TAB"; request: ApiRequest }
+  | { type: "OPEN_REQUEST_TAB"; request: ApiRequest; collectionId?: string | null; folder?: string | null }
   | { type: "NEW_REQUEST_TAB" }
   | { type: "CLOSE_TAB"; tabId: string }
   | { type: "SET_ACTIVE_TAB"; tabId: string }
@@ -304,6 +322,14 @@ export type AppMachineEvent =
   | { type: "SET_EXPLORER_COLLAPSED"; collapsed: boolean }
   | { type: "TOGGLE_EXPLORER_COLLAPSED" }
   | { type: "SET_EXPLORER_WIDTH"; width: number }
+  | { type: "SET_GLOBALS"; variables: KeyValue[] }
+  | { type: "PATCH_COLLECTION_GROUP"; id: string; patch: Partial<CollectionGroup> }
+  | {
+      type: "PATCH_FOLDER_CONFIG";
+      collectionId: string;
+      path: string;
+      patch: Partial<FolderConfig>;
+    }
   | { type: "HYDRATE_APP"; persisted: PersistedState; user: UserSession | null; windowId: string; pendingInit?: PendingWindowInit | null }
   | { type: "SYNC_WORKSPACE"; persisted: PersistedState }
   | { type: "RESET_WORKSPACE" }
@@ -462,7 +488,18 @@ export const appMachine = setup({
 
       void (async () => {
         let environment = getTabEnvironment(context, tab);
-        const script = tab.request.preRequestScript?.trim() ?? "";
+        const collection = collectionForTab(context, tab);
+        const resolved = () =>
+          resolveRequestForSend({
+            request: tab.request,
+            collection,
+            folder: tab.folder,
+            globals: context.persisted.globals,
+            environment,
+          });
+
+        let prepared = resolved();
+        const script = prepared.request.preRequestScript?.trim() ?? "";
         if (script) {
           try {
             const result = await runPreRequestScript(script);
@@ -473,6 +510,7 @@ export const appMachine = setup({
                 id: environment.id,
                 patch: { variables: environment.variables },
               });
+              prepared = resolved();
             }
           } catch (error) {
             self.send({
@@ -491,8 +529,8 @@ export const appMachine = setup({
         startTabRequest(self, {
           tabId: tab.id,
           requestId,
-          request: tab.request,
-          environment,
+          request: prepared.request,
+          environment: prepared.environment,
         });
       })();
     },
@@ -501,11 +539,19 @@ export const appMachine = setup({
       if (!tab || tab.ws.status === "connecting" || tab.ws.status === "open") return;
       if (!tab.request.url.trim()) return;
 
+      const prepared = resolveRequestForSend({
+        request: tab.request,
+        collection: collectionForTab(context, tab),
+        folder: tab.folder,
+        globals: context.persisted.globals,
+        environment: getTabEnvironment(context, tab),
+      });
+
       self.send({ type: "WS_CONNECT_STARTED", tabId: tab.id });
       startTabWebSocketConnect(self, {
         tabId: tab.id,
-        request: tab.request,
-        environment: getTabEnvironment(context, tab),
+        request: prepared.request,
+        environment: prepared.environment,
       });
     },
   },
@@ -573,11 +619,19 @@ export const appMachine = setup({
             if (existing) {
               persistLastRequest(context);
               return {
+                tabs: mapTabById(context, existing.id, (tab) => ({
+                  ...tab,
+                  collectionId: event.collectionId ?? tab.collectionId,
+                  folder: event.folder ?? tab.folder,
+                })),
                 activeTabId: existing.id,
                 mainView: "request" as const,
               };
             }
-            const next = createTabState(structuredClone(event.request));
+            const next = createTabState(structuredClone(event.request), {
+              collectionId: event.collectionId,
+              folder: event.folder,
+            });
             const nextContext = {
               ...context,
               tabs: [...context.tabs, next],
@@ -594,7 +648,9 @@ export const appMachine = setup({
         },
         NEW_REQUEST_TAB: {
           actions: assign(({ context }) => {
-            const next = createTabState();
+            const next = createTabState(createRequest(), {
+              collectionId: context.persisted.activeCollectionId,
+            });
             const nextContext = {
               ...context,
               tabs: [...context.tabs, next],
@@ -677,7 +733,14 @@ export const appMachine = setup({
                 collections: [saved, ...context.persisted.collections],
               };
               saveSharedWorkspace(context, persisted);
-              return { persisted };
+              return {
+                persisted,
+                tabs: mapActiveTab(context, (tab) => ({
+                  ...tab,
+                  collectionId,
+                  folder: event.folder,
+                })),
+              };
             }),
             ({ context }) => {
               const activeTab = getActiveTab(context);
@@ -691,6 +754,8 @@ export const appMachine = setup({
           actions: raise(({ event }) => ({
             type: "OPEN_REQUEST_TAB" as const,
             request: structuredClone(event.saved.request),
+            collectionId: event.saved.collectionId,
+            folder: event.saved.folder,
           })),
         },
         DELETE_SAVED_REQUEST: {
@@ -826,6 +891,39 @@ export const appMachine = setup({
             return { persisted };
           }),
         },
+        SET_GLOBALS: {
+          actions: assign(({ context, event }) => {
+            const persisted = { ...context.persisted, globals: event.variables };
+            saveSharedWorkspace(context, persisted);
+            return { persisted };
+          }),
+        },
+        PATCH_COLLECTION_GROUP: {
+          actions: assign(({ context, event }) => {
+            const persisted = {
+              ...context.persisted,
+              collectionGroups: context.persisted.collectionGroups.map((group) =>
+                group.id === event.id ? { ...group, ...event.patch } : group,
+              ),
+            };
+            saveSharedWorkspace(context, persisted);
+            return { persisted };
+          }),
+        },
+        PATCH_FOLDER_CONFIG: {
+          actions: assign(({ context, event }) => {
+            const persisted = {
+              ...context.persisted,
+              collectionGroups: context.persisted.collectionGroups.map((group) =>
+                group.id === event.collectionId
+                  ? upsertFolderConfig(group, event.path, event.patch)
+                  : group,
+              ),
+            };
+            saveSharedWorkspace(context, persisted);
+            return { persisted };
+          }),
+        },
         ADD_FOLDER: {
           actions: assign(({ context, event }) => {
             const persisted = {
@@ -846,7 +944,14 @@ export const appMachine = setup({
               ...context.persisted,
               collectionGroups: context.persisted.collectionGroups.map((group) =>
                 group.id === event.collectionId
-                  ? removeFolderFromCollection(group, event.folderPath)
+                  ? {
+                      ...removeFolderFromCollection(group, event.folderPath),
+                      folderConfigs: group.folderConfigs?.filter(
+                        (item) =>
+                          item.path !== event.folderPath &&
+                          !item.path.startsWith(`${event.folderPath}/`),
+                      ),
+                    }
                   : group,
               ),
               collections: context.persisted.collections.map((item) =>

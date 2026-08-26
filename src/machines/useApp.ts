@@ -1,8 +1,11 @@
 import { useCallback } from "react";
 import type {
   ApiRequest,
+  CollectionGroup,
   Environment,
+  FolderConfig,
   HistoryEntry,
+  KeyValue,
   MainView,
   RequestTab,
   SavedRequest,
@@ -16,6 +19,8 @@ import type { TestRunResult } from "@/types";
 import { exportCollectionJson, exportEnvironmentsJson, type PersistedState } from "@/lib/storage";
 import { exportPostmanCollection } from "@/lib/postman-export";
 import { exportPulseCollection } from "@/lib/pulse-collection";
+import { mergeVariableLayers } from "@/lib/env";
+import { collectFolderVariables, resolveInheritedAuth } from "@/lib/inherit";
 import type { ThemeMode } from "@/lib/theme";
 import { AppMachineContext } from "@/machines/AppProvider";
 import {
@@ -32,6 +37,21 @@ export function useApp() {
   const activeTab = selectActiveTab(context);
   const activeEnvironment = selectActiveEnvironment(context);
   const workspaceEnvironment = selectWorkspaceEnvironment(context);
+  const activeCollection =
+    context.persisted.collectionGroups.find(
+      (group) => group.id === (activeTab?.collectionId ?? context.persisted.activeCollectionId),
+    ) ?? null;
+  const variableEnvironment = mergeVariableLayers([
+    context.persisted.globals,
+    activeCollection?.variables,
+    collectFolderVariables(activeCollection, activeTab?.folder),
+    activeEnvironment?.variables,
+  ]);
+  const inheritedAuth = resolveInheritedAuth(
+    activeTab?.request.auth ?? createRequest().auth,
+    activeCollection,
+    activeTab?.folder,
+  );
 
   const send = useCallback((event: Parameters<typeof actorRef.send>[0]) => {
     actorRef.send(event);
@@ -62,7 +82,12 @@ export function useApp() {
     environments: context.persisted.environments,
     activeEnvironmentId: context.persisted.activeEnvironmentId,
     activeEnvironment,
+    variableEnvironment,
+    inheritedAuth,
+    globals: context.persisted.globals,
     workspaceEnvironment,
+    tabCollectionId: activeTab?.collectionId ?? null,
+    tabFolder: activeTab?.folder ?? null,
     tabEnvironmentOverrideId: activeTab?.environmentId ?? null,
 
     ws: (activeTab?.ws ?? defaultWebSocketSession()) as WebSocketSession,
@@ -89,7 +114,16 @@ export function useApp() {
     setTestResults: (results: TestRunResult | null) =>
       send({ type: "SET_TEST_RESULTS", results }),
     updateRequest: (patch: Partial<ApiRequest>) => send({ type: "UPDATE_REQUEST", patch }),
-    openRequestTab: (request: ApiRequest) => send({ type: "OPEN_REQUEST_TAB", request }),
+    openRequestTab: (
+      request: ApiRequest,
+      extras?: { collectionId?: string | null; folder?: string | null },
+    ) =>
+      send({
+        type: "OPEN_REQUEST_TAB",
+        request,
+        collectionId: extras?.collectionId,
+        folder: extras?.folder,
+      }),
     newRequestTab: () => send({ type: "NEW_REQUEST_TAB" }),
     closeTab: (tabId: string) => send({ type: "CLOSE_TAB", tabId }),
     setActiveTab: (tabId: string) => send({ type: "SET_ACTIVE_TAB", tabId }),
@@ -132,6 +166,11 @@ export function useApp() {
     renameCollectionGroup: (id: string, name: string) =>
       send({ type: "RENAME_COLLECTION_GROUP", id, name }),
     setActiveCollectionId: (id: string | null) => send({ type: "SET_ACTIVE_COLLECTION", id }),
+    setGlobals: (variables: KeyValue[]) => send({ type: "SET_GLOBALS", variables }),
+    patchCollectionGroup: (id: string, patch: Partial<CollectionGroup>) =>
+      send({ type: "PATCH_COLLECTION_GROUP", id, patch }),
+    patchFolderConfig: (collectionId: string, path: string, patch: Partial<FolderConfig>) =>
+      send({ type: "PATCH_FOLDER_CONFIG", collectionId, path, patch }),
     addFolder: (collectionId: string, folderPath: string) =>
       send({ type: "ADD_FOLDER", collectionId, folderPath }),
     deleteFolder: (collectionId: string, folderPath: string) =>

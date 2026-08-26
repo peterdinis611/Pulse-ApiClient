@@ -1,6 +1,6 @@
 import { groupRequestsByFolder } from "./collections";
 import { createId, createRequest, createSavedRequest } from "./helpers";
-import type { ApiRequest, CollectionGroup, SavedRequest } from "@/types";
+import type { ApiRequest, AuthConfig, CollectionGroup, FolderConfig, KeyValue, SavedRequest } from "@/types";
 
 export const PULSE_COLLECTION_SCHEMA = "https://schema.pulse.dev/collection/v1.json";
 
@@ -16,6 +16,11 @@ type PulseCollection = {
     schema: string;
   };
   folders: string[];
+  auth?: AuthConfig;
+  variables?: KeyValue[];
+  preRequestScript?: string;
+  tests?: string;
+  folderConfigs?: FolderConfig[];
   item: PulseCollectionItem[];
 };
 
@@ -53,6 +58,11 @@ export function exportPulseCollection(group: CollectionGroup, requests: SavedReq
       ...grouped.root.map(toPulseRequestItem),
       ...grouped.folders.map(folderToPulseItem),
     ],
+    ...(group.auth ? { auth: group.auth } : {}),
+    ...(group.variables?.length ? { variables: group.variables } : {}),
+    ...(group.preRequestScript?.trim() ? { preRequestScript: group.preRequestScript } : {}),
+    ...(group.tests?.trim() ? { tests: group.tests } : {}),
+    ...(group.folderConfigs?.length ? { folderConfigs: group.folderConfigs } : {}),
   };
 
   return JSON.stringify(collection, null, 2);
@@ -132,6 +142,11 @@ export function importPulseCollection(raw: string): PulseCollectionImportResult 
     name: parsed.info?.name?.trim() || "Imported Collection",
     source: "pulse",
     folders: [...folderPaths].sort(),
+    ...(parsed.auth ? { auth: parsed.auth } : {}),
+    ...(parsed.variables?.length ? { variables: parsed.variables } : {}),
+    ...(parsed.preRequestScript ? { preRequestScript: parsed.preRequestScript } : {}),
+    ...(parsed.tests ? { tests: parsed.tests } : {}),
+    ...(parsed.folderConfigs?.length ? { folderConfigs: parsed.folderConfigs } : {}),
   };
 
   return { collection, requests };

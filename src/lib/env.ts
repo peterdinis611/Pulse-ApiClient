@@ -1,4 +1,4 @@
-import type { Environment } from "../types";
+import type { Environment, KeyValue } from "../types";
 import { createKeyValue } from "./helpers";
 
 const VARIABLE_PATTERN = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
@@ -65,6 +65,26 @@ export function unresolvedVariables(input: string | undefined | null): string[] 
   if (!input) return [];
   const matches = [...input.matchAll(VARIABLE_PATTERN)];
   return matches.map((match) => match[1]);
+}
+
+export function mergeVariableLayers(layers: Array<KeyValue[] | undefined | null>): Environment {
+  const map = new Map<string, KeyValue>();
+  for (const layer of layers) {
+    for (const variable of layer ?? []) {
+      if (!variable.enabled || !variable.key.trim()) continue;
+      map.set(variable.key.trim(), variable);
+    }
+  }
+  return {
+    id: "merged",
+    name: "Merged",
+    variables: [...map.values()],
+  };
+}
+
+export function maskSecretValue(value: string, secret?: boolean): string {
+  if (!secret || !value) return value;
+  return "•".repeat(Math.min(12, Math.max(4, value.length)));
 }
 
 export type EnvMutation = {

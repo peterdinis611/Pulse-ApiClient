@@ -1,17 +1,29 @@
 import { defaultGraphqlQuery, defaultGraphqlVariables } from "./graphql";
 import { createId, createKeyValue, createRequest, createSavedRequest, defaultAuth } from "./helpers";
 import { normalizeTestsToPulse } from "./test-snippets";
-import type { ApiRequest, AuthConfig, CollectionGroup, HttpMethod, KeyValue, SavedRequest } from "@/types";
+import type { ApiRequest, AuthConfig, CollectionGroup, FolderConfig, HttpMethod, KeyValue, SavedRequest } from "@/types";
+
+type PostmanAuth = {
+  type?: string;
+  bearer?: Array<{ key?: string; value?: string }>;
+  basic?: Array<{ key?: string; value?: string }>;
+  apikey?: Array<{ key?: string; value?: string; in?: string }>;
+};
 
 type PostmanCollection = {
   info?: { name?: string; _postman_id?: string; schema?: string };
   item?: PostmanItem[];
+  auth?: PostmanAuth;
+  variable?: PostmanKeyValue[];
+  event?: PostmanItem["event"];
 };
 
 type PostmanItem = {
   name?: string;
   item?: PostmanItem[];
   request?: PostmanRequest;
+  auth?: PostmanAuth;
+  variable?: PostmanKeyValue[];
   event?: Array<{
     listen?: string;
     script?: { exec?: string | string[] };
@@ -32,12 +44,7 @@ type PostmanRequest = {
       variables?: string;
     };
   };
-  auth?: {
-    type?: string;
-    bearer?: Array<{ key?: string; value?: string }>;
-    basic?: Array<{ key?: string; value?: string }>;
-    apikey?: Array<{ key?: string; value?: string; in?: string }>;
-  };
+  auth?: PostmanAuth;
 };
 
 type PostmanKeyValue = {
@@ -51,6 +58,7 @@ type PostmanUrl = {
   host?: string[];
   path?: string[];
   query?: PostmanKeyValue[];
+  variable?: PostmanKeyValue[];
 };
 
 export type PostmanImportResult = {
@@ -85,17 +93,22 @@ function parseKeyValues(items: PostmanKeyValue[] | undefined): KeyValue[] {
   );
 }
 
-function parseUrl(url: PostmanRequest["url"], queryFromUrl?: PostmanKeyValue[]): { url: string; query: KeyValue[] } {
+function parseUrl(
+  url: PostmanRequest["url"],
+  queryFromUrl?: PostmanKeyValue[],
+): { url: string; query: KeyValue[]; pathParams: KeyValue[] } {
   if (typeof url === "string") {
-    return { url, query: parseKeyValues(queryFromUrl) };
+    return { url, query: parseKeyValues(queryFromUrl), pathParams: [] };
   }
 
   if (!url) {
-    return { url: "", query: parseKeyValues(queryFromUrl) };
+    return { url: "", query: parseKeyValues(queryFromUrl), pathParams: [] };
   }
 
+  const pathParams = parseKeyValues(url.variable).filter((item) => item.key.trim());
+
   if (url.raw?.trim()) {
-    return { url: url.raw, query: parseKeyValues(url.query ?? queryFromUrl) };
+    return { url: url.raw, query: parseKeyValues(url.query ?? queryFromUrl), pathParams };
   }
 
   const host = (url.host ?? []).join(".");
@@ -103,12 +116,16 @@ function parseUrl(url: PostmanRequest["url"], queryFromUrl?: PostmanKeyValue[]):
   const built = [host, path].filter(Boolean).join("/");
   const normalized = built.startsWith("http") ? built : `https://${built}`;
 
-  return { url: normalized, query: parseKeyValues(url.query ?? queryFromUrl) };
+  return { url: normalized, query: parseKeyValues(url.query ?? queryFromUrl), pathParams };
 }
 
-function parseAuth(auth: PostmanRequest["auth"]): AuthConfig {
+function parseAuth(auth: PostmanAuth | undefined, missing: "inherit" | "none" = "inherit"): AuthConfig {
   const base = defaultAuth();
-  if (!auth?.type || auth.type === "noauth") return base;
+  if (!auth?.type) {
+    return missing === "inherit" ? { ...base, authType: "inherit" } : base;
+  }
+  if (auth.type === "noauth") return base;
+  if (auth.type === "inherit") return { ...base, authType: "inherit" };
 
   if (auth.type === "bearer") {
     const token = auth.bearer?.find((item) => item.key === "token")?.value ?? "";
@@ -230,7 +247,10 @@ function parseBody(
   };
 }
 
-function parsePostmanScript(item: PostmanItem, listen: "test" | "prerequest"): string | undefined {
+function parsePostmanScript(
+  item: { event?: PostmanItem["event"] },
+  listen: "test" | "prerequest",
+): string | undefined {
   const event = item.event?.find((entry) => entry.listen === listen);
   const exec = event?.script?.exec;
   if (!exec) return undefined;
@@ -241,7 +261,7 @@ function parsePostmanScript(item: PostmanItem, listen: "test" | "prerequest"): s
 function parsePostmanRequest(item: PostmanItem): ApiRequest | null {
   if (!item.request) return null;
 
-  const { url, query } = parseUrl(item.request.url);
+  const { url, query, pathParams } = parseUrl(item.request.url);
   const body = parseBody(item.request.body);
 
   return createRequest({
@@ -250,6 +270,7 @@ function parsePostmanRequest(item: PostmanItem): ApiRequest | null {
     url,
     headers: parseKeyValues(item.request.header),
     query,
+    pathParams,
     auth: parseAuth(item.request.auth),
     tests: parsePostmanScript(item, "test"),
     preRequestScript: parsePostmanScript(item, "prerequest") ?? "",
@@ -266,18 +287,38 @@ function collectFolders(folderPaths: Set<string>, path: string) {
   }
 }
 
+function folderConfigFromItem(item: PostmanItem, path: string): FolderConfig | null {
+  const auth = item.auth ? parseAuth(item.auth, "none") : undefined;
+  const variables = item.variable
+    ? parseKeyValues(item.variable).filter((row) => row.key.trim())
+    : [];
+  const preRequestScript = parsePostmanScript(item, "prerequest") ?? "";
+  const tests = parsePostmanScript(item, "test") ?? "";
+  if (!auth && !variables.length && !preRequestScript && !tests) return null;
+  return {
+    path,
+    ...(auth ? { auth } : {}),
+    ...(variables.length ? { variables } : {}),
+    ...(preRequestScript ? { preRequestScript } : {}),
+    ...(tests ? { tests } : {}),
+  };
+}
+
 function walkItems(
   items: PostmanItem[] | undefined,
   collectionId: string,
   folderPath: string,
   requests: SavedRequest[],
   folderPaths: Set<string>,
+  folderConfigs: FolderConfig[],
 ) {
   for (const item of items ?? []) {
-    if (item.item?.length) {
+    if (Array.isArray(item.item)) {
       const nextFolder = folderPath ? `${folderPath}/${item.name ?? "Folder"}` : (item.name ?? "Folder");
       collectFolders(folderPaths, nextFolder);
-      walkItems(item.item, collectionId, nextFolder, requests, folderPaths);
+      const config = folderConfigFromItem(item, nextFolder);
+      if (config) folderConfigs.push(config);
+      walkItems(item.item, collectionId, nextFolder, requests, folderPaths, folderConfigs);
       continue;
     }
 
@@ -319,19 +360,30 @@ export function importPostmanCollection(raw: string): PostmanImportResult {
 
   const collectionId = createId("col");
   const folderPaths = new Set<string>();
+  const folderConfigs: FolderConfig[] = [];
   const requests: SavedRequest[] = [];
 
-  walkItems(collectionData.item, collectionId, "", requests, folderPaths);
+  walkItems(collectionData.item, collectionId, "", requests, folderPaths, folderConfigs);
 
   if (!requests.length) {
     throw new Error("No valid requests found in Postman collection.");
   }
+
+  const collectionVariables = parseKeyValues(collectionData.variable).filter((row) => row.key.trim());
+  const collectionAuth = collectionData.auth ? parseAuth(collectionData.auth, "none") : undefined;
+  const collectionPre = parsePostmanScript(collectionData, "prerequest") ?? "";
+  const collectionTests = parsePostmanScript(collectionData, "test") ?? "";
 
   const collection: CollectionGroup = {
     id: collectionId,
     name: collectionData.info?.name?.trim() || "Imported Collection",
     source: "postman",
     folders: [...folderPaths].sort(),
+    ...(collectionAuth ? { auth: collectionAuth } : {}),
+    ...(collectionVariables.length ? { variables: collectionVariables } : {}),
+    ...(collectionPre ? { preRequestScript: collectionPre } : {}),
+    ...(collectionTests ? { tests: collectionTests } : {}),
+    ...(folderConfigs.length ? { folderConfigs } : {}),
   };
 
   return { collection, requests };

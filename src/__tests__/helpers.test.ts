@@ -39,6 +39,12 @@ describe("helpers", () => {
     expect(request.tests).toContain("pulse.test");
     expect(request.tests).toContain("pulse.response");
     expect(request.method).toBe("GET");
+    expect(request.auth.authType).toBe("inherit");
+  });
+
+  it("syncs path params from the URL", () => {
+    const request = createRequest({ url: "https://api.example.com/users/:id" });
+    expect(request.pathParams.map((item) => item.key)).toEqual(["id"]);
   });
 
   it("keeps a trailing blank key-value row", () => {

@@ -1,5 +1,6 @@
 import { Effect } from "effect";
-import type { Environment, SavedRequest, TestRunResult } from "@/types";
+import { resolveRequestForSend } from "./resolve-request";
+import type { CollectionGroup, Environment, KeyValue, SavedRequest, TestRunResult } from "@/types";
 import { createId } from "@/lib/helpers";
 import { applyEnvironmentMutations } from "@/lib/env";
 import { runEffectsParallel } from "@/lib/effect/tauri";
@@ -101,6 +102,7 @@ export async function runCollection(
   requests: SavedRequest[],
   environment: Environment | null,
   onStep?: (step: CollectionRunStep, index: number, total: number) => void,
+  extras?: { collection?: CollectionGroup | null; globals?: KeyValue[] },
 ): Promise<CollectionRunResult> {
   const result: CollectionRunResult = {
     collectionId,
@@ -118,7 +120,14 @@ export async function runCollection(
     let step: CollectionRunStep = { saved };
 
     try {
-      const script = saved.request.preRequestScript?.trim() ?? "";
+      const prepared = resolveRequestForSend({
+        request: saved.request,
+        collection: extras?.collection,
+        folder: saved.folder,
+        globals: extras?.globals,
+        environment: activeEnvironment,
+      });
+      const script = prepared.request.preRequestScript?.trim() ?? "";
       if (script && activeEnvironment) {
         const pre = await runEffect(runPreRequestScriptEffect(script));
         if (pre.mutations.length > 0) {
@@ -126,7 +135,14 @@ export async function runCollection(
         }
       }
 
-      const response = await sendRequest(saved.request, activeEnvironment, {
+      const sendPrepared = resolveRequestForSend({
+        request: saved.request,
+        collection: extras?.collection,
+        folder: saved.folder,
+        globals: extras?.globals,
+        environment: activeEnvironment,
+      });
+      const response = await sendRequest(sendPrepared.request, sendPrepared.environment, {
         requestId: createId("collection"),
       });
       [step] = await evaluateStepsParallel([saved], activeEnvironment, [{ response }]);
@@ -152,12 +168,15 @@ export async function runCollectionAuto(
   requests: SavedRequest[],
   environment: Environment | null,
   onStep?: (step: CollectionRunStep, index: number, total: number) => void,
+  extras?: { collection?: CollectionGroup | null; globals?: KeyValue[] },
 ): Promise<CollectionRunResult> {
-  const needsSequential = requests.some((item) => item.request.preRequestScript?.trim());
+  const needsSequential = requests.some((item) => item.request.preRequestScript?.trim())
+    || Boolean(extras?.collection?.preRequestScript?.trim())
+    || Boolean(extras?.collection?.folderConfigs?.some((item) => item.preRequestScript?.trim()));
   if (needsSequential) {
-    return runCollection(collectionId, collectionName, requests, environment, onStep);
+    return runCollection(collectionId, collectionName, requests, environment, onStep, extras);
   }
-  return runCollectionParallel(collectionId, collectionName, requests, environment, onStep);
+  return runCollectionParallel(collectionId, collectionName, requests, environment, onStep, extras);
 }
 
 export async function runCollectionParallel(
@@ -166,6 +185,7 @@ export async function runCollectionParallel(
   requests: SavedRequest[],
   environment: Environment | null,
   onStep?: (step: CollectionRunStep, index: number, total: number) => void,
+  extras?: { collection?: CollectionGroup | null; globals?: KeyValue[] },
 ): Promise<CollectionRunResult> {
   const result: CollectionRunResult = {
     collectionId,
@@ -177,11 +197,20 @@ export async function runCollectionParallel(
   };
 
   const batch = await sendRequestsBatch(
-    requests.map((saved) => ({
-      request: saved.request,
-      environment,
-      requestId: createId("collection"),
-    })),
+    requests.map((saved) => {
+      const prepared = resolveRequestForSend({
+        request: saved.request,
+        collection: extras?.collection,
+        folder: saved.folder,
+        globals: extras?.globals,
+        environment,
+      });
+      return {
+        request: prepared.request,
+        environment: prepared.environment,
+        requestId: createId("collection"),
+      };
+    }),
   );
 
   const steps = await evaluateStepsParallel(requests, environment, batch);

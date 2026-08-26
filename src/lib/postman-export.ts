@@ -1,5 +1,5 @@
 import { groupRequestsByFolder } from "./collections";
-import type { ApiRequest, AuthConfig, CollectionGroup, KeyValue, SavedRequest } from "@/types";
+import type { ApiRequest, AuthConfig, CollectionGroup, FolderConfig, KeyValue, SavedRequest } from "@/types";
 
 type PostmanKeyValue = {
   key: string;
@@ -7,20 +7,24 @@ type PostmanKeyValue = {
   disabled?: boolean;
 };
 
+type PostmanEvent = {
+  listen: string;
+  script: { type: string; exec: string[] };
+};
+
 type PostmanItem = {
   name: string;
   item?: PostmanItem[];
   request?: PostmanRequest;
-  event?: Array<{
-    listen: string;
-    script: { type: string; exec: string[] };
-  }>;
+  auth?: Record<string, unknown>;
+  variable?: PostmanKeyValue[];
+  event?: PostmanEvent[];
 };
 
 type PostmanRequest = {
   method: string;
   header: PostmanKeyValue[];
-  url: string | { raw: string; query?: PostmanKeyValue[] };
+  url: string | { raw: string; query?: PostmanKeyValue[]; variable?: PostmanKeyValue[] };
   body?: Record<string, unknown>;
   auth?: Record<string, unknown>;
 };
@@ -32,10 +36,13 @@ type PostmanCollection = {
     schema: string;
   };
   item: PostmanItem[];
+  auth?: Record<string, unknown>;
+  variable?: PostmanKeyValue[];
+  event?: PostmanEvent[];
 };
 
-function toPostmanKeyValues(items: KeyValue[]): PostmanKeyValue[] {
-  return items
+function toPostmanKeyValues(items: KeyValue[] | undefined): PostmanKeyValue[] {
+  return (items ?? [])
     .filter((item) => item.key.trim() || item.value.trim())
     .map((item) => ({
       key: item.key,
@@ -44,8 +51,12 @@ function toPostmanKeyValues(items: KeyValue[]): PostmanKeyValue[] {
     }));
 }
 
-function toPostmanAuth(auth: AuthConfig): PostmanRequest["auth"] | undefined {
-  if (auth.authType === "none") return undefined;
+function toPostmanAuth(auth?: AuthConfig): PostmanRequest["auth"] | undefined {
+  if (!auth || auth.authType === "none") return undefined;
+
+  if (auth.authType === "inherit") {
+    return { type: "inherit" };
+  }
 
   if (auth.authType === "bearer") {
     return {
@@ -64,13 +75,50 @@ function toPostmanAuth(auth: AuthConfig): PostmanRequest["auth"] | undefined {
     };
   }
 
+  if (auth.authType === "apiKey") {
+    return {
+      type: "apikey",
+      apikey: [
+        { key: "key", value: auth.apiKeyKey, type: "string" },
+        { key: "value", value: auth.apiKeyValue, type: "string" },
+        { key: "in", value: auth.apiKeyIn, type: "string" },
+      ],
+    };
+  }
+
+  return undefined;
+}
+
+function toPostmanEvents(preRequestScript?: string, tests?: string): PostmanEvent[] | undefined {
+  const event: PostmanEvent[] = [];
+  if (preRequestScript?.trim()) {
+    event.push({
+      listen: "prerequest",
+      script: { type: "text/javascript", exec: preRequestScript.split("\n") },
+    });
+  }
+  if (tests?.trim()) {
+    event.push({
+      listen: "test",
+      script: { type: "text/javascript", exec: tests.split("\n") },
+    });
+  }
+  return event.length ? event : undefined;
+}
+
+function applyParentMeta(
+  item: PostmanItem,
+  config?: Pick<FolderConfig, "auth" | "variables" | "preRequestScript" | "tests">,
+): PostmanItem {
+  if (!config) return item;
+  const auth = toPostmanAuth(config.auth);
+  const variable = toPostmanKeyValues(config.variables);
+  const event = toPostmanEvents(config.preRequestScript, config.tests);
   return {
-    type: "apikey",
-    apikey: [
-      { key: "key", value: auth.apiKeyKey, type: "string" },
-      { key: "value", value: auth.apiKeyValue, type: "string" },
-      { key: "in", value: auth.apiKeyIn, type: "string" },
-    ],
+    ...item,
+    ...(auth ? { auth } : {}),
+    ...(variable.length ? { variable } : {}),
+    ...(event ? { event } : {}),
   };
 }
 
@@ -117,18 +165,21 @@ function toPostmanBody(request: ApiRequest): PostmanRequest["body"] | undefined 
 function toPostmanRequest(saved: SavedRequest): PostmanItem {
   const request = saved.request;
   const query = toPostmanKeyValues(request.query);
+  const pathParams = toPostmanKeyValues(request.pathParams);
   const body = toPostmanBody(request);
   const auth = toPostmanAuth(request.auth);
+  const url =
+    query.length > 0 || pathParams.length > 0
+      ? {
+          raw: request.url,
+          ...(query.length ? { query } : {}),
+          ...(pathParams.length ? { variable: pathParams } : {}),
+        }
+      : request.url;
   const postmanRequest: PostmanRequest = {
     method: request.bodyKind === "graphql" ? "POST" : request.method,
     header: toPostmanKeyValues(request.headers),
-    url:
-      query.length > 0
-        ? {
-            raw: request.url,
-            query,
-          }
-        : request.url,
+    url,
     ...(body ? { body } : {}),
     ...(auth ? { auth } : {}),
   };
@@ -138,38 +189,36 @@ function toPostmanRequest(saved: SavedRequest): PostmanItem {
     request: postmanRequest,
   };
 
-  if (request.tests.trim()) {
-    item.event = [
-      {
-        listen: "test",
-        script: {
-          type: "text/javascript",
-          exec: request.tests.split("\n"),
-        },
-      },
-    ];
-  }
+  const event = toPostmanEvents(request.preRequestScript, request.tests);
+  if (event) item.event = event;
 
   return item;
 }
 
-function folderToPostmanItem(folder: ReturnType<typeof groupRequestsByFolder>["folders"][number]): PostmanItem {
+function folderToPostmanItem(
+  folder: ReturnType<typeof groupRequestsByFolder>["folders"][number],
+  folderConfigs: FolderConfig[],
+): PostmanItem {
   const children: PostmanItem[] = [
     ...folder.requests.map(toPostmanRequest),
-    ...folder.children.map(folderToPostmanItem),
+    ...folder.children.map((child) => folderToPostmanItem(child, folderConfigs)),
   ];
 
-  return {
-    name: folder.name,
-    item: children,
-  };
+  return applyParentMeta(
+    {
+      name: folder.name,
+      item: children,
+    },
+    folderConfigs.find((item) => item.path === folder.path),
+  );
 }
 
 export function exportPostmanCollection(group: CollectionGroup, requests: SavedRequest[]): string {
   const grouped = groupRequestsByFolder(requests, group.folders);
+  const folderConfigs = group.folderConfigs ?? [];
   const items: PostmanItem[] = [
     ...grouped.root.map(toPostmanRequest),
-    ...grouped.folders.map(folderToPostmanItem),
+    ...grouped.folders.map((folder) => folderToPostmanItem(folder, folderConfigs)),
   ];
 
   const collection: PostmanCollection = {
@@ -180,6 +229,13 @@ export function exportPostmanCollection(group: CollectionGroup, requests: SavedR
     },
     item: items,
   };
+
+  const auth = toPostmanAuth(group.auth);
+  const variable = toPostmanKeyValues(group.variables);
+  const event = toPostmanEvents(group.preRequestScript, group.tests);
+  if (auth) collection.auth = auth;
+  if (variable.length) collection.variable = variable;
+  if (event) collection.event = event;
 
   return JSON.stringify(collection, null, 2);
 }

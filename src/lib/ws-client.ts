@@ -57,7 +57,7 @@ function buildWsPayload(request: ApiRequest, environment: Environment | null) {
         mimeType: item.mimeType ?? null,
       })),
     auth: {
-      authType: prepared.auth.authType,
+      authType: prepared.auth.authType === "inherit" ? "none" : prepared.auth.authType,
       bearerToken: prepared.auth.bearerToken,
       basicUsername: prepared.auth.basicUsername,
       basicPassword: prepared.auth.basicPassword,

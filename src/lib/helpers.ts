@@ -11,18 +11,21 @@ import type {
 import { defaultGraphqlQuery, defaultGraphqlVariables } from "./graphql";
 import { defaultRequestTests } from "./default-tests";
 import { inferProtocolFromUrl } from "./protocol";
+import { syncPathParams } from "./path-params";
 
 export function createId(prefix = "id"): string {
   return `${prefix}_${crypto.randomUUID()}`;
 }
 
 export function createKeyValue(partial?: Partial<KeyValue>): KeyValue {
+  const value = partial?.value ?? "";
   return {
     id: createId("kv"),
     key: "",
-    value: "",
     enabled: true,
     ...partial,
+    value,
+    initialValue: partial?.initialValue ?? value,
   };
 }
 
@@ -50,12 +53,17 @@ export function defaultAuth(): AuthConfig {
 
 function normalizeKeyValues(items: KeyValue[] | undefined, fallback: KeyValue[]): KeyValue[] {
   if (!items?.length) return fallback;
-  return items.map((item) => ({
-    id: item.id ?? createId("kv"),
-    key: item.key ?? "",
-    value: item.value ?? "",
-    enabled: item.enabled ?? true,
-  }));
+  return items.map((item) => {
+    const value = item.value ?? "";
+    return {
+      id: item.id ?? createId("kv"),
+      key: item.key ?? "",
+      value,
+      enabled: item.enabled ?? true,
+      secret: item.secret,
+      initialValue: item.initialValue ?? value,
+    };
+  });
 }
 
 function normalizeAuth(partial?: Partial<AuthConfig>): AuthConfig {
@@ -89,16 +97,17 @@ export function normalizeRequest(partial?: Partial<ApiRequest>): ApiRequest {
 
 export function createRequest(partial?: Partial<ApiRequest>): ApiRequest {
   const defaultHeaders = [createKeyValue({ key: "Accept", value: "application/json" })];
+  const url = partial?.url ?? "https://httpbin.org/get";
 
   return {
     id: partial?.id ?? createId("req"),
     name: partial?.name ?? "Untitled Request",
-    protocol:
-      partial?.protocol ?? inferProtocolFromUrl(partial?.url ?? "https://httpbin.org/get"),
+    protocol: partial?.protocol ?? inferProtocolFromUrl(url),
     method: partial?.method ?? "GET",
-    url: partial?.url ?? "https://httpbin.org/get",
+    url,
     headers: normalizeKeyValues(partial?.headers, defaultHeaders),
     query: normalizeKeyValues(partial?.query, [createKeyValue()]),
+    pathParams: syncPathParams(url, normalizeKeyValues(partial?.pathParams, [])),
     bodyKind: partial?.bodyKind ?? "none",
     body: partial?.body ?? '{\n  \n}',
     graphqlQuery: partial?.graphqlQuery ?? defaultGraphqlQuery(),
@@ -123,7 +132,7 @@ export function createRequest(partial?: Partial<ApiRequest>): ApiRequest {
           fieldType: "text",
         },
       ],
-    auth: normalizeAuth(partial?.auth),
+    auth: normalizeAuth(partial?.auth ?? { authType: "inherit" }),
     tests: partial?.tests ?? defaultRequestTests,
     preRequestScript: partial?.preRequestScript ?? "",
   };

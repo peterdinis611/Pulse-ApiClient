@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   getActiveVariableQuery,
   insertVariableAtCursor,
+  maskSecretValue,
+  mergeVariableLayers,
   substituteVariables,
   unresolvedVariables,
   variableTemplate,
@@ -55,5 +57,19 @@ describe("env", () => {
       value: "https://{{baseUrl}}",
       cursor: 19,
     });
+  });
+
+  it("merges layers with later keys winning", () => {
+    const merged = mergeVariableLayers([
+      [createKeyValue({ key: "token", value: "global" })],
+      [createKeyValue({ key: "token", value: "env" }), createKeyValue({ key: "page", value: "1" })],
+    ]);
+    expect(merged.variables.find((item) => item.key === "token")?.value).toBe("env");
+    expect(merged.variables.find((item) => item.key === "page")?.value).toBe("1");
+  });
+
+  it("masks secret values", () => {
+    expect(maskSecretValue("super-secret", true)).toBe("••••••••••••");
+    expect(maskSecretValue("super-secret", false)).toBe("super-secret");
   });
 });

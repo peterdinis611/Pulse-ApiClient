@@ -14,7 +14,10 @@ import {
 import { useApp } from "@/machines";
 import { validateGraphqlRequest } from "@/lib/graphql";
 import { isWebSocketProtocol } from "@/lib/protocol";
-import { containsVariables, substituteVariables } from "@/lib/env";
+import { containsVariables } from "@/lib/env";
+import { prepareRequest } from "@/lib/http-client";
+import { CODE_SNIPPETS, requestToSnippet, type CodeSnippetId } from "@/lib/code-snippets";
+import { resolveRequestForSend } from "@/lib/resolve-request";
 import { methodTextClass } from "@/lib/method-colors";
 import { VariableField } from "@/components/VariableField";
 import { cn } from "@/lib/utils";
@@ -30,12 +33,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FolderSelect } from "@/components/FolderSelect";
-import { requestToCurl, curlToRequest } from "@/lib/curl";
+import { curlToRequest } from "@/lib/curl";
 import { toast } from "@/lib/toast";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
@@ -55,6 +61,10 @@ export function RequestBar() {
     collectionGroups,
     setActiveCollectionId,
     activeEnvironment,
+    variableEnvironment,
+    globals,
+    tabCollectionId,
+    tabFolder,
   } = useApp();
 
   const [saveFolder, setSaveFolder] = useState<string | undefined>();
@@ -77,9 +87,24 @@ export function RequestBar() {
   }, [request.url, ws.status]);
 
   const resolvedUrl = useMemo(
-    () => substituteVariables(request.url, activeEnvironment),
-    [activeEnvironment, request.url],
+    () => prepareRequest(request, variableEnvironment).url,
+    [request, variableEnvironment],
   );
+
+  const copySnippet = async (id: CodeSnippetId) => {
+    const collection =
+      collectionGroups.find((group) => group.id === tabCollectionId) ?? null;
+    const prepared = resolveRequestForSend({
+      request,
+      collection,
+      folder: tabFolder,
+      globals,
+      environment: activeEnvironment,
+    });
+    const snippet = requestToSnippet(id, prepared.request, prepared.environment);
+    await navigator.clipboard.writeText(snippet);
+    toast.success("Copied snippet", CODE_SNIPPETS.find((item) => item.id === id)?.label);
+  };
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -134,7 +159,7 @@ export function RequestBar() {
           )}
           <VariableField
             embedded
-            environment={activeEnvironment}
+            environment={variableEnvironment}
             className="min-w-0 flex-1"
             inputClassName="h-9 rounded-none border-0 bg-transparent font-mono text-[13px] shadow-none focus-visible:ring-0"
             focusTarget="url"
@@ -263,16 +288,19 @@ export function RequestBar() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onClick={async () => {
-                const command = requestToCurl(request, activeEnvironment);
-                await navigator.clipboard.writeText(command);
-                toast.success("cURL copied to clipboard");
-              }}
-            >
-              <ClipboardCopy className="size-4" />
-              Copy as cURL
-            </DropdownMenuItem>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <ClipboardCopy className="size-4" />
+                Copy as
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                {CODE_SNIPPETS.map((item) => (
+                  <DropdownMenuItem key={item.id} onClick={() => void copySnippet(item.id)}>
+                    {item.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
             <DropdownMenuItem onClick={() => curlImportRef.current?.click()}>
               <Braces className="size-4" />
               Import from cURL
@@ -313,7 +341,8 @@ export function RequestBar() {
         </div>
       )}
 
-      {containsVariables(request.url) && (
+      {(containsVariables(request.url) ||
+        request.pathParams.some((item) => item.enabled && item.value.trim())) && (
         <p className="truncate border-t border-topbar-border/50 px-3 py-0.5 font-mono text-[11px] text-topbar-muted">
           <span className="text-topbar-foreground/60">Resolved · </span>
           {resolvedUrl}

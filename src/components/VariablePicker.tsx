@@ -1,6 +1,6 @@
 import { Braces } from "lucide-react";
 import type { Environment } from "@/types";
-import { getEnabledVariables, variableTemplate } from "@/lib/env";
+import { getEnabledVariables, maskSecretValue, variableTemplate } from "@/lib/env";
 import { TooltipWrap } from "@/components/TooltipIconButton";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,7 +37,7 @@ export function VariablePicker({
             variant="ghost"
             size="icon"
             className={cn("size-7 shrink-0 text-muted-foreground", className)}
-            aria-label="Insert environment variable"
+            aria-label="Insert variable"
             disabled={disabled || variables.length === 0}
           >
             <Braces className="size-3.5" />
@@ -46,7 +46,7 @@ export function VariablePicker({
       </TooltipWrap>
       <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-          Environment variables
+          Variables
         </DropdownMenuLabel>
         {variables.length === 0 ? (
           <DropdownMenuItem disabled>No enabled variables</DropdownMenuItem>
@@ -58,7 +58,9 @@ export function VariablePicker({
               onClick={() => onSelect(variable.key)}
             >
               <span className="text-primary">{variableTemplate(variable.key)}</span>
-              <span className="ml-auto truncate text-muted-foreground">{variable.value}</span>
+              <span className="ml-auto truncate text-muted-foreground">
+                {maskSecretValue(variable.value, variable.secret)}
+              </span>
             </DropdownMenuItem>
           ))
         )}
