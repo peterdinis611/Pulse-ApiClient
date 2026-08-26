@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   bodyKindForMethod,
+  createKeyValue,
   createRequest,
+  ensureTrailingBlankKeyValue,
   formatBytes,
+  isKeyValueBlank,
   prettyJson,
 } from "@/lib/helpers";
 
@@ -36,5 +39,14 @@ describe("helpers", () => {
     expect(request.tests).toContain("pulse.test");
     expect(request.tests).toContain("pulse.response");
     expect(request.method).toBe("GET");
+  });
+
+  it("keeps a trailing blank key-value row", () => {
+    expect(isKeyValueBlank(createKeyValue())).toBe(true);
+    const filled = [createKeyValue({ key: "Accept", value: "application/json" })];
+    const next = ensureTrailingBlankKeyValue(filled);
+    expect(next).toHaveLength(2);
+    expect(isKeyValueBlank(next[1]!)).toBe(true);
+    expect(ensureTrailingBlankKeyValue(next)).toBe(next);
   });
 });

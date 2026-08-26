@@ -35,6 +35,7 @@ type VariableFieldBaseProps = {
   placeholder?: string;
   disabled?: boolean;
   type?: ComponentPropsWithoutRef<"input">["type"];
+  focusTarget?: "url";
 };
 
 type VariableFieldProps = VariableFieldBaseProps & {
@@ -54,6 +55,7 @@ export function VariableField({
   placeholder,
   disabled,
   type,
+  focusTarget,
 }: VariableFieldProps) {
   const listId = useId();
   const fieldRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
@@ -142,9 +144,18 @@ export function VariableField({
     <div className={cn(!embedded && "space-y-1", className)}>
       <div className="relative min-w-0">
         {multiline ? (
-          <Textarea ref={fieldRef as never} {...sharedProps} />
+          <Textarea
+            ref={fieldRef as never}
+            data-pulse-focus={focusTarget}
+            {...sharedProps}
+          />
         ) : (
-          <Input ref={fieldRef as never} type={type} {...sharedProps} />
+          <Input
+            ref={fieldRef as never}
+            type={type}
+            data-pulse-focus={focusTarget}
+            {...sharedProps}
+          />
         )}
         <div
           className={cn(

@@ -8,6 +8,7 @@ import { ResizableExplorer } from "./ResizableExplorer";
 import { StatusBar } from "./StatusBar";
 import { ViewHeader } from "./ViewHeader";
 import { APP_NAME } from "@/lib/app-config";
+import { focusPulseFieldWhenReady, matchWorkspaceHotkey } from "@/lib/hotkeys";
 import {
   createAppWindow,
   getCurrentWindowLabel,
@@ -35,35 +36,79 @@ const SettingsView = lazy(() =>
 );
 
 export function ClientShell() {
-  const { mainView, consoleOpen, tabs, activeTabId, toggleExplorerCollapsed } = useApp();
+  const {
+    mainView,
+    consoleOpen,
+    tabs,
+    activeTabId,
+    toggleExplorerCollapsed,
+    explorerCollapsed,
+    newRequestTab,
+    closeTab,
+    setMainView,
+  } = useApp();
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey) {
-        if (event.key.toLowerCase() === "b" && !event.shiftKey) {
-          event.preventDefault();
-          toggleExplorerCollapsed();
+      const action = matchWorkspaceHotkey(event);
+      if (!action) return;
+
+      event.preventDefault();
+
+      if (action === "toggle-explorer") {
+        toggleExplorerCollapsed();
+        return;
+      }
+
+      if (action === "new-window") {
+        void createAppWindow();
+        return;
+      }
+
+      if (action === "overview-window") {
+        void openOverviewWindow();
+        return;
+      }
+
+      if (action === "new-tab") {
+        newRequestTab();
+        focusPulseFieldWhenReady("url");
+        return;
+      }
+
+      if (action === "close-tab") {
+        if (activeTabId) closeTab(activeTabId);
+        return;
+      }
+
+      if (action === "focus-url") {
+        if (mainView !== "request") setMainView("request");
+        focusPulseFieldWhenReady("url");
+        return;
+      }
+
+      if (action === "focus-search") {
+        if (mainView === "overview") {
+          focusPulseFieldWhenReady("overview-search");
           return;
         }
-
-        if (event.shiftKey) {
-          if (event.key.toLowerCase() === "n") {
-            event.preventDefault();
-            void createAppWindow();
-            return;
-          }
-
-          if (event.key.toLowerCase() === "o") {
-            event.preventDefault();
-            void openOverviewWindow();
-          }
-        }
+        if (mainView !== "request") setMainView("request");
+        if (explorerCollapsed) toggleExplorerCollapsed();
+        focusPulseFieldWhenReady("explorer-search");
       }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [toggleExplorerCollapsed]);
+  }, [
+    activeTabId,
+    closeTab,
+    explorerCollapsed,
+    mainView,
+    newRequestTab,
+    setMainView,
+    toggleExplorerCollapsed,
+  ]);
 
   useEffect(() => {
     void (async () => {

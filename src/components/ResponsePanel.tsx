@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Copy, Download } from "lucide-react";
+import { Copy, Download, Send } from "lucide-react";
 import { useApp } from "@/machines";
 import { downloadBytes } from "@/lib/download";
 import { formatBytes } from "@/lib/helpers";
@@ -193,8 +193,8 @@ export function ResponsePanel() {
         <div className="p-4">
           {loading && (
             <div className="flex min-h-[180px] flex-col items-center justify-center gap-3 text-body text-muted-foreground">
-              <div className="h-1 w-40 overflow-hidden rounded-full bg-muted">
-                <div className="h-full w-1/3 animate-pulse bg-primary" />
+              <div className="h-1 w-44 overflow-hidden rounded-full bg-muted">
+                <div className="response-loading-bar h-full w-1/3 rounded-full bg-primary" />
               </div>
               Sending request…
             </div>
@@ -209,8 +209,9 @@ export function ResponsePanel() {
 
           {!loading && !error && !response && (
             <EmptyState
-              title="No response yet"
-              description="Hit Send or press ⌘ Enter to execute the request."
+              icon={Send}
+              title="Waiting for a response"
+              description="Send with the button or press ⌘Enter. The body, headers, and tests will land here."
             />
           )}
 

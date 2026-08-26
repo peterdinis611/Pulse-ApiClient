@@ -189,3 +189,16 @@ export function bodyKindForMethod(method: HttpMethod, current: BodyKind): BodyKi
   }
   return current;
 }
+
+export function isKeyValueBlank(row: KeyValue): boolean {
+  return !row.key.trim() && !row.value.trim();
+}
+
+/** Keep a blank trailing row so params/headers can be typed without clicking Add. */
+export function ensureTrailingBlankKeyValue(rows: KeyValue[]): KeyValue[] {
+  const last = rows[rows.length - 1];
+  if (!last || !isKeyValueBlank(last)) {
+    return [...rows, createKeyValue()];
+  }
+  return rows;
+}

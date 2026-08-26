@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Download, Plus, Trash2, Upload } from "lucide-react";
 import { useApp } from "@/machines";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Panel, PanelBody, PanelHeader } from "@/components/ui/panel";
 import { Separator } from "@/components/ui/separator";
+import { isKeyValueBlank } from "@/lib/helpers";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +37,15 @@ export function EnvironmentsView() {
 
   const selectedEnv =
     environments.find((env) => env.id === selectedId) ?? environments[0] ?? null;
+  const lastVariable = selectedEnv?.variables[selectedEnv.variables.length - 1];
+  const needsTrailingVariable = Boolean(
+    selectedEnv && (!lastVariable || !isKeyValueBlank(lastVariable)),
+  );
+
+  useEffect(() => {
+    if (!selectedEnv || !needsTrailingVariable) return;
+    addEnvironmentVariable(selectedEnv.id);
+  }, [needsTrailingVariable, selectedEnv?.id]);
 
   return (
     <PageShell resetKey="environments">
@@ -156,7 +166,7 @@ export function EnvironmentsView() {
             {selectedEnv.variables.map((variable) => (
               <div
                 key={variable.id}
-                className="grid grid-cols-[32px_1fr_1fr_32px] items-center gap-2"
+                className="grid grid-cols-[32px_1fr_1fr_32px] items-center gap-2 rounded-md px-1 py-0.5 hover:bg-muted/40"
               >
                 <Checkbox
                   checked={variable.enabled}

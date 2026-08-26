@@ -917,10 +917,33 @@ export function SettingsView() {
             <div>
               <p className="font-medium">Start with explorer hidden</p>
               <p className="text-xs text-muted-foreground">
-                Show icon rail only in request view. Toggle with ⌘B or the panel button in the rail.
+                Show icon rail only in request view. Toggle with ⌘B or the panel button.
               </p>
             </div>
           </label>
+          <div className="rounded-md border border-border/70 bg-muted/20 p-3">
+            <p className="text-sm font-medium">Keyboard</p>
+            <ul className="mt-2 grid gap-1.5 text-xs text-muted-foreground sm:grid-cols-2">
+              <li className="flex items-center justify-between gap-3">
+                Send request <kbd className="ui-kbd">⌘↵</kbd>
+              </li>
+              <li className="flex items-center justify-between gap-3">
+                New tab <kbd className="ui-kbd">⌘T</kbd>
+              </li>
+              <li className="flex items-center justify-between gap-3">
+                Close tab <kbd className="ui-kbd">⌘W</kbd>
+              </li>
+              <li className="flex items-center justify-between gap-3">
+                Focus URL <kbd className="ui-kbd">⌘L</kbd>
+              </li>
+              <li className="flex items-center justify-between gap-3">
+                Search <kbd className="ui-kbd">⌘F</kbd>
+              </li>
+              <li className="flex items-center justify-between gap-3">
+                Toggle explorer <kbd className="ui-kbd">⌘B</kbd>
+              </li>
+            </ul>
+          </div>
         </SettingsSection>
 
         <SettingsSection

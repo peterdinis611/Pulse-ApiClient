@@ -28,7 +28,7 @@ See the full guide in [docs/FEATURES.md](./docs/FEATURES.md) (also available in-
 - Custom themes + optional custom CSS overlay
 - WebSocket client, collection runner, fuzzy search
 - In-app **Docs** covering every feature
-- Keyboard shortcut: **Cmd/Ctrl + Enter** to send
+- Keyboard shortcuts: **Cmd/Ctrl + Enter** send, **T** new tab, **W** close tab, **L** focus URL, **F** search, **B** explorer
 
 ## Screenshots
 

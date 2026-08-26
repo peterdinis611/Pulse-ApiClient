@@ -137,6 +137,7 @@ export function RequestBar() {
             environment={activeEnvironment}
             className="min-w-0 flex-1"
             inputClassName="h-9 rounded-none border-0 bg-transparent font-mono text-[13px] shadow-none focus-visible:ring-0"
+            focusTarget="url"
             value={request.url}
             onChange={(url) => updateRequest({ url })}
             placeholder={
@@ -180,12 +181,22 @@ export function RequestBar() {
           <div className="flex shrink-0 items-center gap-1.5">
             <Button
               type="button"
-              className="h-9 shrink-0 rounded-xl px-5 shadow-md shadow-primary/20"
+              className="h-9 shrink-0 rounded-xl px-4 shadow-md shadow-primary/20"
               disabled={loading || !canSend}
+              title={
+                loading
+                  ? "Sending…"
+                  : !request.url.trim()
+                    ? "Enter a URL to send"
+                    : !canSend
+                      ? "GraphQL query is required"
+                      : "Send request (⌘Enter)"
+              }
               onClick={() => void sendCurrentRequest()}
             >
               {loading ? <LoaderCircle className="animate-spin" /> : <Send />}
               {loading ? "Sending…" : "Send"}
+              {!loading && <kbd className="request-send-kbd hidden sm:inline">⌘↵</kbd>}
             </Button>
             {loading && (
               <Button
@@ -206,7 +217,12 @@ export function RequestBar() {
           className="h-7 min-w-0 flex-1 border-transparent bg-transparent px-2 text-[13px] shadow-none focus-visible:ring-0"
           value={request.name}
           onChange={(event) => updateRequest({ name: event.target.value })}
-          placeholder="Request name"
+          placeholder="Name this request"
+          onFocus={(event) => {
+            if (event.currentTarget.value === "Untitled Request") {
+              event.currentTarget.select();
+            }
+          }}
         />
         <Select
           value={activeCollectionId ?? undefined}

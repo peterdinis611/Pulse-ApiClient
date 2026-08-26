@@ -393,6 +393,7 @@ export function ExplorerPanel() {
               className="h-8 border-sidebar-border/80 bg-background/70 pl-8 pr-8 text-[13px] shadow-none focus-visible:bg-background"
               placeholder="Search by name, path, method…"
               aria-busy={isSearchBusy}
+              data-pulse-focus="explorer-search"
             />
             {sidebarSearch && (
               <button
@@ -626,7 +627,7 @@ export function ExplorerPanel() {
                               </CollectionDropRoot>
                               {items.length === 0 && grouped.folders.length === 0 && (
                                 <p className="px-2 py-1.5 text-[11px] text-muted-foreground">
-                                  No requests
+                                  Empty — save a request here
                                 </p>
                               )}
                             </CollapsibleContent>
@@ -634,9 +635,16 @@ export function ExplorerPanel() {
                         );
                       })}
                       {collectionGroups.length === 0 && (
-                        <p className="px-2 py-1.5 text-[11px] text-muted-foreground">
-                          No collections yet
-                        </p>
+                        <div className="px-2 py-2">
+                          <p className="text-[11px] text-muted-foreground">No collections yet</p>
+                          <button
+                            type="button"
+                            className="mt-1 text-[12px] font-medium text-primary underline-offset-4 hover:underline"
+                            onClick={newRequestTab}
+                          >
+                            New request
+                          </button>
+                        </div>
                       )}
                     </CollapsibleContent>
                   </Collapsible>

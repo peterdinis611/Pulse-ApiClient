@@ -134,6 +134,10 @@ Find requests quickly and stay on the keyboard.
 
 - Fuzzy search in the explorer and Overview
 - Cmd/Ctrl + Enter — Send
+- Cmd/Ctrl + T — new request tab
+- Cmd/Ctrl + W — close tab
+- Cmd/Ctrl + L — focus URL
+- Cmd/Ctrl + F — search explorer or Overview
 - Cmd/Ctrl + B — toggle explorer
 - Cmd/Ctrl + Shift + N — new window
 - Cmd/Ctrl + Shift + O — overview window
