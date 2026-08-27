@@ -189,10 +189,8 @@ export async function runCollection(
         [step] = await evaluateStepsParallel([saved], activeEnvironment, [{ response }]);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        [step] = await evaluateStepsParallel([saved], activeEnvironment, [{ error: message }]);
-        result.failed += 1;
-        result.totalTests += 1;
-      }
+      [step] = await evaluateStepsParallel([saved], activeEnvironment, [{ error: message }]);
+    }
 
       if (rows.length > 1) {
         step = { ...step, iteration: iteration + 1 };
@@ -259,11 +257,11 @@ export async function runCollectionParallel(
 
   for (let index = 0; index < steps.length; index += 1) {
     const step = steps[index]!;
-    if (step.error) {
+    tallyTests(result, step);
+    if (step.error && !step.testResults) {
       result.failed += 1;
       result.totalTests += 1;
     }
-    tallyTests(result, step);
     result.steps.push(step);
     onStep?.(step, index, requests.length);
   }

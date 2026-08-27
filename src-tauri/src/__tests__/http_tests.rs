@@ -196,7 +196,10 @@ fn response_payload_deserializes_without_timing_fields() {
         "body": "{}",
         "elapsedMs": 42,
         "sizeBytes": 2,
-        "fromCache": false
+        "fromCache": false,
+        "contentType": null,
+        "cacheAgeMs": null,
+        "requestId": null
     }))
     .expect("legacy payload should deserialize");
     assert_eq!(parsed.elapsed_ms, 42);

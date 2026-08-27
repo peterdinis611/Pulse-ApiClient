@@ -82,6 +82,16 @@ describe("feature-docs", () => {
         item.toLowerCase().includes("timing waterfall"),
       ),
     ).toBe(true);
+    expect(
+      FEATURE_DOC_SECTIONS.find((section) => section.id === "requests")?.items.some((item) =>
+        item.toLowerCase().includes("save example"),
+      ),
+    ).toBe(true);
+    expect(
+      FEATURE_DOC_SECTIONS.find((section) => section.id === "collections")?.items.some((item) =>
+        item.toLowerCase().includes("run folder"),
+      ),
+    ).toBe(true);
   });
 
   it("renders markdown for the docs folder", () => {

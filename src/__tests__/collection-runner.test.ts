@@ -27,7 +27,7 @@ function ok(url: string): HttpResponse {
   };
 }
 
-describe("collection-runner", () => {
+describe.sequential("collection-runner", () => {
   beforeEach(() => {
     sendRequest.mockReset();
     sendRequestsBatch.mockReset();
@@ -36,8 +36,8 @@ describe("collection-runner", () => {
       return ok(prepared.url);
     });
     sendRequestsBatch.mockImplementation(async (items) =>
-      items.map(({ request, environment }: { request: ReturnType<typeof createRequest>; environment: unknown }) => ({
-        response: ok(prepareRequest(request, environment as never).url),
+      items.map(({ request, environment }) => ({
+        response: ok(prepareRequest(request, environment).url),
       })),
     );
   });
