@@ -33,4 +33,36 @@ describe("timing", () => {
     expect(phases.find((phase) => phase.id === "transfer")?.offsetMs).toBe(180);
     expect(phases.find((phase) => phase.id === "total")?.ms).toBe(800);
   });
+
+  it("skips DNS when lookup was cached or unused", () => {
+    const phases = timingPhases({ ...base, dnsMs: 0, ttfbMs: 180, totalMs: 200, downloadMs: 20 });
+    expect(phases.map((phase) => phase.id)).toEqual(["tls", "ttfb", "transfer", "total"]);
+    expect(phases.find((phase) => phase.id === "tls")?.ms).toBe(180);
+  });
+
+  it("derives TLS and transfer from TTFB when split fields are missing", () => {
+    const phases = timingPhases({ ...base, ttfbMs: 200, totalMs: 800 });
+    expect(phases.find((phase) => phase.id === "tls")?.ms).toBe(200);
+    expect(phases.find((phase) => phase.id === "transfer")?.ms).toBe(600);
+    expect(phases.find((phase) => phase.id === "ttfb")?.ms).toBe(200);
+  });
+
+  it("keeps TLS/transfer rows when the engine reports zero", () => {
+    const phases = timingPhases({
+      ...base,
+      dnsMs: 5,
+      tlsMs: 0,
+      ttfbMs: 5,
+      downloadMs: 0,
+      totalMs: 5,
+    });
+    expect(phases.find((phase) => phase.id === "tls")?.ms).toBe(0);
+    expect(phases.find((phase) => phase.id === "transfer")?.ms).toBe(0);
+  });
+
+  it("treats a legacy elapsed-only payload as TTFB + total", () => {
+    const phases = timingPhases(base);
+    expect(phases.map((phase) => phase.id)).toEqual(["tls", "ttfb", "total"]);
+    expect(phases.map((phase) => phase.ms)).toEqual([800, 800, 800]);
+  });
 });

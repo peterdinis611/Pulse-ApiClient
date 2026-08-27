@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addFolderToCollection, createCollectionGroup, groupRequestsByFolder, requestsForFolder } from "@/lib/collections";
+import { addFolderToCollection, countFolderRequests, createCollectionGroup, groupRequestsByFolder, requestsForFolder } from "@/lib/collections";
 import { createRequest, createSavedRequest } from "@/lib/helpers";
 
 describe("collections", () => {
@@ -57,5 +57,51 @@ describe("collections", () => {
     });
     const items = requestsForFolder([nested, sibling, other], collectionId, "Auth");
     expect(items.map((item) => item.name).sort()).toEqual(["Login", "Token"]);
+  });
+
+  it("runs only root requests when the folder path is empty", () => {
+    const collectionId = "col_root";
+    const root = createSavedRequest(createRequest(), { collectionId, name: "Health" });
+    const nested = createSavedRequest(createRequest(), {
+      collectionId,
+      folder: "Auth",
+      name: "Login",
+    });
+    expect(requestsForFolder([root, nested], collectionId, "  ").map((item) => item.name)).toEqual([
+      "Health",
+    ]);
+  });
+
+  it("does not treat AuthTools as inside Auth", () => {
+    const collectionId = "col_1";
+    const auth = createSavedRequest(createRequest(), {
+      collectionId,
+      folder: "Auth",
+      name: "Login",
+    });
+    const similar = createSavedRequest(createRequest(), {
+      collectionId,
+      folder: "AuthTools",
+      name: "Debug",
+    });
+    const otherCol = createSavedRequest(createRequest(), {
+      collectionId: "col_2",
+      folder: "Auth",
+      name: "Foreign",
+    });
+    expect(requestsForFolder([auth, similar, otherCol], collectionId, "Auth").map((item) => item.name)).toEqual([
+      "Login",
+    ]);
+  });
+
+  it("counts nested folder requests for the Play button", () => {
+    const grouped = groupRequestsByFolder(
+      [
+        createSavedRequest(createRequest(), { folder: "Auth", name: "Login" }),
+        createSavedRequest(createRequest(), { folder: "Auth/OAuth", name: "Token" }),
+      ],
+      ["Auth", "Auth/OAuth"],
+    );
+    expect(countFolderRequests(grouped.folders[0]!)).toBe(2);
   });
 });

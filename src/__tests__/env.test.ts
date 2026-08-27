@@ -82,5 +82,19 @@ describe("env", () => {
     expect(next.variables.find((item) => item.key === "token")?.value).toBe("from-json");
     expect(next.variables.find((item) => item.key === "userId")?.value).toBe("42");
     expect(next.id).not.toBe("merged");
+    expect(environment.variables.find((item) => item.key === "token")?.value).toBe("secret");
+  });
+
+  it("skips blank keys, no-ops empty lists, and re-enables existing rows", () => {
+    const same = applyEnvironmentMutations(environment, []);
+    expect(same).toBe(environment);
+
+    const skipped = applyEnvironmentMutations(environment, [{ key: "  ", value: "nope" }]);
+    expect(skipped.variables).toHaveLength(environment.variables.length);
+
+    const disabled = createEnvironment("Local");
+    disabled.variables = [createKeyValue({ key: "token", value: "old", enabled: false })];
+    const enabled = applyEnvironmentMutations(disabled, [{ key: "token", value: "new" }]);
+    expect(enabled.variables[0]).toMatchObject({ key: "token", value: "new", enabled: true });
   });
 });

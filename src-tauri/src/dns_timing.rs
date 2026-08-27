@@ -56,3 +56,32 @@ impl Resolve for TimingResolver {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    impl TimingResolver {
+        fn record(&self, host: &str, ms: u64, at: Instant) {
+            self.hits.lock().unwrap().insert(host.to_string(), DnsHit { ms, at });
+        }
+    }
+
+    #[test]
+    fn lookup_since_ignores_hits_from_before_the_request() {
+        let resolver = TimingResolver::new();
+        let started = Instant::now();
+        resolver.record("api.example.com", 12, started - Duration::from_millis(5));
+        assert_eq!(resolver.lookup_since("api.example.com", started), None);
+    }
+
+    #[test]
+    fn lookup_since_returns_hits_during_the_request() {
+        let resolver = TimingResolver::new();
+        let started = Instant::now();
+        resolver.record("api.example.com", 18, started + Duration::from_millis(1));
+        assert_eq!(resolver.lookup_since("api.example.com", started), Some(18));
+        assert_eq!(resolver.lookup_since("other.example.com", started), None);
+    }
+}

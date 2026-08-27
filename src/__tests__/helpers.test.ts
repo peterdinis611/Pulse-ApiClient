@@ -40,6 +40,27 @@ describe("helpers", () => {
     expect(request.tests).toContain("pulse.response");
     expect(request.method).toBe("GET");
     expect(request.auth.authType).toBe("inherit");
+    expect(request.examples).toEqual([]);
+  });
+
+  it("clones saved examples onto a new request", () => {
+    const example = {
+      id: "ex_1",
+      name: "200 OK",
+      savedAt: "2026-01-01T00:00:00.000Z",
+      response: {
+        status: 200,
+        statusText: "OK",
+        headers: [],
+        body: "{}",
+        elapsedMs: 10,
+        sizeBytes: 2,
+      },
+    };
+    const request = createRequest({ examples: [example] });
+    example.name = "mutated";
+    expect(request.examples).toHaveLength(1);
+    expect(request.examples[0]?.name).toBe("200 OK");
   });
 
   it("syncs path params from the URL", () => {

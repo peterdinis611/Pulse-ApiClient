@@ -186,3 +186,53 @@ fn response_payload_serializes_timing_fields() {
     assert_eq!(json["downloadMs"], 620);
     assert_eq!(json["totalMs"], 800);
 }
+
+#[test]
+fn response_payload_deserializes_without_timing_fields() {
+    let parsed: HttpResponsePayload = serde_json::from_value(serde_json::json!({
+        "status": 200,
+        "statusText": "OK",
+        "headers": [],
+        "body": "{}",
+        "elapsedMs": 42,
+        "sizeBytes": 2,
+        "fromCache": false
+    }))
+    .expect("legacy payload should deserialize");
+    assert_eq!(parsed.elapsed_ms, 42);
+    assert_eq!(parsed.body_encoding, "utf8");
+    assert!(parsed.dns_ms.is_none());
+    assert!(parsed.tls_ms.is_none());
+    assert!(parsed.ttfb_ms.is_none());
+    assert!(parsed.download_ms.is_none());
+    assert!(parsed.total_ms.is_none());
+}
+
+#[test]
+fn response_payload_omits_null_timing_fields() {
+    let payload = HttpResponsePayload {
+        status: 204,
+        status_text: "No Content".to_string(),
+        headers: vec![],
+        body: String::new(),
+        body_encoding: "utf8".to_string(),
+        elapsed_ms: 5,
+        dns_ms: None,
+        tls_ms: None,
+        ttfb_ms: None,
+        download_ms: None,
+        total_ms: None,
+        size_bytes: 0,
+        content_type: None,
+        from_cache: false,
+        cache_age_ms: None,
+        request_id: None,
+    };
+    let json = serde_json::to_value(&payload).expect("serialize");
+    assert!(json.get("dnsMs").is_none());
+    assert!(json.get("tlsMs").is_none());
+    assert!(json.get("ttfbMs").is_none());
+    assert!(json.get("downloadMs").is_none());
+    assert!(json.get("totalMs").is_none());
+    assert_eq!(json["elapsedMs"], 5);
+}

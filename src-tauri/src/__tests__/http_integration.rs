@@ -51,6 +51,11 @@ async fn execute_request_returns_json_body() {
 
     assert_eq!(response.status, 200);
     assert!(response.body.contains("hello"));
+    assert!(response.ttfb_ms.is_some());
+    assert!(response.download_ms.is_some());
+    assert!(response.total_ms.is_some());
+    assert_eq!(response.elapsed_ms, response.total_ms.unwrap());
+    assert!(response.elapsed_ms >= response.ttfb_ms.unwrap());
 }
 
 #[tokio::test]

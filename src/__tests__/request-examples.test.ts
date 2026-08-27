@@ -22,4 +22,23 @@ describe("request-examples", () => {
   it("uses a custom name when provided", () => {
     expect(snapshotResponseExample(response, "Login success").name).toBe("Login success");
   });
+
+  it("trims blank names back to the status fallback", () => {
+    expect(snapshotResponseExample(response, "   ").name).toBe("200 OK");
+  });
+
+  it("clones the response so later edits do not mutate the example", () => {
+    const source = structuredClone(response);
+    const example = snapshotResponseExample(source);
+    source.body = "changed";
+    source.headers[0]!.value = "text/plain";
+    expect(example.response.body).toBe('{"ok":true}');
+    expect(example.response.headers[0]?.value).toBe("application/json");
+    expect(example.id.startsWith("ex_")).toBe(true);
+    expect(Number.isNaN(Date.parse(example.savedAt))).toBe(false);
+  });
+
+  it("uses the status code when status text is blank", () => {
+    expect(snapshotResponseExample({ ...response, statusText: "" }).name).toBe("200");
+  });
 });
