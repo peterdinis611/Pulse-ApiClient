@@ -9,7 +9,9 @@ Organize saved requests and run them as a set.
 
 - Save, duplicate, delete, drag-and-drop requests and folders
 - Nested folders; empty folders can be deleted
-- Run collection — sequential when pre-request scripts exist, otherwise can batch
+- Run collection — sequential when pre-request scripts or a data file exist, otherwise can batch
+- Run folder — Play on a folder sends that folder and its nested requests only
+- Data file — CSV or JSON, one row = one full iteration of the collection or folder
 - Runner uses the same inheritance and variable layers as a single Send
 - Import Pulse JSON, Postman v2.1, Bruno, Insomnia, OpenAPI
 - Export one collection as Pulse or Postman (⋯ menu), or the whole workspace
@@ -19,5 +21,6 @@ Organize saved requests and run them as a set.
 ## How to
 
 1. Save from the request bar (collection + optional folder).
-2. Play icon on a collection runs every request; View results for status and tests.
-3. Explorer transfer menu imports a file; collection ⋯ exports Pulse or Postman JSON.
+2. Play on a collection runs every request; Play on a folder runs that folder. View results for status and tests.
+3. Spreadsheet icon (or Run with CSV / JSON) picks a data file: each row becomes `{{column}}` for one iteration.
+4. Explorer transfer menu imports a file; collection ⋯ exports Pulse or Postman JSON.

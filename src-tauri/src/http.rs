@@ -7,6 +7,7 @@ use std::str::FromStr;
 use std::time::Instant;
 
 use crate::cache::{cache_key, should_store_in_cache, should_use_cache};
+use crate::dns_timing::TimingResolver;
 use crate::state::HttpState;
 use std::time::Duration;
 
@@ -86,6 +87,16 @@ pub struct HttpResponsePayload {
     #[serde(default = "default_body_encoding")]
     pub body_encoding: String,
     pub elapsed_ms: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dns_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ttfb_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub download_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total_ms: Option<u64>,
     pub size_bytes: usize,
     pub content_type: Option<String>,
     pub from_cache: bool,
@@ -250,12 +261,13 @@ pub async fn execute_request(
     let request_id = payload.request_id.clone();
 
     let client = state.client().clone();
+    let dns = state.dns_timing();
     let payload_for_task = payload.clone();
 
     let join_handle = tokio::spawn(async move {
         tokio::time::timeout(
             Duration::from_millis(timeout_ms),
-            perform_request(&client, payload_for_task),
+            perform_request(&client, payload_for_task, dns),
         )
         .await
     });
@@ -375,10 +387,12 @@ mod http_tests;
 async fn perform_request(
     client: &reqwest::Client,
     payload: HttpRequestPayload,
+    dns: TimingResolver,
 ) -> Result<HttpResponsePayload, String> {
     let method = Method::from_bytes(payload.method.trim().to_uppercase().as_bytes())
         .map_err(|e| format!("Invalid HTTP method: {e}"))?;
     let url = build_url(&payload)?;
+    let host = url.host_str().unwrap_or("").to_string();
 
     let headers = build_request_headers(&payload)?;
 
@@ -476,7 +490,9 @@ async fn perform_request(
         .send()
         .await
         .map_err(|e| format!("Request failed: {e}"))?;
-    let elapsed_ms = started.elapsed().as_millis() as u64;
+    let ttfb_ms = started.elapsed().as_millis() as u64;
+    let dns_ms = dns.lookup_since(&host, started);
+    let tls_ms = Some(ttfb_ms.saturating_sub(dns_ms.unwrap_or(0)));
 
     let status = response.status().as_u16();
     let status_text = response
@@ -499,10 +515,13 @@ async fn perform_request(
         })
         .collect::<Vec<_>>();
 
+    let body_started = Instant::now();
     let body_bytes = response
         .bytes()
         .await
         .map_err(|e| format!("Failed to read response body: {e}"))?;
+    let download_ms = body_started.elapsed().as_millis() as u64;
+    let total_ms = started.elapsed().as_millis() as u64;
     let size_bytes = body_bytes.len();
     let (body, body_encoding) = encode_response_body(&body_bytes, content_type.as_deref());
 
@@ -512,7 +531,12 @@ async fn perform_request(
         headers: response_headers,
         body,
         body_encoding,
-        elapsed_ms,
+        elapsed_ms: total_ms,
+        dns_ms,
+        tls_ms,
+        ttfb_ms: Some(ttfb_ms),
+        download_ms: Some(download_ms),
+        total_ms: Some(total_ms),
         size_bytes,
         content_type,
         from_cache: false,

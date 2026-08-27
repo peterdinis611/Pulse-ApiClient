@@ -99,7 +99,7 @@ export function StatusBar() {
             </span>
             <span className="text-topbar-muted">·</span>
             <span className="shrink-0 tabular-nums">
-              {response.fromCache ? "cached" : `${response.elapsedMs} ms`}
+              {response.fromCache ? "cached" : `${response.totalMs ?? response.elapsedMs} ms`}
             </span>
             {testResults && testResults.failed > 0 && (
               <span className="shrink-0 rounded-full bg-destructive/20 px-1.5 text-[9px] font-bold text-destructive">

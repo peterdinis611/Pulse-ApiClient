@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Copy, Download, Send } from "lucide-react";
+import { BookmarkPlus, Copy, Download, Send } from "lucide-react";
 import { useApp } from "@/machines";
 import { downloadBytes } from "@/lib/download";
 import { formatBytes } from "@/lib/helpers";
@@ -14,21 +14,34 @@ import {
   suggestedDownloadFilename,
   type ResponseBodyFormat,
 } from "@/lib/response-body";
+import { buildJsonTree, parseJsonBody } from "@/lib/json-path";
+import { variableTemplate } from "@/lib/env";
+import { responseTotalMs } from "@/lib/timing";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/EmptyState";
+import { JsonTree } from "@/components/JsonTree";
 import {
   previewKindForResponse,
   ResponseMediaPreview,
 } from "@/components/ResponseMediaPreview";
 import { TestResultsList } from "@/components/TestResultsList";
+import { TimingWaterfall } from "@/components/TimingWaterfall";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollAreaWithTop } from "@/components/ui/scroll-area-with-top";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export function ResponsePanel() {
-  const { response, error, loading, testResults } = useApp();
-  const [view, setView] = useState<"body" | "headers" | "tests">("body");
+  const {
+    response,
+    error,
+    loading,
+    testResults,
+    saveResponseExample,
+    upsertEnvironmentVariable,
+    activeEnvironment,
+  } = useApp();
+  const [view, setView] = useState<"body" | "headers" | "tests" | "timing">("body");
   const [bodyFormat, setBodyFormat] = useState<ResponseBodyFormat>("pretty");
 
   const previewKind = useMemo(
@@ -52,6 +65,12 @@ export function ResponsePanel() {
         : (parseGraphqlResponse(response?.body ?? "")?.errors ?? []),
     [response],
   );
+
+  const jsonTree = useMemo(() => {
+    if (!response || response.bodyEncoding === "base64") return null;
+    const parsed = parseJsonBody(response.body);
+    return parsed === undefined ? null : buildJsonTree(parsed);
+  }, [response]);
 
   const scrollResetKey = useMemo(
     () =>
@@ -113,7 +132,7 @@ export function ResponsePanel() {
                 {response.statusText && (
                   <span className="mr-1.5 text-foreground/80">{response.statusText}</span>
                 )}
-                {response.fromCache ? "cached" : `${response.elapsedMs} ms`}
+                {response.fromCache ? "cached" : `${responseTotalMs(response)} ms`}
                 {" · "}
                 {formatBytes(response.sizeBytes)}
                 {contentTypeShort && (
@@ -168,6 +187,16 @@ export function ResponsePanel() {
               <Download className="size-3.5" />
               Download
             </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-muted-foreground"
+              onClick={() => saveResponseExample()}
+            >
+              <BookmarkPlus className="size-3.5" />
+              Save example
+            </Button>
             <div className="mx-1 h-4 w-px bg-border/60" />
             <Tabs value={view} onValueChange={(value) => setView(value as typeof view)}>
               <TabsList className="h-8 border-0 bg-transparent">
@@ -176,6 +205,9 @@ export function ResponsePanel() {
                 </TabsTrigger>
                 <TabsTrigger value="headers" className="h-7 px-2.5 text-xs">
                   Headers
+                </TabsTrigger>
+                <TabsTrigger value="timing" className="h-7 px-2.5 text-xs">
+                  Timing
                 </TabsTrigger>
                 <TabsTrigger value="tests" className="h-7 px-2.5 text-xs">
                   Tests
@@ -244,10 +276,28 @@ export function ResponsePanel() {
                 {bodyFormat === "json" && formattedBody.jsonValid === false && (
                   <span className="text-xs text-warning">Not valid JSON — showing raw text.</span>
                 )}
+                {jsonTree && (bodyFormat === "pretty" || bodyFormat === "json") && (
+                  <span className="text-[11px] text-muted-foreground">
+                    Click a key to set{" "}
+                    {activeEnvironment
+                      ? `{{name}} in ${activeEnvironment.name}`
+                      : "an environment variable"}
+                  </span>
+                )}
               </div>
 
               {bodyFormat === "preview" && isMediaPreview ? (
                 <ResponseMediaPreview response={response} kind={previewKind} />
+              ) : jsonTree && (bodyFormat === "pretty" || bodyFormat === "json") ? (
+                <div className="ui-code-block">
+                  <JsonTree
+                    node={jsonTree}
+                    onSetVariable={(name, value) => {
+                      upsertEnvironmentVariable(name, value);
+                      void navigator.clipboard.writeText(variableTemplate(name)).catch(() => undefined);
+                    }}
+                  />
+                </div>
               ) : (
                 <pre className="ui-code-block">
                   {bodyFormat === "raw" && response.bodyEncoding === "base64"
@@ -271,6 +321,8 @@ export function ResponsePanel() {
               ))}
             </div>
           )}
+
+          {!loading && response && view === "timing" && <TimingWaterfall response={response} />}
 
           {!loading && response && view === "tests" && (
             <>

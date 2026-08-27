@@ -16,12 +16,14 @@ Layered values: globals → collection → folder → environment. Later layers 
 - \{\{name\}\} substitution in URL, path, query, headers, auth, and body
 - Autocomplete and the `{ }` picker list the merged enabled variables
 - pulse.environment.set updates the real environment (current value), not globals
+- Click a JSON key in the response body to upsert that value as \{\{key\}\} on the active environment
 
 ## How to
 
 1. Open Environments in the rail. Edit Globals, or select an environment chip.
 2. Mark tokens and passwords as secret. Fill Initial once, then change Current per session.
 3. Put `baseUrl` on the environment and `{{baseUrl}}/users/:id` on the request.
+4. After Send, click `token` in the JSON tree — Pulse writes it to the environment and copies `{{token}}`.
 
 <Callout title="Tip">
 

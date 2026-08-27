@@ -157,3 +157,32 @@ fn encode_response_body_keeps_csv_as_utf8() {
     assert_eq!(encoding, "utf8");
     assert_eq!(body, "a,b\n1,2\n");
 }
+
+#[test]
+fn response_payload_serializes_timing_fields() {
+    let payload = HttpResponsePayload {
+        status: 200,
+        status_text: "OK".to_string(),
+        headers: vec![],
+        body: "{}".to_string(),
+        body_encoding: "utf8".to_string(),
+        elapsed_ms: 800,
+        dns_ms: Some(12),
+        tls_ms: Some(48),
+        ttfb_ms: Some(180),
+        download_ms: Some(620),
+        total_ms: Some(800),
+        size_bytes: 2,
+        content_type: Some("application/json".to_string()),
+        from_cache: false,
+        cache_age_ms: None,
+        request_id: None,
+    };
+    let json = serde_json::to_value(&payload).expect("serialize");
+    assert_eq!(json["elapsedMs"], 800);
+    assert_eq!(json["dnsMs"], 12);
+    assert_eq!(json["tlsMs"], 48);
+    assert_eq!(json["ttfbMs"], 180);
+    assert_eq!(json["downloadMs"], 620);
+    assert_eq!(json["totalMs"], 800);
+}

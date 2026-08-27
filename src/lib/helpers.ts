@@ -135,6 +135,7 @@ export function createRequest(partial?: Partial<ApiRequest>): ApiRequest {
     auth: normalizeAuth(partial?.auth ?? { authType: "inherit" }),
     tests: partial?.tests ?? defaultRequestTests,
     preRequestScript: partial?.preRequestScript ?? "",
+    examples: structuredClone(partial?.examples ?? []),
   };
 }
 

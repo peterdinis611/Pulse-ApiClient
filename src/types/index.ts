@@ -48,6 +48,8 @@ export type RequestTabState = {
   collectionId?: string | null;
   /** Folder path within the collection, if any. */
   folder?: string | null;
+  /** Saved collection item this tab was opened from, if any. */
+  savedRequestId?: string | null;
   response: HttpResponse | null;
   error: string | null;
   loading: boolean;
@@ -116,6 +118,15 @@ export type ApiRequest = {
   auth: AuthConfig;
   tests: string;
   preRequestScript: string;
+  /** Saved response snapshots for this request (“how it should look”). */
+  examples: RequestExample[];
+};
+
+export type RequestExample = {
+  id: string;
+  name: string;
+  savedAt: string;
+  response: HttpResponse;
 };
 
 export type HttpResponse = {
@@ -131,6 +142,16 @@ export type HttpResponse = {
   fromCache?: boolean;
   cacheAgeMs?: number | null;
   requestId?: string | null;
+  /** DNS lookup for this request, if the resolver ran. */
+  dnsMs?: number | null;
+  /** TCP + TLS + wait until first byte, after DNS. */
+  tlsMs?: number | null;
+  /** Time until response headers. */
+  ttfbMs?: number | null;
+  /** Time to read the body after headers. */
+  downloadMs?: number | null;
+  /** Wall-clock total (headers + body). */
+  totalMs?: number | null;
 };
 
 export type HttpEngineStats = {
@@ -209,7 +230,15 @@ export type HistoryEntry = {
   response?: Pick<HttpResponse, "status" | "elapsedMs" | "sizeBytes">;
 };
 
-export type RequestTab = "params" | "headers" | "body" | "auth" | "pre-request" | "tests" | "code";
+export type RequestTab =
+  | "params"
+  | "headers"
+  | "body"
+  | "auth"
+  | "pre-request"
+  | "tests"
+  | "code"
+  | "examples";
 
 export type TestCaseResult = {
   name: string;

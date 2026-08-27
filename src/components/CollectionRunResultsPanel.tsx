@@ -93,7 +93,7 @@ export function CollectionRunResultsPanel({ result, onClose }: CollectionRunResu
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Collection run
+                {result.folderPath ? "Folder run" : "Collection run"}
               </p>
               <h2
                 id="collection-runner-title"
@@ -101,6 +101,12 @@ export function CollectionRunResultsPanel({ result, onClose }: CollectionRunResu
               >
                 {result.collectionName}
               </h2>
+              {(result.dataFileName || result.iterations > 1) && (
+                <p className="mt-1 text-[12px] text-muted-foreground">
+                  {result.dataFileName ? `${result.dataFileName} · ` : ""}
+                  {result.iterations} iteration{result.iterations === 1 ? "" : "s"}
+                </p>
+              )}
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <Button type="button" variant="outline" size="sm" onClick={onClose}>
@@ -186,7 +192,14 @@ export function CollectionRunResultsPanel({ result, onClose }: CollectionRunResu
                     )}
                     <MethodBadge method={step.saved.request.method} />
                     <div className="min-w-0 flex-1 overflow-hidden">
-                      <p className="truncate text-[13px] font-medium">{step.saved.name}</p>
+                      <p className="truncate text-[13px] font-medium">
+                        {step.iteration != null && (
+                          <span className="mr-1.5 font-mono text-[10px] text-muted-foreground">
+                            #{step.iteration}
+                          </span>
+                        )}
+                        {step.saved.name}
+                      </p>
                       <p className="truncate font-mono text-[11px] text-muted-foreground">
                         {step.saved.request.url}
                       </p>

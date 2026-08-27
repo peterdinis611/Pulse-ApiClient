@@ -6,6 +6,7 @@ pub mod cache;
 pub mod cookies;
 pub mod custom_theme;
 pub mod db;
+pub mod dns_timing;
 pub mod engine;
 pub mod history;
 pub mod http;

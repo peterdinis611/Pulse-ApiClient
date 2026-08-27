@@ -48,6 +48,7 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
       "Desktop engine is not limited by browser CORS — set any header you need",
       "Send with `Cmd/Ctrl + Enter` (or the Send button); Cancel while in flight",
       "Name the request, pick a collection and folder, then Save",
+      "Save example stores the last response on the request (Examples tab) — a snapshot of how a 200 should look",
       "Import from cURL via the ⋯ menu on the request bar",
       "Tabs for parallel requests; duplicate from the explorer",
       "QUERY is experimental — some proxies and frameworks still reject it",
@@ -232,7 +233,9 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
     items: [
       "Save, duplicate, delete, drag-and-drop requests and folders",
       "Nested folders; empty folders can be deleted",
-      "Run collection — sequential when pre-request scripts exist, otherwise can batch",
+      "Run collection — sequential when pre-request scripts or a data file exist, otherwise can batch",
+      "Run folder — Play on a folder sends that folder and its nested requests only",
+      "Data file — CSV or JSON, one row = one full iteration of the collection or folder",
       "Runner uses the same inheritance and variable layers as a single Send",
       "Import Pulse JSON, Postman v2.1, Bruno, Insomnia, OpenAPI",
       "Export one collection as Pulse or Postman (⋯ menu), or the whole workspace",
@@ -241,7 +244,8 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
     ],
     howTo: [
       "Save from the request bar (collection + optional folder).",
-      "Play icon on a collection runs every request; View results for status and tests.",
+      "Play on a collection runs every request; Play on a folder runs that folder. View results for status and tests.",
+      "Spreadsheet icon (or Run with CSV / JSON) picks a data file: each row becomes `{{column}}` for one iteration.",
       "Explorer transfer menu imports a file; collection ⋯ exports Pulse or Postman JSON.",
     ],
   },
@@ -260,11 +264,13 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
       "{{name}} substitution in URL, path, query, headers, auth, and body",
       "Autocomplete and the `{ }` picker list the merged enabled variables",
       "pulse.environment.set updates the real environment (current value), not globals",
+      "Click a JSON key in the response body to upsert that value as {{key}} on the active environment",
     ],
     howTo: [
       "Open Environments in the rail. Edit Globals, or select an environment chip.",
       "Mark tokens and passwords as secret. Fill Initial once, then change Current per session.",
       "Put `baseUrl` on the environment and `{{baseUrl}}/users/:id` on the request.",
+      "After Send, click `token` in the JSON tree — Pulse writes it to the environment and copies `{{token}}`.",
     ],
     tips: [
       "Do not type secrets into collection JSON you plan to export and share — use environment or secret globals locally.",
@@ -308,6 +314,10 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
       "Default User-Agent, Origin, Referer",
       "Send / store cookies toggles",
       "Engine stats: active, completed, failed, cache hits",
+      "Timing waterfall: DNS, TLS (TCP + handshake + wait), TTFB, transfer, total",
+    ],
+    howTo: [
+      "Send a request, then open Response → Timing. Status 200 plus a single millisecond number is not the whole story — the bars split lookup, handshake, first byte, and body.",
     ],
     tips: [
       "Pulse is not a browser: there is no CORS preflight. Use Origin/Referer headers (or Settings defaults) to reproduce what a browser would send.",

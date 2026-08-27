@@ -116,13 +116,14 @@ export function useApp() {
     updateRequest: (patch: Partial<ApiRequest>) => send({ type: "UPDATE_REQUEST", patch }),
     openRequestTab: (
       request: ApiRequest,
-      extras?: { collectionId?: string | null; folder?: string | null },
+      extras?: { collectionId?: string | null; folder?: string | null; savedRequestId?: string | null },
     ) =>
       send({
         type: "OPEN_REQUEST_TAB",
         request,
         collectionId: extras?.collectionId,
         folder: extras?.folder,
+        savedRequestId: extras?.savedRequestId,
       }),
     newRequestTab: () => send({ type: "NEW_REQUEST_TAB" }),
     closeTab: (tabId: string) => send({ type: "CLOSE_TAB", tabId }),
@@ -135,6 +136,11 @@ export function useApp() {
     sendWebSocketPing: () => send({ type: "WS_PING" }),
     cancelCurrentRequest: () => send({ type: "CANCEL_SEND" }),
     saveCurrentToCollection: (folder?: string) => send({ type: "SAVE_TO_COLLECTION", folder }),
+    saveResponseExample: (name?: string) => send({ type: "SAVE_RESPONSE_EXAMPLE", name }),
+    deleteResponseExample: (id: string) => send({ type: "DELETE_RESPONSE_EXAMPLE", id }),
+    loadResponseExample: (id: string) => send({ type: "LOAD_RESPONSE_EXAMPLE", id }),
+    upsertEnvironmentVariable: (key: string, value: string) =>
+      send({ type: "UPSERT_ENVIRONMENT_VARIABLE", key, value }),
     loadSavedRequest: (saved: SavedRequest) => send({ type: "LOAD_SAVED_REQUEST", saved }),
     deleteSavedRequest: (id: string) => send({ type: "DELETE_SAVED_REQUEST", id }),
     duplicateSavedRequest: (id: string) => send({ type: "DUPLICATE_SAVED_REQUEST", id }),

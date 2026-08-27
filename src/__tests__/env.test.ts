@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyEnvironmentMutations,
   getActiveVariableQuery,
   insertVariableAtCursor,
   maskSecretValue,
@@ -71,5 +72,15 @@ describe("env", () => {
   it("masks secret values", () => {
     expect(maskSecretValue("super-secret", true)).toBe("••••••••••••");
     expect(maskSecretValue("super-secret", false)).toBe("super-secret");
+  });
+
+  it("upserts environment variables from JSON clicks or scripts", () => {
+    const next = applyEnvironmentMutations(environment, [
+      { key: "token", value: "from-json" },
+      { key: "userId", value: "42" },
+    ]);
+    expect(next.variables.find((item) => item.key === "token")?.value).toBe("from-json");
+    expect(next.variables.find((item) => item.key === "userId")?.value).toBe("42");
+    expect(next.id).not.toBe("merged");
   });
 });

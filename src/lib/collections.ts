@@ -25,6 +25,24 @@ export function requestsForCollection(requests: SavedRequest[], collectionId: st
   return requests.filter((item) => item.collectionId === collectionId);
 }
 
+export function requestsForFolder(
+  requests: SavedRequest[],
+  collectionId: string,
+  folderPath: string,
+): SavedRequest[] {
+  const path = folderPath.trim();
+  if (!path) return requestsForCollection(requests, collectionId).filter((item) => !item.folder);
+  return requests.filter((item) => {
+    if (item.collectionId !== collectionId) return false;
+    const folder = item.folder?.trim() ?? "";
+    return folder === path || folder.startsWith(`${path}/`);
+  });
+}
+
+export function countFolderRequests(folder: FolderTreeNode): number {
+  return folder.requests.length + folder.children.reduce((sum, child) => sum + countFolderRequests(child), 0);
+}
+
 export function groupRequestsByFolder(
   items: SavedRequest[],
   folderPaths: string[] = [],

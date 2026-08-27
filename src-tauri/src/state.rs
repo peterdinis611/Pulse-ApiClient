@@ -1,6 +1,7 @@
 use crate::cache::{CacheConfig, ResponseCache};
 use crate::cookies::{CookieJarState, StoredCookie};
 use crate::db::DbState;
+use crate::dns_timing::TimingResolver;
 use crate::engine::{RequestEngine, DEFAULT_MAX_CONCURRENT, DEFAULT_TIMEOUT_MS};
 use crate::settings::{AppSettings, HttpClientConfig};
 use reqwest::header::{HeaderMap, HeaderValue, ORIGIN, REFERER, USER_AGENT};
@@ -16,6 +17,7 @@ pub struct HttpStateInner {
     engine: RequestEngine,
     store_cookies: AtomicBool,
     last_config: Mutex<HttpClientConfig>,
+    dns: TimingResolver,
 }
 
 #[derive(Clone)]
@@ -27,13 +29,15 @@ impl HttpState {
     fn build_client(
         jar: Arc<reqwest::cookie::Jar>,
         config: &HttpClientConfig,
+        dns: TimingResolver,
     ) -> Result<Client, String> {
         let mut builder = Client::builder()
             .pool_max_idle_per_host(32)
             .pool_idle_timeout(Duration::from_secs(90))
             .tcp_keepalive(Duration::from_secs(60))
             .connect_timeout(Duration::from_millis(config.connect_timeout_ms))
-            .danger_accept_invalid_certs(!config.ssl_verify);
+            .danger_accept_invalid_certs(!config.ssl_verify)
+            .dns_resolver(Arc::new(dns));
 
         builder = if config.follow_redirects {
             builder.redirect(reqwest::redirect::Policy::limited(config.max_redirects as usize))
@@ -85,7 +89,8 @@ impl HttpState {
         let cookies = CookieJarState::new();
         let jar = cookies.jar();
         let store_cookies = client_config.store_cookies;
-        let client = Self::build_client(jar, &client_config)?;
+        let dns = TimingResolver::new();
+        let client = Self::build_client(jar, &client_config, dns.clone())?;
 
         Ok(Self {
             inner: Arc::new(HttpStateInner {
@@ -95,6 +100,7 @@ impl HttpState {
                 engine: RequestEngine::new(max_concurrent, timeout_ms),
                 store_cookies: AtomicBool::new(store_cookies),
                 last_config: Mutex::new(client_config),
+                dns,
             }),
         })
     }
@@ -124,6 +130,10 @@ impl HttpState {
             .lock()
             .expect("HTTP client lock poisoned")
             .clone()
+    }
+
+    pub fn dns_timing(&self) -> TimingResolver {
+        self.inner.dns.clone()
     }
 
     pub fn cache(&self) -> &ResponseCache {
@@ -178,7 +188,7 @@ impl HttpState {
         jar: Arc<reqwest::cookie::Jar>,
         config: HttpClientConfig,
     ) -> Result<(), String> {
-        let client = Self::build_client(jar, &config)?;
+        let client = Self::build_client(jar, &config, self.inner.dns.clone())?;
         *self
             .inner
             .client

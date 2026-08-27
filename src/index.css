@@ -354,6 +354,40 @@ html[data-theme="dark"] {
     @apply whitespace-pre-wrap break-words rounded-md border border-border/60 bg-surface-2/80 p-4 font-mono text-sm leading-relaxed text-foreground;
   }
 
+  .json-tree-key {
+    @apply text-primary underline-offset-2 hover:underline;
+  }
+
+  .timing-waterfall {
+    @apply space-y-2 rounded-lg border border-border/60 bg-surface-2/70 p-4;
+  }
+
+  .timing-waterfall-row {
+    @apply grid grid-cols-[72px_minmax(0,1fr)_64px] items-center gap-3;
+  }
+
+  .timing-waterfall-label {
+    @apply font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground;
+  }
+
+  .timing-waterfall-track {
+    @apply relative h-2 overflow-hidden rounded-full bg-muted/80;
+  }
+
+  .timing-waterfall-fill {
+    @apply absolute inset-y-0 rounded-full bg-primary;
+    box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 35%, transparent);
+  }
+
+  .timing-waterfall-fill--total {
+    background: color-mix(in oklch, var(--primary) 45%, var(--muted));
+    box-shadow: none;
+  }
+
+  .timing-waterfall-ms {
+    @apply text-right font-mono text-[11px] tabular-nums text-foreground;
+  }
+
   .resize-handle {
     touch-action: none;
   }

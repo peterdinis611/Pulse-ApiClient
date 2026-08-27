@@ -9,6 +9,7 @@ import {
   Eye,
   Folder,
   FolderPlus,
+  FileSpreadsheet,
   GripVertical,
   History,
   LoaderCircle,
@@ -24,8 +25,9 @@ import {
 } from "lucide-react";
 import { useApp } from "@/machines";
 import { useHistory } from "@/hooks/useHistory";
-import { groupRequestsByFolder, requestsForCollection } from "@/lib/collections";
+import { groupRequestsByFolder, requestsForCollection, requestsForFolder, countFolderRequests } from "@/lib/collections";
 import { runCollectionAuto, type CollectionRunResult } from "@/lib/collection-runner";
+import { parseRunnerDataFile, pickRunnerDataFile } from "@/lib/runner-data";
 import { filterSavedRequests, filterSavedRequestsAsync } from "@/lib/filters";
 import { downloadJson, collectionExportFilename } from "@/lib/download";
 import {
@@ -291,18 +293,42 @@ export function ExplorerPanel() {
     return [...hints].slice(0, 6);
   }, [collections]);
 
-  const handleRunCollection = async (collectionId: string, collectionName: string) => {
-    const items = requestsForCollection(collections, collectionId);
+  const handleRun = async (options: {
+    collectionId: string;
+    collectionName: string;
+    items: SavedRequest[];
+    folderPath?: string;
+    withDataFile?: boolean;
+  }) => {
+    const { collectionId, collectionName, items, folderPath, withDataFile } = options;
     if (items.length === 0 || runningCollectionId) return;
 
-    setRunningCollectionId(collectionId);
+    let dataRows: Array<Record<string, string>> | undefined;
+    let dataFileName: string | undefined;
+    if (withDataFile) {
+      const picked = await pickRunnerDataFile();
+      if (!picked) return;
+      try {
+        const parsed = parseRunnerDataFile(picked.text, picked.name);
+        dataRows = parsed.rows;
+        dataFileName = parsed.fileName;
+      } catch (error) {
+        toast.error("Data file", error instanceof Error ? error.message : String(error));
+        return;
+      }
+    }
+
+    const scope = folderPath ? `${collectionId}::${folderPath}` : collectionId;
+    const displayName = folderPath ? `${collectionName} / ${folderPath}` : collectionName;
+    const totalSends = items.length * (dataRows?.length ?? 1);
+    setRunningCollectionId(scope);
     setCollectionRun(null);
-    setRunProgress(`Running 0/${items.length}`);
+    setRunProgress(`Running 0/${totalSends}`);
 
     try {
       const result = await runCollectionAuto(
         collectionId,
-        collectionName,
+        displayName,
         items,
         activeEnvironment,
         (_step, index, total) => {
@@ -311,6 +337,9 @@ export function ExplorerPanel() {
         {
           collection: collectionGroups.find((group) => group.id === collectionId) ?? null,
           globals,
+          dataRows,
+          dataFileName,
+          folderPath,
         },
       );
       setCollectionRun(result);
@@ -528,13 +557,36 @@ export function ExplorerPanel() {
                                 className="explorer-action-btn"
                                 label="Run collection"
                                 disabled={items.length === 0 || runningCollectionId !== null}
-                                onClick={() => void handleRunCollection(group.id, group.name)}
+                                onClick={() =>
+                                  void handleRun({
+                                    collectionId: group.id,
+                                    collectionName: group.name,
+                                    items,
+                                  })
+                                }
                               >
                                 {runningCollectionId === group.id ? (
                                   <LoaderCircle className="size-3.5 animate-spin" />
                                 ) : (
                                   <Play className="size-3.5" />
                                 )}
+                              </TooltipIconButton>
+                              <TooltipIconButton
+                                variant="ghost"
+                                size="icon"
+                                className="explorer-action-btn"
+                                label="Run with CSV / JSON"
+                                disabled={items.length === 0 || runningCollectionId !== null}
+                                onClick={() =>
+                                  void handleRun({
+                                    collectionId: group.id,
+                                    collectionName: group.name,
+                                    items,
+                                    withDataFile: true,
+                                  })
+                                }
+                              >
+                                <FileSpreadsheet className="size-3.5" />
                               </TooltipIconButton>
                               <AddFolderMenu
                                 collectionId={group.id}
@@ -608,6 +660,16 @@ export function ExplorerPanel() {
                                       path,
                                     })
                                   }
+                                  onRun={(folderPath, withDataFile) =>
+                                    void handleRun({
+                                      collectionId: group.id,
+                                      collectionName: group.name,
+                                      items: requestsForFolder(collections, group.id, folderPath),
+                                      folderPath,
+                                      withDataFile,
+                                    })
+                                  }
+                                  runningScope={runningCollectionId}
                                   activeSignature={activeSignature}
                                 />
                               ))}
@@ -1510,6 +1572,8 @@ function FolderBranch({
   onRelocateRequest,
   onReorderFolder,
   onEditSettings,
+  onRun,
+  runningScope,
 }: {
   folder: FolderTreeNode;
   collectionId: string;
@@ -1531,10 +1595,14 @@ function FolderBranch({
   ) => void;
   onReorderFolder: (path: string, targetPath: string, position: "before" | "after") => void;
   onEditSettings: (path: string) => void;
+  onRun: (folderPath: string, withDataFile?: boolean) => void;
+  runningScope: string | null;
 }) {
   const open = isFolderOpen(collectionId, folder.path);
   const [dropEdge, setDropEdge] = useState<"before" | "after" | "into" | null>(null);
   const isEmpty = folderIsEmpty(folder);
+  const folderRequestCount = countFolderRequests(folder);
+  const folderScope = `${collectionId}::${folder.path}`;
 
   return (
     <Collapsible
@@ -1627,6 +1695,36 @@ function FolderBranch({
           variant="ghost"
           size="icon"
           className="explorer-action-btn"
+          label="Run folder"
+          disabled={folderRequestCount === 0 || runningScope !== null}
+          onClick={(event) => {
+            event.stopPropagation();
+            onRun(folder.path);
+          }}
+        >
+          {runningScope === folderScope ? (
+            <LoaderCircle className="size-3.5 animate-spin" />
+          ) : (
+            <Play className="size-3.5" />
+          )}
+        </TooltipIconButton>
+        <TooltipIconButton
+          variant="ghost"
+          size="icon"
+          className="explorer-action-btn"
+          label="Run folder with CSV / JSON"
+          disabled={folderRequestCount === 0 || runningScope !== null}
+          onClick={(event) => {
+            event.stopPropagation();
+            onRun(folder.path, true);
+          }}
+        >
+          <FileSpreadsheet className="size-3.5" />
+        </TooltipIconButton>
+        <TooltipIconButton
+          variant="ghost"
+          size="icon"
+          className="explorer-action-btn"
           label="Folder settings"
           onClick={(event) => {
             event.stopPropagation();
@@ -1711,6 +1809,8 @@ function FolderBranch({
             onRelocateRequest={onRelocateRequest}
             onReorderFolder={onReorderFolder}
             onEditSettings={onEditSettings}
+            onRun={onRun}
+            runningScope={runningScope}
           />
         ))}
       </CollapsibleContent>

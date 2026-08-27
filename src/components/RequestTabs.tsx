@@ -4,6 +4,7 @@ import { KeyValueEditor } from "@/components/KeyValueEditor";
 import { TestsTabPanel } from "@/components/TestsTabPanel";
 import { PreRequestTabPanel } from "@/components/PreRequestTabPanel";
 import { CodeSnippetPanel } from "@/components/CodeSnippetPanel";
+import { ExamplesTabPanel } from "@/components/ExamplesTabPanel";
 import { BODY_KINDS } from "@/types";
 import type { BodyKind, KeyValue, MultipartField } from "@/types";
 import { Trash2 } from "lucide-react";
@@ -162,6 +163,14 @@ export function RequestTabs() {
             <TabsTrigger value="auth">Auth</TabsTrigger>
             <TabsTrigger value="pre-request">Pre-request</TabsTrigger>
             <TabsTrigger value="tests">Tests</TabsTrigger>
+            <TabsTrigger value="examples">
+              Examples
+              {request.examples.length > 0 && (
+                <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
+                  {request.examples.length}
+                </Badge>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="code">Code</TabsTrigger>
           </TabsList>
         </Tabs>
@@ -852,6 +861,7 @@ export function RequestTabs() {
 
           {requestTab === "pre-request" && <PreRequestTabPanel />}
           {requestTab === "tests" && <TestsTabPanel />}
+          {requestTab === "examples" && <ExamplesTabPanel />}
           {requestTab === "code" && <CodeSnippetPanel />}
         </div>
       </ScrollAreaWithTop>

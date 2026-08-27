@@ -71,6 +71,17 @@ describe("feature-docs", () => {
     expect(pathParams?.items.some((item) => item.includes(":id"))).toBe(true);
     expect(snippets?.items.some((item) => item.toLowerCase().includes("axios"))).toBe(true);
     expect(environments?.summary.toLowerCase()).toContain("globals");
+    expect(environments?.items.some((item) => item.includes("Click a JSON key"))).toBe(true);
+    expect(
+      FEATURE_DOC_SECTIONS.find((section) => section.id === "collections")?.items.some((item) =>
+        item.toLowerCase().includes("data file"),
+      ),
+    ).toBe(true);
+    expect(
+      FEATURE_DOC_SECTIONS.find((section) => section.id === "http-engine")?.items.some((item) =>
+        item.toLowerCase().includes("timing waterfall"),
+      ),
+    ).toBe(true);
   });
 
   it("renders markdown for the docs folder", () => {

@@ -8,6 +8,7 @@ import type {
   HttpResponse,
   KeyValue,
   MainView,
+  RequestExample,
   RequestTab,
   RequestTabState,
   SavedRequest,
@@ -57,6 +58,7 @@ import {
 } from "@/lib/layout-preferences";
 import { loadThemeMode, saveThemeMode, type ThemeMode } from "@/lib/theme";
 import { defaultWebSocketSession, inferProtocolFromUrl } from "@/lib/protocol";
+import { snapshotResponseExample } from "@/lib/request-examples";
 import { toast } from "@/lib/toast";
 import { syncPathParams } from "@/lib/path-params";
 import { resolveRequestForSend } from "@/lib/resolve-request";
@@ -66,13 +68,14 @@ import { wsClose, wsConnect, wsPing, wsSend } from "@/lib/ws-client";
 
 export function createTabState(
   request = createRequest(),
-  extras?: { collectionId?: string | null; folder?: string | null },
+  extras?: { collectionId?: string | null; folder?: string | null; savedRequestId?: string | null },
 ): RequestTabState {
   return {
     id: createId("tab"),
     request: normalizeRequest(request),
     collectionId: extras?.collectionId,
     folder: extras?.folder,
+    savedRequestId: extras?.savedRequestId,
     response: null,
     error: null,
     loading: false,
@@ -226,7 +229,7 @@ export type AppMachineEvent =
   | { type: "SET_CONSOLE_OPEN"; open: boolean }
   | { type: "SET_RESPONSE_PANEL_OPEN"; open: boolean }
   | { type: "UPDATE_REQUEST"; patch: Partial<ApiRequest> }
-  | { type: "OPEN_REQUEST_TAB"; request: ApiRequest; collectionId?: string | null; folder?: string | null }
+  | { type: "OPEN_REQUEST_TAB"; request: ApiRequest; collectionId?: string | null; folder?: string | null; savedRequestId?: string | null }
   | { type: "NEW_REQUEST_TAB" }
   | { type: "CLOSE_TAB"; tabId: string }
   | { type: "SET_ACTIVE_TAB"; tabId: string }
@@ -272,6 +275,10 @@ export type AppMachineEvent =
     }
   | { type: "WS_ERROR"; connectionId: string; tabId: string; message: string }
   | { type: "SAVE_TO_COLLECTION"; folder?: string }
+  | { type: "SAVE_RESPONSE_EXAMPLE"; name?: string }
+  | { type: "DELETE_RESPONSE_EXAMPLE"; id: string }
+  | { type: "LOAD_RESPONSE_EXAMPLE"; id: string }
+  | { type: "UPSERT_ENVIRONMENT_VARIABLE"; key: string; value: string }
   | { type: "LOAD_SAVED_REQUEST"; saved: SavedRequest }
   | { type: "DELETE_SAVED_REQUEST"; id: string }
   | { type: "DUPLICATE_SAVED_REQUEST"; id: string }
@@ -471,6 +478,28 @@ function mapActiveTab(
   return context.tabs.map((tab) => (tab.id === context.activeTabId ? updater(tab) : tab));
 }
 
+function persistExamplesOnSavedRequest(
+  context: AppMachineContext,
+  tab: RequestTabState,
+  examples: RequestExample[],
+) {
+  const tabs = mapActiveTab(context, (current) => ({
+    ...current,
+    request: { ...current.request, examples },
+  }));
+  const collections = tab.savedRequestId
+    ? context.persisted.collections.map((item) =>
+        item.id === tab.savedRequestId
+          ? { ...item, request: { ...item.request, examples } }
+          : item,
+      )
+    : context.persisted.collections;
+  const persisted = { ...context.persisted, collections };
+  saveSharedWorkspace(context, persisted);
+  persistLastRequest({ ...context, tabs, persisted });
+  return { tabs, persisted };
+}
+
 export const appMachine = setup({
   types: {
     context: {} as AppMachineContext,
@@ -623,6 +652,7 @@ export const appMachine = setup({
                   ...tab,
                   collectionId: event.collectionId ?? tab.collectionId,
                   folder: event.folder ?? tab.folder,
+                  savedRequestId: event.savedRequestId ?? tab.savedRequestId,
                 })),
                 activeTabId: existing.id,
                 mainView: "request" as const,
@@ -631,6 +661,7 @@ export const appMachine = setup({
             const next = createTabState(structuredClone(event.request), {
               collectionId: event.collectionId,
               folder: event.folder,
+              savedRequestId: event.savedRequestId,
             });
             const nextContext = {
               ...context,
@@ -739,6 +770,7 @@ export const appMachine = setup({
                   ...tab,
                   collectionId,
                   folder: event.folder,
+                  savedRequestId: saved.id,
                 })),
               };
             }),
@@ -750,12 +782,96 @@ export const appMachine = setup({
             },
           ],
         },
+        SAVE_RESPONSE_EXAMPLE: {
+          actions: [
+            assign(({ context, event }) => {
+              const tab = getActiveTab(context);
+              if (!tab?.response) return {};
+              const example = snapshotResponseExample(tab.response, event.name);
+              const examples = [...(tab.request.examples ?? []), example];
+              return persistExamplesOnSavedRequest(context, tab, examples);
+            }),
+            ({ context }) => {
+              const tab = getActiveTab(context);
+              if (!tab?.response) {
+                toast.error("No response", "Send a request first.");
+                return;
+              }
+              const examples = tab.request.examples;
+              const last = examples[examples.length - 1];
+              toast.success("Example saved", last?.name ?? "Response snapshot");
+            },
+          ],
+        },
+        DELETE_RESPONSE_EXAMPLE: {
+          actions: assign(({ context, event }) => {
+            const tab = getActiveTab(context);
+            if (!tab) return {};
+            const examples = (tab.request.examples ?? []).filter((item) => item.id !== event.id);
+            return persistExamplesOnSavedRequest(context, tab, examples);
+          }),
+        },
+        LOAD_RESPONSE_EXAMPLE: {
+          actions: [
+            assign(({ context, event }) => {
+              const tab = getActiveTab(context);
+              const example = tab?.request.examples.find((item) => item.id === event.id);
+              if (!example) return {};
+              return {
+                tabs: mapActiveTab(context, (current) => ({
+                  ...current,
+                  response: structuredClone(example.response),
+                  error: null,
+                  loading: false,
+                  testResults: null,
+                })),
+                mainView: "request" as const,
+                responsePanelOpen: true,
+              };
+            }),
+            ({ context, event }) => {
+              const tab = getActiveTab(context);
+              const example = tab?.request.examples.find((item) => item.id === event.id);
+              if (example) toast.success("Loaded example", example.name);
+            },
+          ],
+        },
+        UPSERT_ENVIRONMENT_VARIABLE: {
+          actions: [
+            assign(({ context, event }) => {
+              const key = event.key.trim();
+              if (!key) return {};
+              const environment = getTabEnvironment(context);
+              if (!environment || environment.id === "merged") return {};
+              const next = applyEnvironmentMutations(environment, [
+                { key, value: event.value },
+              ]);
+              const persisted = {
+                ...context.persisted,
+                environments: context.persisted.environments.map((env) =>
+                  env.id === environment.id ? next : env,
+                ),
+              };
+              saveSharedWorkspace(context, persisted);
+              return { persisted };
+            }),
+            ({ context, event }) => {
+              const environment = getTabEnvironment(context);
+              if (!environment || environment.id === "merged") {
+                toast.error("No environment", "Create or select an environment first.");
+                return;
+              }
+              toast.success(`Set {{${event.key}}}`, `Saved to ${environment.name}`);
+            },
+          ],
+        },
         LOAD_SAVED_REQUEST: {
           actions: raise(({ event }) => ({
             type: "OPEN_REQUEST_TAB" as const,
             request: structuredClone(event.saved.request),
             collectionId: event.saved.collectionId,
             folder: event.saved.folder,
+            savedRequestId: event.saved.id,
           })),
         },
         DELETE_SAVED_REQUEST: {
