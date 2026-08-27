@@ -49,11 +49,40 @@ bun install
 bun run tauri dev
 ```
 
+### Windows
+
+- [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) (preinstalled on Windows 11)
+- [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the “Desktop development with C++” workload
+- Shortcuts in the UI show **Ctrl+** (for example Ctrl+B, Ctrl+Enter)
+
+### Linux
+
+Build **and** runtime need WebKitGTK 4.1, not only the `-dev` packages used to compile:
+
+```bash
+# Debian / Ubuntu
+sudo apt-get install -y \
+  libwebkit2gtk-4.1-dev \
+  libwebkit2gtk-4.1-0 \
+  libgtk-3-dev \
+  libayatana-appindicator3-dev \
+  librsvg2-dev \
+  patchelf
+```
+
+AppImage and `.deb` on some distros fail at launch if `libwebkit2gtk-4.1-0` is missing even after a successful CI build. Fedora/Arch equivalents: `webkit2gtk4.1` / `webkit2gtk-4.1`.
+
+The window uses the default OS titlebar on Windows and Linux. macOS traffic-light overlay, if added later, stays behind `cfg(target_os = "macos")`.
+
+File pickers (custom CSS, runner data files) go through the OS dialog and Rust `PathBuf` — nothing hardcodes `~/Library`.
+
 ## Build
 
 ```bash
 bun run tauri build
 ```
+
+CI (`.github/workflows/ci.yml`) runs `bun run test`, `cargo test`, and `tauri build` on `macos-latest`, `ubuntu-latest`, and `windows-latest`.
 
 ## Docs site (Fumadocs)
 

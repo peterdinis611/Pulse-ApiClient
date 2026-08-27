@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/select";
 import { FolderSelect } from "@/components/FolderSelect";
 import { curlToRequest } from "@/lib/curl";
+import { formatModShortcut } from "@/lib/hotkeys";
 import { toast } from "@/lib/toast";
 import {
   DropdownMenu,
@@ -215,13 +216,15 @@ export function RequestBar() {
                     ? "Enter a URL to send"
                     : !canSend
                       ? "GraphQL query is required"
-                      : "Send request (⌘Enter)"
+                      : `Send request (${formatModShortcut("Enter")})`
               }
               onClick={() => void sendCurrentRequest()}
             >
               {loading ? <LoaderCircle className="animate-spin" /> : <Send />}
               {loading ? "Sending…" : "Send"}
-              {!loading && <kbd className="request-send-kbd hidden sm:inline">⌘↵</kbd>}
+              {!loading && (
+                <kbd className="request-send-kbd hidden sm:inline">{formatModShortcut("↵")}</kbd>
+              )}
             </Button>
             {loading && (
               <Button

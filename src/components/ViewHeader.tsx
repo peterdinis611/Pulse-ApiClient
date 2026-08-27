@@ -5,6 +5,7 @@ import { TabScrollStrip } from "@/components/TabScrollStrip";
 import { TooltipIconButton, TooltipWrap } from "@/components/TooltipIconButton";
 import { useApp } from "@/machines";
 import { methodShortLabel, methodTextClass } from "@/lib/method-colors";
+import { formatModShortcut } from "@/lib/hotkeys";
 import { cn } from "@/lib/utils";
 
 const VIEW_META = {
@@ -58,14 +59,14 @@ export function ViewHeader() {
           >
             <PanelLeftOpen className="size-4 text-primary transition-transform group-hover:scale-105" />
             <span>Explorer</span>
-            <kbd className="explorer-kbd hidden xl:inline">⌘B</kbd>
+            <kbd className="explorer-kbd hidden xl:inline">{formatModShortcut("B")}</kbd>
           </button>
         ) : (
           <TooltipIconButton
             variant="ghost"
             size="icon"
             className="explorer-hide-btn mx-1 size-8 shrink-0 self-center text-topbar-muted hover:text-topbar-foreground"
-            label="Hide explorer (⌘B)"
+            label={`Hide explorer (${formatModShortcut("B")})`}
             onClick={toggleExplorerCollapsed}
           >
             <PanelLeftClose className="size-4" />
@@ -169,7 +170,7 @@ export function ViewHeader() {
             variant="ghost"
             size="icon"
             className="size-7 text-topbar-muted hover:text-topbar-foreground"
-            label="New request tab (⌘T)"
+            label={`New request tab (${formatModShortcut("T")})`}
             onClick={newRequestTab}
           >
             <Plus className="size-3.5" />

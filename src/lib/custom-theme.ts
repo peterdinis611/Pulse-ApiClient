@@ -88,6 +88,7 @@ export async function setCustomThemeCssPath(path: string | null): Promise<AppSet
   return runEffect(invokeEffect<AppSettings>("set_custom_theme_css", { path }));
 }
 
+/** Native dialog — OS-agnostic; do not hardcode `~/Library` or other user-home paths. */
 export async function pickCustomThemeCssFile(): Promise<string | null> {
   const selected = await open({
     multiple: false,

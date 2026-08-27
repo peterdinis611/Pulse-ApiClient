@@ -352,6 +352,7 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
       "`Cmd/Ctrl + Shift + N` — new window",
       "`Cmd/Ctrl + Shift + O` — overview window",
       "Cheat sheet also lives in Settings → Layout",
+      "Shortcut labels show ⌘ on macOS and Ctrl+ on Windows/Linux",
     ],
   },
   {
@@ -364,6 +365,10 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
       "Settings — export collections, reset database, clear cache",
       "Sign in keeps a separate auth database from workspace data",
       "No Pulse cloud — collections stay on disk unless you export them",
+      "File pickers (custom CSS, runner data) are OS-agnostic — no hardcoded `~/Library` paths",
+    ],
+    tips: [
+      "Linux AppImage and .deb need webkit2gtk 4.1 at runtime, not only when compiling. Install `libwebkit2gtk-4.1-0` (Debian/Ubuntu) if the window fails to open.",
     ],
   },
 ];

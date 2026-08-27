@@ -23,6 +23,7 @@ import {
   type StoredCookie,
 } from "@/lib/http-client";
 import { canUseTauriIpc } from "@/lib/tauri-runtime";
+import { formatModShortcut } from "@/lib/hotkeys";
 import { clearLegacyPersistedState, defaultPersistedState, savePersistedState } from "@/lib/storage";
 import { toast } from "@/lib/toast";
 import { requestsForCollection } from "@/lib/collections";
@@ -917,7 +918,8 @@ export function SettingsView() {
             <div>
               <p className="font-medium">Start with explorer hidden</p>
               <p className="text-xs text-muted-foreground">
-                Show icon rail only in request view. Toggle with ⌘B or the panel button.
+                Show icon rail only in request view. Toggle with {formatModShortcut("B")} or the
+                panel button.
               </p>
             </div>
           </label>
@@ -925,22 +927,22 @@ export function SettingsView() {
             <p className="text-sm font-medium">Keyboard</p>
             <ul className="mt-2 grid gap-1.5 text-xs text-muted-foreground sm:grid-cols-2">
               <li className="flex items-center justify-between gap-3">
-                Send request <kbd className="ui-kbd">⌘↵</kbd>
+                Send request <kbd className="ui-kbd">{formatModShortcut("↵")}</kbd>
               </li>
               <li className="flex items-center justify-between gap-3">
-                New tab <kbd className="ui-kbd">⌘T</kbd>
+                New tab <kbd className="ui-kbd">{formatModShortcut("T")}</kbd>
               </li>
               <li className="flex items-center justify-between gap-3">
-                Close tab <kbd className="ui-kbd">⌘W</kbd>
+                Close tab <kbd className="ui-kbd">{formatModShortcut("W")}</kbd>
               </li>
               <li className="flex items-center justify-between gap-3">
-                Focus URL <kbd className="ui-kbd">⌘L</kbd>
+                Focus URL <kbd className="ui-kbd">{formatModShortcut("L")}</kbd>
               </li>
               <li className="flex items-center justify-between gap-3">
-                Search <kbd className="ui-kbd">⌘F</kbd>
+                Search <kbd className="ui-kbd">{formatModShortcut("F")}</kbd>
               </li>
               <li className="flex items-center justify-between gap-3">
-                Toggle explorer <kbd className="ui-kbd">⌘B</kbd>
+                Toggle explorer <kbd className="ui-kbd">{formatModShortcut("B")}</kbd>
               </li>
             </ul>
           </div>

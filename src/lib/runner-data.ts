@@ -142,6 +142,7 @@ function parseCsv(text: string): string[][] {
   return rows;
 }
 
+/** OS file picker — do not hardcode macOS `~/Library` (or any user-home) paths. */
 export async function pickRunnerDataFile(): Promise<{ name: string; text: string } | null> {
   return new Promise((resolve) => {
     const input = document.createElement("input");

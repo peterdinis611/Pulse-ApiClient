@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { matchWorkspaceHotkey, pulseFocusSelector } from "@/lib/hotkeys";
+import {
+  formatModShortcut,
+  isAppleModPlatform,
+  matchWorkspaceHotkey,
+  pulseFocusSelector,
+} from "@/lib/hotkeys";
 
 function keyEvent(
   key: string,
@@ -37,5 +42,29 @@ describe("workspace hotkeys", () => {
 
   it("builds focus selectors", () => {
     expect(pulseFocusSelector("url")).toBe('[data-pulse-focus="url"]');
+  });
+});
+
+describe("mod shortcut labels", () => {
+  it("detects Apple platforms from platform or UA", () => {
+    expect(isAppleModPlatform({ platform: "MacIntel" })).toBe(true);
+    expect(isAppleModPlatform({ userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)" })).toBe(
+      true,
+    );
+    expect(isAppleModPlatform({ platform: "Win32" })).toBe(false);
+    expect(isAppleModPlatform({ platform: "Linux x86_64" })).toBe(false);
+    expect(isAppleModPlatform(null)).toBe(false);
+    expect(isAppleModPlatform({})).toBe(false);
+  });
+
+  it("formats ⌘ on Apple and Ctrl+ on Win/Linux", () => {
+    expect(formatModShortcut("B", { apple: true })).toBe("⌘B");
+    expect(formatModShortcut("B", { apple: false })).toBe("Ctrl+B");
+    expect(formatModShortcut("↵", { apple: true })).toBe("⌘↵");
+    expect(formatModShortcut("↵", { apple: false })).toBe("Ctrl+Enter");
+    expect(formatModShortcut("Enter", { apple: true })).toBe("⌘Enter");
+    expect(formatModShortcut("Enter", { apple: false })).toBe("Ctrl+Enter");
+    expect(formatModShortcut("N", { shift: true, apple: true })).toBe("⌘⇧N");
+    expect(formatModShortcut("N", { shift: true, apple: false })).toBe("Ctrl+Shift+N");
   });
 });

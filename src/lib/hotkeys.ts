@@ -41,6 +41,44 @@ export function isModKey(event: Pick<KeyboardEvent, "metaKey" | "ctrlKey">): boo
   return event.metaKey || event.ctrlKey;
 }
 
+export type NavigatorPlatformHint = {
+  platform?: string;
+  userAgent?: string;
+};
+
+export type FormatModShortcutOptions = {
+  shift?: boolean;
+  /** Override detection (tests). Apple platforms show ⌘; Win/Linux show Ctrl+. */
+  apple?: boolean;
+};
+
+function navigatorPlatformHint(): NavigatorPlatformHint | undefined {
+  if (typeof navigator === "undefined") return undefined;
+  return { platform: navigator.platform, userAgent: navigator.userAgent };
+}
+
+/** macOS / iOS — labels use ⌘. Win/Linux (and Node tests without navigator) use Ctrl. */
+export function isAppleModPlatform(
+  nav: NavigatorPlatformHint | null | undefined = navigatorPlatformHint(),
+): boolean {
+  if (!nav) return false;
+  return /Mac|iPhone|iPad|iPod/i.test(`${nav.platform ?? ""} ${nav.userAgent ?? ""}`);
+}
+
+export function formatModShortcut(key: string, options: FormatModShortcutOptions = {}): string {
+  const apple = options.apple ?? isAppleModPlatform();
+  const displayKey = !apple && key === "↵" ? "Enter" : key;
+
+  if (apple) {
+    return `⌘${options.shift ? "⇧" : ""}${displayKey}`;
+  }
+
+  const parts = ["Ctrl"];
+  if (options.shift) parts.push("Shift");
+  parts.push(displayKey);
+  return parts.join("+");
+}
+
 export function matchWorkspaceHotkey(event: KeyboardEvent): WorkspaceHotkey | null {
   if (!isModKey(event) || event.altKey) return null;
   const key = event.key.toLowerCase();

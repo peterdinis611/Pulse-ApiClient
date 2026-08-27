@@ -28,6 +28,7 @@ import { useHistory } from "@/hooks/useHistory";
 import { groupRequestsByFolder, requestsForCollection, requestsForFolder, countFolderRequests } from "@/lib/collections";
 import { runCollectionAuto, type CollectionRunResult } from "@/lib/collection-runner";
 import { parseRunnerDataFile, pickRunnerDataFile } from "@/lib/runner-data";
+import { formatModShortcut } from "@/lib/hotkeys";
 import { filterSavedRequests, filterSavedRequestsAsync } from "@/lib/filters";
 import { downloadJson, collectionExportFilename } from "@/lib/download";
 import {
@@ -400,7 +401,7 @@ export function ExplorerPanel() {
               variant="ghost"
               size="icon"
               className="size-7 text-muted-foreground hover:text-foreground"
-              label="Hide explorer (⌘B)"
+              label={`Hide explorer (${formatModShortcut("B")})`}
               onClick={toggleExplorerCollapsed}
             >
               <PanelLeftClose className="size-3.5" />

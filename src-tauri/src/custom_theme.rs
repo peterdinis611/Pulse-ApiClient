@@ -12,6 +12,7 @@ pub fn read_css_file(path: &str) -> Result<String, String> {
         return Err("Invalid CSS file path".to_string());
     }
 
+    // OS file picker path — `Path` handles Windows `\` and Unix `/`. Do not join `~/Library` in JS.
     let file_path = Path::new(path);
     if !file_path.exists() {
         return Err(format!("CSS file not found: {path}"));

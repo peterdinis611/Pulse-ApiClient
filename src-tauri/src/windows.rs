@@ -44,6 +44,9 @@ pub fn register_pending_window_init(
     Ok(())
 }
 
+/// Extra windows clone the main config, including OS chrome (`decorations: true`).
+/// Hidden titlebar / traffic-light overlay must stay behind `cfg(target_os = "macos")` —
+/// Windows and Linux need the default frame for move, maximize, and snap.
 pub fn create_app_window(
     app: &AppHandle,
     title: Option<String>,
