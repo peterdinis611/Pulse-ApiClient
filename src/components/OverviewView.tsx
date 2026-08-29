@@ -23,7 +23,7 @@ import {
   listHistoryPage,
   searchHistoryEntries,
 } from "@/lib/history-client";
-import { focusPulseFieldWhenReady, formatModShortcut } from "@/lib/hotkeys";
+import { focusPulseFieldWhenReady, formatModShortcut, PULSE_HOTKEYS } from "@/lib/hotkeys";
 import { toast } from "@/lib/toast";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import type { HistoryEntry } from "@/types";
@@ -210,7 +210,7 @@ export function OverviewView() {
             data-pulse-focus="overview-search"
           />
           <kbd className="ui-kbd pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 hidden sm:inline">
-            {formatModShortcut("F")}
+            {formatModShortcut(PULSE_HOTKEYS.focusSearch)}
           </kbd>
         </div>
         <OverviewFilterMenu totalCount={allItems.length} filteredCount={filteredItems.length} />

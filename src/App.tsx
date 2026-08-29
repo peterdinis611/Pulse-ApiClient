@@ -1,4 +1,5 @@
 import { Suspense, lazy, useState } from "react";
+import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { PacerProvider } from "@tanstack/react-pacer";
 import { AppProvider, useApp } from "@/machines";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -29,13 +30,15 @@ function AppContent() {
 function AppShell() {
   return (
     <PacerProvider defaultOptions={{ debouncer: { wait: 120, trailing: true, leading: false } }}>
-      <HistoryProvider>
-        <TooltipProvider delayDuration={300}>
-          <ThemeSync />
-          <CustomThemeSync />
-          <AppContent />
-        </TooltipProvider>
-      </HistoryProvider>
+      <HotkeysProvider defaultOptions={{ hotkey: { preventDefault: true } }}>
+        <HistoryProvider>
+          <TooltipProvider delayDuration={300}>
+            <ThemeSync />
+            <CustomThemeSync />
+            <AppContent />
+          </TooltipProvider>
+        </HistoryProvider>
+      </HotkeysProvider>
     </PacerProvider>
   );
 }

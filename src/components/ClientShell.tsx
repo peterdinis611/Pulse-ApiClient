@@ -8,13 +8,8 @@ import { ResizableExplorer } from "./ResizableExplorer";
 import { StatusBar } from "./StatusBar";
 import { ViewHeader } from "./ViewHeader";
 import { APP_NAME } from "@/lib/app-config";
-import { focusPulseFieldWhenReady, matchWorkspaceHotkey } from "@/lib/hotkeys";
-import {
-  createAppWindow,
-  getCurrentWindowLabel,
-  openOverviewWindow,
-  setWindowTitle,
-} from "@/lib/window-manager";
+import { useWorkspaceHotkeys } from "@/hooks/useWorkspaceHotkeys";
+import { getCurrentWindowLabel, setWindowTitle } from "@/lib/window-manager";
 
 const ConsolePanel = lazy(() =>
   import("./ConsolePanel").then((module) => ({ default: module.ConsolePanel })),
@@ -36,87 +31,9 @@ const SettingsView = lazy(() =>
 );
 
 export function ClientShell() {
-  const {
-    mainView,
-    consoleOpen,
-    setConsoleOpen,
-    tabs,
-    activeTabId,
-    toggleExplorerCollapsed,
-    explorerCollapsed,
-    newRequestTab,
-    closeTab,
-    setMainView,
-  } = useApp();
+  const { mainView, consoleOpen, tabs, activeTabId } = useApp();
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const action = matchWorkspaceHotkey(event);
-      if (!action) return;
-
-      event.preventDefault();
-
-      if (action === "toggle-explorer") {
-        toggleExplorerCollapsed();
-        return;
-      }
-
-      if (action === "toggle-console") {
-        setConsoleOpen(!consoleOpen);
-        return;
-      }
-
-      if (action === "new-window") {
-        void createAppWindow();
-        return;
-      }
-
-      if (action === "overview-window") {
-        void openOverviewWindow();
-        return;
-      }
-
-      if (action === "new-tab") {
-        newRequestTab();
-        focusPulseFieldWhenReady("url");
-        return;
-      }
-
-      if (action === "close-tab") {
-        if (activeTabId) closeTab(activeTabId);
-        return;
-      }
-
-      if (action === "focus-url") {
-        if (mainView !== "request") setMainView("request");
-        focusPulseFieldWhenReady("url");
-        return;
-      }
-
-      if (action === "focus-search") {
-        if (mainView === "overview") {
-          focusPulseFieldWhenReady("overview-search");
-          return;
-        }
-        if (mainView !== "request") setMainView("request");
-        if (explorerCollapsed) toggleExplorerCollapsed();
-        focusPulseFieldWhenReady("explorer-search");
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [
-    activeTabId,
-    closeTab,
-    consoleOpen,
-    explorerCollapsed,
-    mainView,
-    newRequestTab,
-    setConsoleOpen,
-    setMainView,
-    toggleExplorerCollapsed,
-  ]);
+  useWorkspaceHotkeys();
 
   useEffect(() => {
     void (async () => {

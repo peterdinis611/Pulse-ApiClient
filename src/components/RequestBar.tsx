@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   Braces,
   ClipboardCopy,
@@ -34,7 +34,8 @@ import {
 } from "@/components/ui/select";
 import { FolderSelect } from "@/components/FolderSelect";
 import { curlToRequest } from "@/lib/curl";
-import { formatModShortcut } from "@/lib/hotkeys";
+import { useHotkey } from "@tanstack/react-hotkeys";
+import { formatModShortcut, PULSE_HOTKEYS } from "@/lib/hotkeys";
 import { toast } from "@/lib/toast";
 import {
   DropdownMenu,
@@ -107,22 +108,17 @@ export function RequestBar() {
     toast.success("Copied snippet", CODE_SNIPPETS.find((item) => item.id === id)?.label);
   };
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-        event.preventDefault();
-        if (isWebSocket) {
-          if (canConnect) connectWebSocket();
-          return;
-        }
-        if (canSend) {
-          void sendCurrentRequest();
-        }
+  useHotkey(
+    PULSE_HOTKEYS.send,
+    () => {
+      if (isWebSocket) {
+        if (canConnect) connectWebSocket();
+        return;
       }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [canConnect, canSend, connectWebSocket, isWebSocket, sendCurrentRequest]);
+      if (canSend) void sendCurrentRequest();
+    },
+    { meta: { name: "Send request" }, conflictBehavior: "replace" },
+  );
 
   return (
     <div className="request-bar shrink-0">
@@ -216,14 +212,16 @@ export function RequestBar() {
                     ? "Enter a URL to send"
                     : !canSend
                       ? "GraphQL query is required"
-                      : `Send request (${formatModShortcut("Enter")})`
+                      : `Send request (${formatModShortcut(PULSE_HOTKEYS.send)})`
               }
               onClick={() => void sendCurrentRequest()}
             >
               {loading ? <LoaderCircle className="animate-spin" /> : <Send />}
               {loading ? "Sending…" : "Send"}
               {!loading && (
-                <kbd className="request-send-kbd hidden sm:inline">{formatModShortcut("↵")}</kbd>
+                <kbd className="request-send-kbd hidden sm:inline">
+                  {formatModShortcut(PULSE_HOTKEYS.send)}
+                </kbd>
               )}
             </Button>
             {loading && (

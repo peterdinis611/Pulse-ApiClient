@@ -10,7 +10,7 @@ import {
   openRequestInNewWindow,
   type AppWindowInfo,
 } from "@/lib/window-manager";
-import { formatModShortcut } from "@/lib/hotkeys";
+import { formatModShortcut, PULSE_HOTKEYS } from "@/lib/hotkeys";
 import { toast } from "@/lib/toast";
 import { TooltipWrap } from "@/components/TooltipIconButton";
 import { Button } from "@/components/ui/button";
@@ -113,12 +113,14 @@ export function WindowMenu({ compact = false }: { compact?: boolean }) {
         <DropdownMenuItem onClick={() => void handleNewWindow()}>
           <CopyPlus className="size-4" />
           New window
-          <DropdownMenuShortcut>{formatModShortcut("N", { shift: true })}</DropdownMenuShortcut>
+          <DropdownMenuShortcut>{formatModShortcut(PULSE_HOTKEYS.newWindow)}</DropdownMenuShortcut>
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => void handleOverviewWindow()}>
           <LayoutGrid className="size-4" />
           New overview window
-          <DropdownMenuShortcut>{formatModShortcut("O", { shift: true })}</DropdownMenuShortcut>
+          <DropdownMenuShortcut>
+            {formatModShortcut(PULSE_HOTKEYS.overviewWindow)}
+          </DropdownMenuShortcut>
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => {

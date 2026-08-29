@@ -1,3 +1,4 @@
+import { useHotkey } from "@tanstack/react-hotkeys";
 import { useEffect, useRef, useState } from "react";
 import { LoaderCircle, Trash2, X } from "lucide-react";
 import { useApp } from "@/machines";
@@ -6,6 +7,7 @@ import { useConsoleLog, type ConsoleEntryKind } from "@/hooks/useConsoleLog";
 import { ScrollAreaWithTop } from "@/components/ui/scroll-area-with-top";
 import { TooltipIconButton } from "@/components/TooltipIconButton";
 import { Input } from "@/components/ui/input";
+import { PULSE_HOTKEYS } from "@/lib/hotkeys";
 import { cn } from "@/lib/utils";
 
 function entryClassName(kind: ConsoleEntryKind): string {
@@ -35,6 +37,14 @@ export function ConsolePanel() {
   const [draft, setDraft] = useState("");
   const [running, setRunning] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useHotkey(PULSE_HOTKEYS.closeConsole, () => setConsoleOpen(false), {
+    target: panelRef,
+    requireReset: true,
+    meta: { name: "Close console" },
+    conflictBehavior: "replace",
+  });
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
@@ -77,15 +87,10 @@ export function ConsolePanel() {
 
   return (
     <div
+      ref={panelRef}
       className="flex h-full min-h-0 flex-1 flex-col bg-console"
       data-pulse-console=""
       tabIndex={-1}
-      onKeyDown={(event) => {
-        if (event.key !== "Escape") return;
-        event.preventDefault();
-        event.stopPropagation();
-        setConsoleOpen(false);
-      }}
     >
       <div className="flex items-center justify-between border-b border-console-muted/20 px-4 py-2">
         <p className="text-caption normal-case tracking-normal text-console-muted">Console</p>

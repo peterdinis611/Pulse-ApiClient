@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { matchesKeyboardEvent } from "@tanstack/react-hotkeys";
 import {
   formatModShortcut,
-  isAppleModPlatform,
-  matchWorkspaceHotkey,
+  PULSE_HOTKEYS,
   pulseFocusSelector,
 } from "@/lib/hotkeys";
 
@@ -20,25 +20,53 @@ function keyEvent(
 }
 
 describe("workspace hotkeys", () => {
-  it("matches core shortcuts with cmd or ctrl", () => {
-    expect(matchWorkspaceHotkey(keyEvent("t", { metaKey: true }))).toBe("new-tab");
-    expect(matchWorkspaceHotkey(keyEvent("w", { ctrlKey: true }))).toBe("close-tab");
-    expect(matchWorkspaceHotkey(keyEvent("l", { metaKey: true }))).toBe("focus-url");
-    expect(matchWorkspaceHotkey(keyEvent("f", { metaKey: true }))).toBe("focus-search");
-    expect(matchWorkspaceHotkey(keyEvent("b", { metaKey: true }))).toBe("toggle-explorer");
-    expect(matchWorkspaceHotkey(keyEvent("j", { ctrlKey: true }))).toBe("toggle-console");
+  it("matches core shortcuts with Mod on mac and windows", () => {
+    expect(matchesKeyboardEvent(keyEvent("t", { metaKey: true }), PULSE_HOTKEYS.newTab, "mac")).toBe(
+      true,
+    );
+    expect(
+      matchesKeyboardEvent(keyEvent("w", { ctrlKey: true }), PULSE_HOTKEYS.closeTab, "windows"),
+    ).toBe(true);
+    expect(
+      matchesKeyboardEvent(keyEvent("l", { metaKey: true }), PULSE_HOTKEYS.focusUrl, "mac"),
+    ).toBe(true);
+    expect(
+      matchesKeyboardEvent(keyEvent("f", { metaKey: true }), PULSE_HOTKEYS.focusSearch, "mac"),
+    ).toBe(true);
+    expect(
+      matchesKeyboardEvent(keyEvent("b", { metaKey: true }), PULSE_HOTKEYS.toggleExplorer, "mac"),
+    ).toBe(true);
+    expect(
+      matchesKeyboardEvent(keyEvent("j", { ctrlKey: true }), PULSE_HOTKEYS.toggleConsole, "windows"),
+    ).toBe(true);
   });
 
   it("matches shifted window shortcuts", () => {
-    expect(matchWorkspaceHotkey(keyEvent("n", { metaKey: true, shiftKey: true }))).toBe("new-window");
-    expect(matchWorkspaceHotkey(keyEvent("o", { ctrlKey: true, shiftKey: true }))).toBe(
-      "overview-window",
-    );
+    expect(
+      matchesKeyboardEvent(
+        keyEvent("n", { metaKey: true, shiftKey: true }),
+        PULSE_HOTKEYS.newWindow,
+        "mac",
+      ),
+    ).toBe(true);
+    expect(
+      matchesKeyboardEvent(
+        keyEvent("o", { ctrlKey: true, shiftKey: true }),
+        PULSE_HOTKEYS.overviewWindow,
+        "windows",
+      ),
+    ).toBe(true);
   });
 
   it("ignores unmodified and alt combinations", () => {
-    expect(matchWorkspaceHotkey(keyEvent("t"))).toBeNull();
-    expect(matchWorkspaceHotkey(keyEvent("t", { metaKey: true, altKey: true }))).toBeNull();
+    expect(matchesKeyboardEvent(keyEvent("t"), PULSE_HOTKEYS.newTab, "mac")).toBe(false);
+    expect(
+      matchesKeyboardEvent(
+        keyEvent("t", { metaKey: true, altKey: true }),
+        PULSE_HOTKEYS.newTab,
+        "mac",
+      ),
+    ).toBe(false);
   });
 
   it("builds focus selectors", () => {
@@ -47,25 +75,12 @@ describe("workspace hotkeys", () => {
 });
 
 describe("mod shortcut labels", () => {
-  it("detects Apple platforms from platform or UA", () => {
-    expect(isAppleModPlatform({ platform: "MacIntel" })).toBe(true);
-    expect(isAppleModPlatform({ userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)" })).toBe(
-      true,
-    );
-    expect(isAppleModPlatform({ platform: "Win32" })).toBe(false);
-    expect(isAppleModPlatform({ platform: "Linux x86_64" })).toBe(false);
-    expect(isAppleModPlatform(null)).toBe(false);
-    expect(isAppleModPlatform({})).toBe(false);
-  });
-
-  it("formats ⌘ on Apple and Ctrl+ on Win/Linux", () => {
-    expect(formatModShortcut("B", { apple: true })).toBe("⌘B");
-    expect(formatModShortcut("B", { apple: false })).toBe("Ctrl+B");
-    expect(formatModShortcut("↵", { apple: true })).toBe("⌘↵");
-    expect(formatModShortcut("↵", { apple: false })).toBe("Ctrl+Enter");
-    expect(formatModShortcut("Enter", { apple: true })).toBe("⌘Enter");
-    expect(formatModShortcut("Enter", { apple: false })).toBe("Ctrl+Enter");
-    expect(formatModShortcut("N", { shift: true, apple: true })).toBe("⌘⇧N");
-    expect(formatModShortcut("N", { shift: true, apple: false })).toBe("Ctrl+Shift+N");
+  it("formats ⌘ on Apple and Ctrl+ on Win/Linux via formatForDisplay", () => {
+    expect(formatModShortcut(PULSE_HOTKEYS.toggleExplorer, { platform: "mac" })).toBe("⌘B");
+    expect(formatModShortcut(PULSE_HOTKEYS.toggleExplorer, { platform: "windows" })).toBe("Ctrl+B");
+    expect(formatModShortcut(PULSE_HOTKEYS.send, { platform: "mac" })).toBe("⌘↵");
+    expect(formatModShortcut(PULSE_HOTKEYS.send, { platform: "windows" })).toBe("Ctrl+Enter");
+    expect(formatModShortcut(PULSE_HOTKEYS.newWindow, { platform: "mac" })).toBe("⌘⇧N");
+    expect(formatModShortcut(PULSE_HOTKEYS.newWindow, { platform: "windows" })).toBe("Ctrl+Shift+N");
   });
 });

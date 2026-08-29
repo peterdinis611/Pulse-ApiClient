@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { BookmarkPlus, Copy, Download, Send } from "lucide-react";
 import { useApp } from "@/machines";
 import { downloadBytes } from "@/lib/download";
-import { formatModShortcut } from "@/lib/hotkeys";
+import { formatModShortcut, PULSE_HOTKEYS } from "@/lib/hotkeys";
 import { formatBytes } from "@/lib/helpers";
 import { toast } from "@/lib/toast";
 import { parseGraphqlResponse } from "@/lib/graphql";
@@ -244,7 +244,7 @@ export function ResponsePanel() {
             <EmptyState
               icon={Send}
               title="Waiting for a response"
-              description={`Send with the button or press ${formatModShortcut("Enter")}. The body, headers, and tests will land here.`}
+              description={`Send with the button or press ${formatModShortcut(PULSE_HOTKEYS.send)}. The body, headers, and tests will land here.`}
             />
           )}
 
