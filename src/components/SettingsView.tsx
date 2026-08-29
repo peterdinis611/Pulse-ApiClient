@@ -944,6 +944,9 @@ export function SettingsView() {
               <li className="flex items-center justify-between gap-3">
                 Toggle explorer <kbd className="ui-kbd">{formatModShortcut("B")}</kbd>
               </li>
+              <li className="flex items-center justify-between gap-3">
+                Toggle console <kbd className="ui-kbd">{formatModShortcut("J")}</kbd>
+              </li>
             </ul>
           </div>
         </SettingsSection>

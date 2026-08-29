@@ -59,7 +59,7 @@ export function StatusBar() {
 
   return (
     <footer className="view-header flex h-8 shrink-0 items-center justify-between px-3 text-[11px] text-topbar-muted">
-      <div className="flex min-w-0 items-center gap-2">
+      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
         {pendingRequestCount > 0 && (
           <span className="status-chip status-chip--active">
             <LoaderCircle className="size-3 animate-spin" />
@@ -133,6 +133,8 @@ export function StatusBar() {
             "status-chip hover:text-topbar-foreground",
             consoleOpen && "status-chip--active",
           )}
+          aria-pressed={consoleOpen}
+          title={consoleOpen ? "Hide console" : "Show console"}
           onClick={() => setConsoleOpen(!consoleOpen)}
         >
           <TerminalSquare className="size-3" />
@@ -154,6 +156,18 @@ export function StatusBar() {
           }
         >
           <Trash2 className="size-3.5" />
+        </TooltipIconButton>
+        <TooltipIconButton
+          variant="ghost"
+          size="icon"
+          className={cn(
+            "size-7 rounded-lg text-topbar-muted hover:text-topbar-foreground",
+            consoleOpen && "bg-primary/10 text-primary",
+          )}
+          label={consoleOpen ? "Hide console" : "Show console"}
+          onClick={() => setConsoleOpen(!consoleOpen)}
+        >
+          <TerminalSquare className="size-3.5" />
         </TooltipIconButton>
         {mainView === "request" && (
           <TooltipIconButton

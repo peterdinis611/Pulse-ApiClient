@@ -39,6 +39,7 @@ export function ClientShell() {
   const {
     mainView,
     consoleOpen,
+    setConsoleOpen,
     tabs,
     activeTabId,
     toggleExplorerCollapsed,
@@ -57,6 +58,11 @@ export function ClientShell() {
 
       if (action === "toggle-explorer") {
         toggleExplorerCollapsed();
+        return;
+      }
+
+      if (action === "toggle-console") {
+        setConsoleOpen(!consoleOpen);
         return;
       }
 
@@ -103,9 +109,11 @@ export function ClientShell() {
   }, [
     activeTabId,
     closeTab,
+    consoleOpen,
     explorerCollapsed,
     mainView,
     newRequestTab,
+    setConsoleOpen,
     setMainView,
     toggleExplorerCollapsed,
   ]);

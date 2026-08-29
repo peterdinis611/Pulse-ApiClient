@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { LoaderCircle, Trash2 } from "lucide-react";
+import { LoaderCircle, Trash2, X } from "lucide-react";
 import { useApp } from "@/machines";
 import { runConsoleInput } from "@/lib/console-eval";
 import { useConsoleLog, type ConsoleEntryKind } from "@/hooks/useConsoleLog";
@@ -24,7 +24,7 @@ function entryClassName(kind: ConsoleEntryKind): string {
 }
 
 export function ConsolePanel() {
-  const { activeTabId, error, response, loading, testResults } = useApp();
+  const { activeTabId, error, response, loading, testResults, setConsoleOpen } = useApp();
   const { entries, clearConsole, logInput, logOutput } = useConsoleLog({
     tabId: activeTabId,
     loading,
@@ -76,19 +76,40 @@ export function ConsolePanel() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col bg-console">
+    <div
+      className="flex h-full min-h-0 flex-1 flex-col bg-console"
+      data-pulse-console=""
+      tabIndex={-1}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        event.stopPropagation();
+        setConsoleOpen(false);
+      }}
+    >
       <div className="flex items-center justify-between border-b border-console-muted/20 px-4 py-2">
         <p className="text-caption normal-case tracking-normal text-console-muted">Console</p>
-        <TooltipIconButton
-          size="icon"
-          variant="ghost"
-          className="size-7 text-console-muted hover:text-console-foreground"
-          label="Clear console"
-          onClick={clearConsole}
-          disabled={entries.length === 0}
-        >
-          <Trash2 className="size-3.5" />
-        </TooltipIconButton>
+        <div className="flex items-center gap-0.5">
+          <TooltipIconButton
+            size="icon"
+            variant="ghost"
+            className="size-7 text-console-muted hover:text-console-foreground"
+            label="Clear console"
+            onClick={clearConsole}
+            disabled={entries.length === 0}
+          >
+            <Trash2 className="size-3.5" />
+          </TooltipIconButton>
+          <TooltipIconButton
+            size="icon"
+            variant="ghost"
+            className="size-7 text-console-muted hover:text-console-foreground"
+            label="Close console"
+            onClick={() => setConsoleOpen(false)}
+          >
+            <X className="size-3.5" />
+          </TooltipIconButton>
+        </div>
       </div>
 
       <ScrollAreaWithTop className="min-h-0 flex-1" showTopButton={entries.length > 8}>

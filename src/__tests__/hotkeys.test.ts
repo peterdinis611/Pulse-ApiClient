@@ -26,6 +26,7 @@ describe("workspace hotkeys", () => {
     expect(matchWorkspaceHotkey(keyEvent("l", { metaKey: true }))).toBe("focus-url");
     expect(matchWorkspaceHotkey(keyEvent("f", { metaKey: true }))).toBe("focus-search");
     expect(matchWorkspaceHotkey(keyEvent("b", { metaKey: true }))).toBe("toggle-explorer");
+    expect(matchWorkspaceHotkey(keyEvent("j", { ctrlKey: true }))).toBe("toggle-console");
   });
 
   it("matches shifted window shortcuts", () => {

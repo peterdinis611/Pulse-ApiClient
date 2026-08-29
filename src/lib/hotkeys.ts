@@ -8,6 +8,7 @@ export type PulseFocusTarget = (typeof PULSE_FOCUS)[keyof typeof PULSE_FOCUS];
 
 export type WorkspaceHotkey =
   | "toggle-explorer"
+  | "toggle-console"
   | "new-window"
   | "overview-window"
   | "new-tab"
@@ -90,6 +91,7 @@ export function matchWorkspaceHotkey(event: KeyboardEvent): WorkspaceHotkey | nu
   }
 
   if (key === "b") return "toggle-explorer";
+  if (key === "j") return "toggle-console";
   if (key === "t") return "new-tab";
   if (key === "w") return "close-tab";
   if (key === "l") return "focus-url";

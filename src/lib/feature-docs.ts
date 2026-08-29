@@ -219,7 +219,8 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
     summary: "Bottom console for logs and quick pulse evaluations.",
     group: "Scripting",
     items: [
-      "Toggle from the status bar",
+      "Toggle from the status bar (chip or terminal icon)",
+      "Close with the X on the console header, Escape (when focused), or Cmd/Ctrl + J",
       "help — list commands",
       "status · text() · json() · headers · time · size",
       "Run pulse.test / pulse.expect against the last response",
@@ -349,6 +350,7 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
       "`Cmd/Ctrl + L` — focus URL",
       "`Cmd/Ctrl + F` — search explorer or Overview",
       "`Cmd/Ctrl + B` — toggle explorer",
+      "`Cmd/Ctrl + J` — toggle console",
       "`Cmd/Ctrl + Shift + N` — new window",
       "`Cmd/Ctrl + Shift + O` — overview window",
       "Cheat sheet also lives in Settings → Layout",

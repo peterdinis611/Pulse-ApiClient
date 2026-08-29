@@ -625,7 +625,11 @@ export const appMachine = setup({
           }),
         },
         SET_CONSOLE_OPEN: {
-          actions: assign({ consoleOpen: ({ event }) => event.open }),
+          actions: assign(({ context, event }) => {
+            const consoleOpen = event.open;
+            persistLastRequest({ ...context, consoleOpen });
+            return { consoleOpen };
+          }),
         },
         SET_RESPONSE_PANEL_OPEN: {
           actions: assign({ responsePanelOpen: ({ event }) => event.open }),

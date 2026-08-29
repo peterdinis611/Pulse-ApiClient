@@ -178,7 +178,8 @@ Assert on the last response with pulse.test scripts.
 
 Bottom console for logs and quick pulse evaluations.
 
-- Toggle from the status bar
+- Toggle from the status bar (chip or terminal icon)
+- Close with the X on the console header, Escape (when focused), or Cmd/Ctrl + J
 - help — list commands
 - status · text() · json() · headers · time · size
 - Run pulse.test / pulse.expect against the last response
@@ -294,6 +295,7 @@ Find requests quickly and stay on the keyboard.
 - `Cmd/Ctrl + L` — focus URL
 - `Cmd/Ctrl + F` — search explorer or Overview
 - `Cmd/Ctrl + B` — toggle explorer
+- `Cmd/Ctrl + J` — toggle console
 - `Cmd/Ctrl + Shift + N` — new window
 - `Cmd/Ctrl + Shift + O` — overview window
 - Cheat sheet also lives in Settings → Layout
