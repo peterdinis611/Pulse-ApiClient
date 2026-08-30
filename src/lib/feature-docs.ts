@@ -383,11 +383,28 @@ export const FEATURE_DOC_GROUPS: FeatureDocGroup[] = [
   "Productivity",
 ];
 
+export const FEATURE_DOC_GROUP_BLURBS: Record<FeatureDocGroup, string> = {
+  Workspace: "The request desk — URL, path params, auth, response, and extra windows.",
+  Scripting: "Pre-request scripts, tests, and the bottom console against the last response.",
+  Data: "Collections, environments, history, cookies, and the HTTP engine.",
+  Appearance: "Built-in themes and a custom CSS overlay that can restyle the chrome.",
+  Productivity: "Search, shortcuts, and what stays on this machine.",
+};
+
+const FUMADOCS_SCREENSHOTS: Partial<Record<string, { src: string; alt: string }>> = {
+  overview: { src: "/screenshots/overview.png", alt: "Pulse Overview — saved requests and history" },
+  requests: { src: "/screenshots/request.png", alt: "Pulse request workspace" },
+  auth: { src: "/screenshots/auth.png", alt: "Pulse sign-in" },
+  themes: { src: "/screenshots/settings.png", alt: "Pulse settings and themes" },
+};
+
 export function featureDocsMarkdown(): string {
   const lines: string[] = [
     "# Pulse feature guide",
     "",
     "In-app: open **Docs** from the left rail. Generated from `src/lib/feature-docs.ts`. Fumadocs site: `bun run docs:dev`.",
+    "",
+    "Same chapters as the public field manual — Workspace, Scripting, Data, Appearance, Productivity.",
     "",
   ];
 
@@ -459,41 +476,83 @@ export function featureDocsFumadocsFiles(): GeneratedDocFile[] {
   const cards = FEATURE_DOC_GROUPS.map((group) => {
     const first = FEATURE_DOC_SECTIONS.find((section) => section.group === group);
     if (!first) return "";
-    return `  <Card title="${group}" href="/docs/${groupSlug(group)}/${first.id}" />`;
+    const blurb = FEATURE_DOC_GROUP_BLURBS[group];
+    return `  <Card title="${group}" description=${yamlString(blurb)} href="/docs/${groupSlug(group)}" />`;
   }).join("\n");
+
+  const startHere = [
+    ["Send a request", "/docs/workspace/requests"],
+    ["Path parameters", "/docs/workspace/path-params"],
+    ["Environments", "/docs/data/environments"],
+    ["Keyboard shortcuts", "/docs/productivity/search"],
+  ]
+    .map(([title, href]) => `- [${title}](${href})`)
+    .join("\n");
 
   files.push({
     path: "index.mdx",
     contents: `---
-title: ${yamlString("Pulse feature guide")}
-description: ${yamlString("Local-first API client docs — same content as in-app Docs.")}
+title: ${yamlString("Field guide")}
+description: ${yamlString("Local-first desktop API client — the same pages as Docs in the app rail.")}
 ---
 
-Pulse is a desktop API client. This site is generated from \`src/lib/feature-docs.ts\`, the same source as **Docs** in the app rail and \`docs/FEATURES.md\`.
+Pulse lives on your machine. This manual is generated from \`src/lib/feature-docs.ts\` — the same source as **Docs** in the app and \`docs/FEATURES.md\`.
+
+![Pulse request workspace](/screenshots/request.png)
+
+## Chapters
 
 <Cards>
 ${cards}
 </Cards>
+
+## Start here
+
+${startHere}
 `,
   });
 
   for (const group of FEATURE_DOC_GROUPS) {
     const sections = FEATURE_DOC_SECTIONS.filter((section) => section.group === group);
     const folder = groupSlug(group);
+    const blurb = FEATURE_DOC_GROUP_BLURBS[group];
 
     files.push({
       path: `${folder}/meta.json`,
       contents: `${JSON.stringify(
         {
           title: group,
-          pages: sections.map((section) => section.id),
+          pages: ["index", ...sections.map((section) => section.id)],
         },
         null,
         2,
       )}\n`,
     });
 
+    const groupCards = sections
+      .map(
+        (section) =>
+          `  <Card title=${yamlString(section.title)} description=${yamlString(section.summary)} href="/docs/${folder}/${section.id}" />`,
+      )
+      .join("\n");
+
+    files.push({
+      path: `${folder}/index.mdx`,
+      contents: `---
+title: ${yamlString(group)}
+description: ${yamlString(blurb)}
+---
+
+${escapeMdx(blurb)}
+
+<Cards>
+${groupCards}
+</Cards>
+`,
+    });
+
     for (const section of sections) {
+      const shot = FUMADOCS_SCREENSHOTS[section.id];
       const lines: string[] = [
         "---",
         `title: ${yamlString(section.title)}`,
@@ -502,14 +561,16 @@ ${cards}
         "",
         escapeMdx(section.summary),
         "",
-        "## Capabilities",
-        "",
       ];
+      if (shot) {
+        lines.push(`![${shot.alt}](${shot.src})`, "");
+      }
+      lines.push("## In the product", "");
       for (const item of section.items) {
         lines.push(`- ${escapeMdx(item)}`);
       }
       if (section.howTo?.length) {
-        lines.push("", "## How to", "");
+        lines.push("", "## Walkthrough", "");
         section.howTo.forEach((step, index) => {
           lines.push(`${index + 1}. ${escapeMdx(step)}`);
         });

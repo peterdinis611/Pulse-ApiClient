@@ -942,3 +942,135 @@ html[data-theme="dark"] {
 [data-sonner-toast][data-type="info"] [data-icon] svg {
   color: var(--info) !important;
 }
+
+.docs-masthead {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklch, var(--border) 80%, transparent);
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--primary) 10%, transparent), transparent 42%),
+    var(--card);
+  padding: 1.35rem 1.25rem 1.2rem;
+}
+
+@media (min-width: 640px) {
+  .docs-masthead {
+    padding: 1.6rem 1.5rem 1.35rem;
+  }
+}
+
+.docs-masthead__kicker {
+  margin-bottom: 0.45rem;
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.docs-masthead__rule {
+  margin: 1rem 0 0.9rem;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    var(--primary),
+    color-mix(in oklch, var(--primary) 12%, transparent) 72%,
+    transparent
+  );
+}
+
+.docs-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid color-mix(in oklch, var(--border) 75%, transparent);
+  background: color-mix(in oklch, var(--background) 70%, transparent);
+  padding: 0.28rem 0.7rem;
+  font-size: 11px;
+  font-weight: 550;
+  color: var(--muted-foreground);
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.docs-chip:hover {
+  border-color: color-mix(in oklch, var(--primary) 35%, var(--border));
+  color: var(--foreground);
+}
+
+.docs-chip--on {
+  border-color: color-mix(in oklch, var(--primary) 40%, transparent);
+  background: color-mix(in oklch, var(--primary) 12%, transparent);
+  color: var(--primary);
+}
+
+.docs-article__lede {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9rem;
+}
+
+.docs-notes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.docs-notes li {
+  position: relative;
+  padding: 0.55rem 0 0.55rem 1rem;
+  border-bottom: 1px solid color-mix(in oklch, var(--border) 55%, transparent);
+  font-size: var(--text-body, 0.875rem);
+  line-height: 1.6;
+  color: color-mix(in oklch, var(--foreground) 90%, transparent);
+}
+
+.docs-notes li:last-child {
+  border-bottom: 0;
+}
+
+.docs-notes li::before {
+  content: "";
+  position: absolute;
+  top: 0.95rem;
+  left: 0;
+  width: 0.4rem;
+  height: 1px;
+  background: var(--primary);
+}
+
+.docs-walk {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.docs-walk li {
+  display: flex;
+  gap: 0.85rem;
+  padding: 0.65rem 0;
+}
+
+.docs-walk__n {
+  display: flex;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.1rem;
+  border: 1px solid color-mix(in oklch, var(--primary) 30%, transparent);
+  background: color-mix(in oklch, var(--primary) 10%, transparent);
+  font-size: 11px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--primary);
+}
+
+.docs-tip {
+  display: flex;
+  gap: 0.75rem;
+  border-left: 2px solid var(--primary);
+  background: color-mix(in oklch, var(--primary) 6%, transparent);
+  padding: 0.8rem 0.95rem;
+}
+

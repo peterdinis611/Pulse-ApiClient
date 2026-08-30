@@ -5,9 +5,10 @@ export function baseOptions(): BaseLayoutProps {
   return {
     nav: {
       title: (
-        <span className="flex items-baseline gap-2">
+        <span className="pulse-brand">
+          <span className="pulse-brand__mark" aria-hidden />
           <span className="font-semibold tracking-tight">{appName}</span>
-          <span className="text-xs font-medium text-fd-muted-foreground">docs</span>
+          <em>manual</em>
         </span>
       ),
     },
@@ -16,6 +17,10 @@ export function baseOptions(): BaseLayoutProps {
       {
         text: 'Guide',
         url: '/docs',
+      },
+      {
+        text: 'Requests',
+        url: '/docs/workspace/requests',
       },
     ],
   };

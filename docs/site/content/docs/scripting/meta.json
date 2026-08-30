@@ -1,6 +1,7 @@
 {
   "title": "Scripting",
   "pages": [
+    "index",
     "pre-request",
     "tests",
     "console"

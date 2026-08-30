@@ -1,14 +1,25 @@
 ---
-title: "Pulse feature guide"
-description: "Local-first API client docs — same content as in-app Docs."
+title: "Field guide"
+description: "Local-first desktop API client — the same pages as Docs in the app rail."
 ---
 
-Pulse is a desktop API client. This site is generated from `src/lib/feature-docs.ts`, the same source as **Docs** in the app rail and `docs/FEATURES.md`.
+Pulse lives on your machine. This manual is generated from `src/lib/feature-docs.ts` — the same source as **Docs** in the app and `docs/FEATURES.md`.
+
+![Pulse request workspace](/screenshots/request.png)
+
+## Chapters
 
 <Cards>
-  <Card title="Workspace" href="/docs/workspace/overview" />
-  <Card title="Scripting" href="/docs/scripting/pre-request" />
-  <Card title="Data" href="/docs/data/collections" />
-  <Card title="Appearance" href="/docs/appearance/themes" />
-  <Card title="Productivity" href="/docs/productivity/search" />
+  <Card title="Workspace" description="The request desk — URL, path params, auth, response, and extra windows." href="/docs/workspace" />
+  <Card title="Scripting" description="Pre-request scripts, tests, and the bottom console against the last response." href="/docs/scripting" />
+  <Card title="Data" description="Collections, environments, history, cookies, and the HTTP engine." href="/docs/data" />
+  <Card title="Appearance" description="Built-in themes and a custom CSS overlay that can restyle the chrome." href="/docs/appearance" />
+  <Card title="Productivity" description="Search, shortcuts, and what stays on this machine." href="/docs/productivity" />
 </Cards>
+
+## Start here
+
+- [Send a request](/docs/workspace/requests)
+- [Path parameters](/docs/workspace/path-params)
+- [Environments](/docs/data/environments)
+- [Keyboard shortcuts](/docs/productivity/search)

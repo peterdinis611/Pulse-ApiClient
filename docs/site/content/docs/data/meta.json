@@ -1,6 +1,7 @@
 {
   "title": "Data",
   "pages": [
+    "index",
     "collections",
     "environments",
     "history",

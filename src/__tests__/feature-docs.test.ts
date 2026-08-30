@@ -111,6 +111,8 @@ describe("feature-docs", () => {
     const paths = files.map((file) => file.path);
     expect(paths).toContain("index.mdx");
     expect(paths).toContain("meta.json");
+    expect(paths).toContain("workspace/index.mdx");
+    expect(paths).toContain("scripting/index.mdx");
     for (const section of FEATURE_DOC_SECTIONS) {
       expect(paths.some((path) => path.endsWith(`/${section.id}.mdx`))).toBe(true);
     }

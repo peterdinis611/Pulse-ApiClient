@@ -30,8 +30,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Panel, PanelBody, PanelHeader } from "@/components/ui/panel";
 import {
+  FEATURE_DOC_GROUP_BLURBS,
   FEATURE_DOC_GROUPS,
   FEATURE_DOC_SECTIONS,
+  type FeatureDocGroup,
   type FeatureDocSection,
 } from "@/lib/feature-docs";
 import { cn } from "@/lib/utils";
@@ -64,11 +66,18 @@ function DocInlineText({ text }: { text: string }) {
     <>
       {parts.map((part, index) => {
         if (!part) return null;
+        const isKbd = part.startsWith("Cmd/Ctrl");
         const isCode =
           (part.startsWith("`") && part.endsWith("`")) ||
           part.startsWith("{{") ||
-          part.startsWith("pulse.") ||
-          part.startsWith("Cmd/Ctrl");
+          part.startsWith("pulse.");
+        if (isKbd) {
+          return (
+            <kbd key={index} className="ui-kbd mx-0.5">
+              {part}
+            </kbd>
+          );
+        }
         if (!isCode) return <span key={index}>{part}</span>;
         const value = part.startsWith("`") ? part.slice(1, -1) : part;
         return (
@@ -91,12 +100,14 @@ function SectionIcon({ id, className }: { id: string; className?: string }) {
 
 export function DocsView() {
   const [query, setQuery] = useState("");
+  const [groupFilter, setGroupFilter] = useState<FeatureDocGroup | null>(null);
   const [activeId, setActiveId] = useState(FEATURE_DOC_SECTIONS[0]?.id ?? "");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return FEATURE_DOC_SECTIONS;
     return FEATURE_DOC_SECTIONS.filter((section) => {
+      if (groupFilter && section.group !== groupFilter) return false;
+      if (!q) return true;
       const haystack = [
         section.title,
         section.summary,
@@ -109,7 +120,7 @@ export function DocsView() {
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [query]);
+  }, [query, groupFilter]);
 
   useEffect(() => {
     if (filtered.length === 0) return;
@@ -133,51 +144,57 @@ export function DocsView() {
 
   return (
     <PageShell resetKey="docs" width="wide">
-      <div className="relative overflow-hidden rounded-xl border border-border/60 bg-gradient-to-br from-primary/12 via-card to-card px-5 py-5 shadow-sm sm:px-6">
-        <div className="pointer-events-none absolute -top-16 -right-10 size-44 rounded-full bg-primary/15 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-20 left-10 size-40 rounded-full bg-primary/10 blur-3xl" />
-        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div className="min-w-0 space-y-2">
-            <p className="text-caption text-primary">Feature guide</p>
-            <h2 className="text-heading">Everything Pulse can do</h2>
-            <p className="max-w-xl text-body text-muted-foreground">
-              Browse {FEATURE_DOC_SECTIONS.length} topics — requests, path params, inheritance,
-              variables, snippets, scripting, and more — or search to jump straight in.
+      <div className="docs-masthead">
+        <p className="docs-masthead__kicker">Field manual</p>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0 max-w-xl space-y-2">
+            <h2 className="text-heading">What Pulse can do</h2>
+            <p className="text-body text-muted-foreground">
+              {FEATURE_DOC_SECTIONS.length} topics across five desks — same pages as the public
+              guide. Search, or pick a chapter.
             </p>
           </div>
-          <div className="relative w-full sm:max-w-xs">
+          <div className="relative w-full lg:max-w-xs">
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search features…"
-              className="h-9 border-border/70 bg-background/80 pl-9 shadow-sm backdrop-blur"
+              placeholder="Search the manual…"
+              className="h-9 border-border/70 bg-background/80 pl-9 shadow-sm"
             />
           </div>
         </div>
-        <div className="relative mt-4 flex flex-wrap gap-2">
-          {FEATURE_DOC_GROUPS.map((group) => {
+        <div className="docs-masthead__rule" />
+        <div className="flex flex-wrap gap-2">
+          {FEATURE_DOC_GROUPS.map((group, index) => {
             const count = FEATURE_DOC_SECTIONS.filter((section) => section.group === group).length;
+            const selected = groupFilter === group;
             return (
-              <span
+              <button
                 key={group}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/55 px-2.5 py-1 text-[11px] font-medium text-muted-foreground backdrop-blur"
+                type="button"
+                onClick={() => setGroupFilter(selected ? null : group)}
+                title={FEATURE_DOC_GROUP_BLURBS[group]}
+                className={cn("docs-chip", selected && "docs-chip--on")}
               >
+                <span className="font-mono text-[10px] tracking-wider opacity-60">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
                 {group}
-                <span className="tabular-nums text-foreground/80">{count}</span>
-              </span>
+                <span className="tabular-nums opacity-70">{count}</span>
+              </button>
             );
           })}
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+      <div className="grid gap-4 lg:grid-cols-[252px_minmax(0,1fr)]">
         <Panel className="h-fit lg:sticky lg:top-0">
-          <PanelHeader label="Topics" title={`${filtered.length} shown`} />
+          <PanelHeader label="Chapters" title={`${filtered.length} shown`} />
           <PanelBody className="max-h-[min(70vh,640px)] space-y-4 overflow-auto p-2">
             {grouped.length === 0 && (
               <p className="px-2 py-6 text-center text-body text-muted-foreground">
-                No matching features.
+                Nothing matches that search.
               </p>
             )}
             {grouped.map(({ group, sections }) => (
@@ -211,8 +228,8 @@ export function DocsView() {
                             {section.title}
                           </span>
                           <span className="block truncate text-[11px] text-muted-foreground">
-                            {section.items.length} points
-                            {section.howTo?.length ? ` · ${section.howTo.length} steps` : ""}
+                            {section.items.length} notes
+                            {section.howTo?.length ? ` · ${section.howTo.length}-step walkthrough` : ""}
                           </span>
                         </span>
                       </button>
@@ -234,7 +251,7 @@ export function DocsView() {
         ) : (
           <Panel>
             <PanelBody className="py-16 text-center text-body text-muted-foreground">
-              Try a different search.
+              Try a different search or chapter.
             </PanelBody>
           </Panel>
         )}
@@ -286,61 +303,53 @@ function DocArticle({
           </div>
         }
       />
-      <PanelBody className="space-y-5 p-5 sm:p-6">
-        <div className="flex items-start gap-3">
-          <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary">
+      <PanelBody className="docs-article space-y-6 p-5 sm:p-7">
+        <header className="docs-article__lede">
+          <div className="flex size-12 shrink-0 items-center justify-center rounded-none bg-primary/12 text-primary">
             <SectionIcon id={section.id} className="size-5" />
           </div>
           <div className="min-w-0">
-            <h3 className="text-title">{section.title}</h3>
-            <p className="mt-1 text-body text-muted-foreground">{section.summary}</p>
+            <p className="text-caption">{section.group}</p>
+            <h3 className="text-title mt-0.5">{section.title}</h3>
+            <p className="mt-2 max-w-2xl text-body leading-relaxed text-muted-foreground">
+              {section.summary}
+            </p>
           </div>
-        </div>
+        </header>
 
-        <ol className="space-y-2">
-          {section.items.map((item, index) => (
-            <li
-              key={item}
-              className="flex gap-3 rounded-lg border border-border/50 bg-muted/20 px-3 py-2.5 transition-colors hover:border-border hover:bg-muted/35"
-            >
-              <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-background text-[11px] font-semibold tabular-nums text-muted-foreground shadow-sm">
-                {index + 1}
-              </span>
-              <p className="min-w-0 text-body leading-relaxed text-foreground/90">
+        <section className="space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            In the product
+          </p>
+          <ul className="docs-notes">
+            {section.items.map((item) => (
+              <li key={item}>
                 <DocInlineText text={item} />
-              </p>
-            </li>
-          ))}
-        </ol>
+              </li>
+            ))}
+          </ul>
+        </section>
 
         {section.howTo && section.howTo.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              How to
+          <section className="space-y-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              Walkthrough
             </p>
-            <ol className="space-y-2">
+            <ol className="docs-walk">
               {section.howTo.map((step, index) => (
-                <li
-                  key={step}
-                  className="flex gap-3 rounded-lg border border-primary/15 bg-primary/4 px-3 py-2.5"
-                >
-                  <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-primary/12 text-[11px] font-semibold tabular-nums text-primary">
-                    {index + 1}
-                  </span>
+                <li key={step}>
+                  <span className="docs-walk__n">{index + 1}</span>
                   <p className="min-w-0 text-body leading-relaxed text-foreground/90">
                     <DocInlineText text={step} />
                   </p>
                 </li>
               ))}
             </ol>
-          </div>
+          </section>
         )}
 
         {section.tips?.map((tip) => (
-          <div
-            key={tip}
-            className="flex gap-3 rounded-lg border border-primary/20 bg-primary/6 px-3.5 py-3"
-          >
+          <div key={tip} className="docs-tip">
             <Lightbulb className="mt-0.5 size-4 shrink-0 text-primary" />
             <p className="text-body leading-relaxed text-foreground/90">
               <DocInlineText text={tip} />
@@ -350,18 +359,8 @@ function DocArticle({
 
         {(prev || next) && (
           <div className="grid gap-2 border-t border-border/50 pt-4 sm:grid-cols-2">
-            <NavChip
-              label="Previous"
-              section={prev}
-              align="left"
-              onSelect={onSelect}
-            />
-            <NavChip
-              label="Next"
-              section={next}
-              align="right"
-              onSelect={onSelect}
-            />
+            <NavChip label="Previous" section={prev} align="left" onSelect={onSelect} />
+            <NavChip label="Next" section={next} align="right" onSelect={onSelect} />
           </div>
         )}
       </PanelBody>

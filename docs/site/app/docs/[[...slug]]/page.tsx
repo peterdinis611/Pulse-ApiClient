@@ -23,6 +23,7 @@ export default async function Page(props: PageProps<'/docs/[[...slug]]'>) {
 
   return (
     <DocsPage toc={page.data.toc} full={page.data.full}>
+      <p className="pulse-kicker mb-2">Field manual</p>
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription className="mb-0">{page.data.description}</DocsDescription>
       <div className="flex flex-row gap-2 items-center border-b pb-6">
@@ -32,7 +33,7 @@ export default async function Page(props: PageProps<'/docs/[[...slug]]'>) {
           githubUrl={`https://github.com/${gitConfig.user}/${gitConfig.repo}/blob/${gitConfig.branch}/docs/site/content/docs/${page.path}`}
         />
       </div>
-      <DocsBody>
+      <DocsBody className="docs-body">
         <MDX
           components={getMDXComponents({
             // this allows you to link to other pages with relative file paths

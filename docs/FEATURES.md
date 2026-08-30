@@ -2,6 +2,8 @@
 
 In-app: open **Docs** from the left rail. Generated from `src/lib/feature-docs.ts`. Fumadocs site: `bun run docs:dev`.
 
+Same chapters as the public field manual — Workspace, Scripting, Data, Appearance, Productivity.
+
 ## Workspace
 
 ### Overview
