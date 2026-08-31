@@ -64,18 +64,22 @@ html[data-theme="light"] {
   --success: oklch(0.5 0.13 155);
   --warning: oklch(0.66 0.13 55);
   --info: oklch(0.54 0.11 230);
-  --method-get: oklch(0.48 0.13 155);
-  --method-post: oklch(0.58 0.13 55);
-  --method-put: oklch(0.5 0.11 230);
-  --method-patch: oklch(0.52 0.09 200);
-  --method-delete: oklch(0.52 0.18 25);
-  --method-query: oklch(0.5 0.12 285);
-  --method-get-bg: oklch(0.48 0.13 155 / 0.11);
-  --method-post-bg: oklch(0.58 0.13 55 / 0.11);
-  --method-put-bg: oklch(0.5 0.11 230 / 0.11);
-  --method-patch-bg: oklch(0.52 0.09 200 / 0.11);
-  --method-delete-bg: oklch(0.52 0.18 25 / 0.11);
-  --method-query-bg: oklch(0.5 0.12 285 / 0.11);
+  --method-get: oklch(0.48 0.17 155);
+  --method-post: oklch(0.56 0.18 55);
+  --method-put: oklch(0.48 0.16 255);
+  --method-patch: oklch(0.5 0.16 310);
+  --method-delete: oklch(0.5 0.2 25);
+  --method-query: oklch(0.48 0.16 275);
+  --method-head: oklch(0.48 0.08 245);
+  --method-options: oklch(0.5 0.09 75);
+  --method-get-bg: oklch(0.48 0.17 155 / 0.14);
+  --method-post-bg: oklch(0.56 0.18 55 / 0.14);
+  --method-put-bg: oklch(0.48 0.16 255 / 0.14);
+  --method-patch-bg: oklch(0.5 0.16 310 / 0.14);
+  --method-delete-bg: oklch(0.5 0.2 25 / 0.14);
+  --method-query-bg: oklch(0.48 0.16 275 / 0.14);
+  --method-head-bg: oklch(0.48 0.08 245 / 0.14);
+  --method-options-bg: oklch(0.5 0.09 75 / 0.14);
   --workspace-gradient: linear-gradient(
     180deg,
     var(--surface-0) 0%,
@@ -142,18 +146,22 @@ html[data-theme="dark"] {
   --success: oklch(0.7 0.11 155);
   --warning: oklch(0.76 0.11 55);
   --info: oklch(0.66 0.09 230);
-  --method-get: oklch(0.72 0.11 155);
-  --method-post: oklch(0.76 0.11 55);
-  --method-put: oklch(0.7 0.09 230);
-  --method-patch: oklch(0.72 0.07 200);
-  --method-delete: oklch(0.66 0.15 25);
-  --method-query: oklch(0.74 0.1 285);
-  --method-get-bg: oklch(0.72 0.11 155 / 0.14);
-  --method-post-bg: oklch(0.76 0.11 55 / 0.14);
-  --method-put-bg: oklch(0.7 0.09 230 / 0.14);
-  --method-patch-bg: oklch(0.72 0.07 200 / 0.14);
-  --method-delete-bg: oklch(0.66 0.15 25 / 0.14);
-  --method-query-bg: oklch(0.74 0.1 285 / 0.14);
+  --method-get: oklch(0.74 0.15 155);
+  --method-post: oklch(0.78 0.15 55);
+  --method-put: oklch(0.74 0.14 255);
+  --method-patch: oklch(0.76 0.13 310);
+  --method-delete: oklch(0.7 0.18 25);
+  --method-query: oklch(0.76 0.14 275);
+  --method-head: oklch(0.74 0.07 245);
+  --method-options: oklch(0.76 0.08 75);
+  --method-get-bg: oklch(0.74 0.15 155 / 0.16);
+  --method-post-bg: oklch(0.78 0.15 55 / 0.16);
+  --method-put-bg: oklch(0.74 0.14 255 / 0.16);
+  --method-patch-bg: oklch(0.76 0.13 310 / 0.16);
+  --method-delete-bg: oklch(0.7 0.18 25 / 0.16);
+  --method-query-bg: oklch(0.76 0.14 275 / 0.16);
+  --method-head-bg: oklch(0.74 0.07 245 / 0.16);
+  --method-options-bg: oklch(0.76 0.08 75 / 0.16);
   --workspace-gradient: linear-gradient(
     180deg,
     var(--surface-0) 0%,
@@ -404,36 +412,48 @@ html[data-theme="dark"] {
   .text-method-patch { color: var(--method-patch); }
   .text-method-delete { color: var(--method-delete); }
   .text-method-query { color: var(--method-query); }
+  .text-method-head { color: var(--method-head); }
+  .text-method-options { color: var(--method-options); }
 
   .method-badge-get {
-    border: 1px solid color-mix(in oklch, var(--method-get) 25%, transparent);
+    border: 1px solid color-mix(in oklch, var(--method-get) 28%, transparent);
     background: var(--method-get-bg);
     color: var(--method-get);
   }
   .method-badge-post {
-    border: 1px solid color-mix(in oklch, var(--method-post) 25%, transparent);
+    border: 1px solid color-mix(in oklch, var(--method-post) 28%, transparent);
     background: var(--method-post-bg);
     color: var(--method-post);
   }
   .method-badge-put {
-    border: 1px solid color-mix(in oklch, var(--method-put) 25%, transparent);
+    border: 1px solid color-mix(in oklch, var(--method-put) 28%, transparent);
     background: var(--method-put-bg);
     color: var(--method-put);
   }
   .method-badge-patch {
-    border: 1px solid color-mix(in oklch, var(--method-patch) 25%, transparent);
+    border: 1px solid color-mix(in oklch, var(--method-patch) 28%, transparent);
     background: var(--method-patch-bg);
     color: var(--method-patch);
   }
   .method-badge-delete {
-    border: 1px solid color-mix(in oklch, var(--method-delete) 25%, transparent);
+    border: 1px solid color-mix(in oklch, var(--method-delete) 28%, transparent);
     background: var(--method-delete-bg);
     color: var(--method-delete);
   }
   .method-badge-query {
-    border: 1px solid color-mix(in oklch, var(--method-query) 25%, transparent);
+    border: 1px solid color-mix(in oklch, var(--method-query) 28%, transparent);
     background: var(--method-query-bg);
     color: var(--method-query);
+  }
+  .method-badge-head {
+    border: 1px solid color-mix(in oklch, var(--method-head) 28%, transparent);
+    background: var(--method-head-bg);
+    color: var(--method-head);
+  }
+  .method-badge-options {
+    border: 1px solid color-mix(in oklch, var(--method-options) 28%, transparent);
+    background: var(--method-options-bg);
+    color: var(--method-options);
   }
 
   .status-badge-success {
@@ -800,6 +820,124 @@ html[data-theme="dark"] {
       transform: none;
     }
   }
+}
+
+.method-select-trigger[data-method="GET"],
+.method-select-item[data-method="GET"] {
+  --method-current: var(--method-get);
+  --method-current-bg: var(--method-get-bg);
+}
+.method-select-trigger[data-method="POST"],
+.method-select-item[data-method="POST"] {
+  --method-current: var(--method-post);
+  --method-current-bg: var(--method-post-bg);
+}
+.method-select-trigger[data-method="PUT"],
+.method-select-item[data-method="PUT"] {
+  --method-current: var(--method-put);
+  --method-current-bg: var(--method-put-bg);
+}
+.method-select-trigger[data-method="PATCH"],
+.method-select-item[data-method="PATCH"] {
+  --method-current: var(--method-patch);
+  --method-current-bg: var(--method-patch-bg);
+}
+.method-select-trigger[data-method="DELETE"],
+.method-select-item[data-method="DELETE"] {
+  --method-current: var(--method-delete);
+  --method-current-bg: var(--method-delete-bg);
+}
+.method-select-trigger[data-method="HEAD"],
+.method-select-item[data-method="HEAD"] {
+  --method-current: var(--method-head);
+  --method-current-bg: var(--method-head-bg);
+}
+.method-select-trigger[data-method="OPTIONS"],
+.method-select-item[data-method="OPTIONS"] {
+  --method-current: var(--method-options);
+  --method-current-bg: var(--method-options-bg);
+}
+.method-select-trigger[data-method="QUERY"],
+.method-select-item[data-method="QUERY"] {
+  --method-current: var(--method-query);
+  --method-current-bg: var(--method-query-bg);
+}
+
+.method-select-trigger {
+  width: 7rem;
+  justify-content: flex-start;
+  gap: 0.42rem;
+  padding-inline: 0.7rem 0.4rem;
+  background: color-mix(in oklch, var(--method-current) 12%, var(--muted));
+  color: var(--method-current);
+  font-variant-numeric: tabular-nums;
+}
+
+.method-select-trigger:hover {
+  background: color-mix(in oklch, var(--method-current) 18%, var(--muted));
+}
+
+.method-select-pip {
+  width: 0.42rem;
+  height: 0.42rem;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--method-current, var(--muted-foreground));
+  box-shadow: 0 0 0 3px var(--method-current-bg, color-mix(in oklch, var(--muted-foreground) 16%, transparent));
+}
+
+.method-select-trigger svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  margin-left: auto;
+  color: var(--method-current);
+  opacity: 0.72;
+}
+
+.method-select-content {
+  min-width: 11.5rem;
+  overflow: hidden;
+  border-radius: 0.8rem;
+  border-color: color-mix(in oklch, var(--border) 70%, var(--foreground) 8%);
+  padding: 0;
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--foreground) 6%, transparent),
+    0 18px 40px -12px color-mix(in oklch, var(--foreground) 22%, transparent);
+}
+
+.method-select-content [data-radix-select-viewport] {
+  height: auto;
+  min-width: 11.5rem;
+  padding: 0.32rem;
+}
+
+.method-select-item {
+  height: 2.05rem;
+  gap: 0.5rem;
+  border-radius: 0.5rem;
+  padding-left: 0.55rem;
+  padding-right: 1.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--method-current);
+}
+
+.method-select-item:focus,
+.method-select-item[data-highlighted] {
+  background: var(--method-current-bg);
+  color: var(--method-current);
+}
+
+.method-select-item[data-state="checked"] {
+  background: var(--method-current-bg);
+}
+
+.method-select-item svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  color: var(--method-current);
 }
 
 @keyframes pulse-page-reveal {

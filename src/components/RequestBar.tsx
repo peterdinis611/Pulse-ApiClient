@@ -18,9 +18,8 @@ import { containsVariables } from "@/lib/env";
 import { prepareRequest } from "@/lib/http-client";
 import { CODE_SNIPPETS, requestToSnippet, type CodeSnippetId } from "@/lib/code-snippets";
 import { resolveRequestForSend } from "@/lib/resolve-request";
-import { methodTextClass } from "@/lib/method-colors";
+import { methodToneStyle } from "@/lib/method-colors";
 import { VariableField } from "@/components/VariableField";
-import { cn } from "@/lib/utils";
 import { HTTP_METHODS } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -138,16 +137,23 @@ export function RequestBar() {
               }
             >
               <SelectTrigger
-                className={cn(
-                  "h-9 w-24 shrink-0 rounded-none border-0 border-r bg-muted/30 font-mono text-xs font-bold shadow-none focus:ring-0",
-                  methodTextClass(request.method),
-                )}
+                data-method={request.method}
+                style={methodToneStyle(request.method)}
+                className="method-select-trigger h-9 shrink-0 rounded-none border-0 border-r font-mono text-xs font-bold shadow-none focus:ring-0"
               >
+                <span className="method-select-pip" aria-hidden />
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="method-select-content" align="start">
                 {HTTP_METHODS.map((method) => (
-                  <SelectItem key={method} value={method} className={methodTextClass(method)}>
+                  <SelectItem
+                    key={method}
+                    value={method}
+                    data-method={method}
+                    style={methodToneStyle(method)}
+                    leading={<span className="method-select-pip" aria-hidden />}
+                    className="method-select-item focus:bg-transparent focus:text-inherit"
+                  >
                     {method}
                   </SelectItem>
                 ))}

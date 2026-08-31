@@ -89,16 +89,18 @@
   --destructive-foreground: oklch(0.99 0 0);
 
   /* HTTP method colors */
-  --method-get: oklch(0.5 0.14 155);
-  --method-post: oklch(0.58 0.14 55);
-  --method-put: oklch(0.52 0.12 230);
-  --method-patch: oklch(0.54 0.1 200);
-  --method-delete: oklch(0.52 0.18 25);
-  --method-get-bg: oklch(0.5 0.14 155 / 0.12);
-  --method-post-bg: oklch(0.58 0.14 55 / 0.12);
-  --method-put-bg: oklch(0.52 0.12 230 / 0.12);
-  --method-patch-bg: oklch(0.54 0.1 200 / 0.12);
-  --method-delete-bg: oklch(0.52 0.18 25 / 0.12);
+  --method-get: oklch(0.5 0.16 155);
+  --method-post: oklch(0.56 0.16 55);
+  --method-put: oklch(0.5 0.15 255);
+  --method-patch: oklch(0.52 0.15 310);
+  --method-delete: oklch(0.5 0.2 25);
+  --method-query: oklch(0.5 0.15 275);
+  --method-get-bg: oklch(0.5 0.16 155 / 0.12);
+  --method-post-bg: oklch(0.56 0.16 55 / 0.12);
+  --method-put-bg: oklch(0.5 0.15 255 / 0.12);
+  --method-patch-bg: oklch(0.52 0.15 310 / 0.12);
+  --method-delete-bg: oklch(0.5 0.2 25 / 0.12);
+  --method-query-bg: oklch(0.5 0.15 275 / 0.12);
 
   /* Shape, type & elevation */
   --radius: 0.75rem;

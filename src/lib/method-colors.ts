@@ -21,6 +21,10 @@ export function methodTextClass(method: HttpMethod | string): string {
       return "text-method-delete";
     case "QUERY":
       return "text-method-query";
+    case "HEAD":
+      return "text-method-head";
+    case "OPTIONS":
+      return "text-method-options";
     default:
       return "text-muted-foreground";
   }
@@ -40,9 +44,21 @@ export function methodBadgeClass(method: HttpMethod | string): string {
       return "method-badge-delete";
     case "QUERY":
       return "method-badge-query";
+    case "HEAD":
+      return "method-badge-head";
+    case "OPTIONS":
+      return "method-badge-options";
     default:
       return "border-border bg-muted text-muted-foreground";
   }
+}
+
+export function methodToneStyle(method: HttpMethod | string): Record<string, string> {
+  const key = method.toLowerCase();
+  return {
+    "--method-current": `var(--method-${key})`,
+    "--method-current-bg": `var(--method-${key}-bg)`,
+  };
 }
 
 export function statusBadgeClass(status: number): string {

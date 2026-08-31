@@ -48,13 +48,13 @@ html[data-theme="ocean"] {
   --info: oklch(0.52 0.11 205);
   --method-get: oklch(0.48 0.13 155);
   --method-post: oklch(0.58 0.13 55);
-  --method-put: oklch(0.5 0.11 205);
-  --method-patch: oklch(0.52 0.09 200);
+  --method-put: oklch(0.5 0.11 255);
+  --method-patch: oklch(0.52 0.09 310);
   --method-delete: oklch(0.52 0.18 25);
   --method-get-bg: oklch(0.48 0.13 155 / 0.11);
   --method-post-bg: oklch(0.58 0.13 55 / 0.11);
-  --method-put-bg: oklch(0.5 0.11 205 / 0.11);
-  --method-patch-bg: oklch(0.52 0.09 200 / 0.11);
+  --method-put-bg: oklch(0.5 0.11 255 / 0.11);
+  --method-patch-bg: oklch(0.52 0.09 310 / 0.11);
   --method-delete-bg: oklch(0.52 0.18 25 / 0.11);
   --workspace-gradient: var(--background);
 }
@@ -107,13 +107,13 @@ html[data-theme="forest"] {
   --info: oklch(0.5 0.1 200);
   --method-get: oklch(0.48 0.13 155);
   --method-post: oklch(0.58 0.13 55);
-  --method-put: oklch(0.5 0.1 200);
-  --method-patch: oklch(0.52 0.09 200);
+  --method-put: oklch(0.5 0.1 255);
+  --method-patch: oklch(0.52 0.09 310);
   --method-delete: oklch(0.52 0.18 25);
   --method-get-bg: oklch(0.48 0.13 155 / 0.11);
   --method-post-bg: oklch(0.58 0.13 55 / 0.11);
-  --method-put-bg: oklch(0.5 0.1 200 / 0.11);
-  --method-patch-bg: oklch(0.52 0.09 200 / 0.11);
+  --method-put-bg: oklch(0.5 0.1 255 / 0.11);
+  --method-patch-bg: oklch(0.52 0.09 310 / 0.11);
   --method-delete-bg: oklch(0.52 0.18 25 / 0.11);
   --workspace-gradient: var(--background);
 }
@@ -165,14 +165,14 @@ html[data-theme="sunset"] {
   --warning: oklch(0.66 0.13 55);
   --info: oklch(0.54 0.1 230);
   --method-get: oklch(0.48 0.13 155);
-  --method-post: oklch(0.58 0.14 45);
-  --method-put: oklch(0.5 0.11 230);
-  --method-patch: oklch(0.52 0.09 200);
+  --method-post: oklch(0.58 0.14 55);
+  --method-put: oklch(0.5 0.11 255);
+  --method-patch: oklch(0.52 0.09 310);
   --method-delete: oklch(0.52 0.18 25);
   --method-get-bg: oklch(0.48 0.13 155 / 0.11);
-  --method-post-bg: oklch(0.58 0.14 45 / 0.11);
-  --method-put-bg: oklch(0.5 0.11 230 / 0.11);
-  --method-patch-bg: oklch(0.52 0.09 200 / 0.11);
+  --method-post-bg: oklch(0.58 0.14 55 / 0.11);
+  --method-put-bg: oklch(0.5 0.11 255 / 0.11);
+  --method-patch-bg: oklch(0.52 0.09 310 / 0.11);
   --method-delete-bg: oklch(0.52 0.18 25 / 0.11);
   --workspace-gradient: var(--background);
 }
@@ -225,13 +225,13 @@ html[data-theme="rose"] {
   --info: oklch(0.54 0.1 230);
   --method-get: oklch(0.48 0.13 155);
   --method-post: oklch(0.58 0.13 55);
-  --method-put: oklch(0.5 0.11 230);
-  --method-patch: oklch(0.52 0.09 200);
+  --method-put: oklch(0.5 0.11 255);
+  --method-patch: oklch(0.52 0.09 310);
   --method-delete: oklch(0.52 0.18 25);
   --method-get-bg: oklch(0.48 0.13 155 / 0.11);
   --method-post-bg: oklch(0.58 0.13 55 / 0.11);
-  --method-put-bg: oklch(0.5 0.11 230 / 0.11);
-  --method-patch-bg: oklch(0.52 0.09 200 / 0.11);
+  --method-put-bg: oklch(0.5 0.11 255 / 0.11);
+  --method-patch-bg: oklch(0.52 0.09 310 / 0.11);
   --method-delete-bg: oklch(0.52 0.18 25 / 0.11);
   --workspace-gradient: var(--background);
 }
@@ -284,13 +284,13 @@ html[data-theme="sand"] {
   --info: oklch(0.54 0.1 230);
   --method-get: oklch(0.48 0.13 155);
   --method-post: oklch(0.58 0.13 55);
-  --method-put: oklch(0.5 0.11 230);
-  --method-patch: oklch(0.52 0.09 200);
+  --method-put: oklch(0.5 0.11 255);
+  --method-patch: oklch(0.52 0.09 310);
   --method-delete: oklch(0.52 0.18 25);
   --method-get-bg: oklch(0.48 0.13 155 / 0.11);
   --method-post-bg: oklch(0.58 0.13 55 / 0.11);
-  --method-put-bg: oklch(0.5 0.11 230 / 0.11);
-  --method-patch-bg: oklch(0.52 0.09 200 / 0.11);
+  --method-put-bg: oklch(0.5 0.11 255 / 0.11);
+  --method-patch-bg: oklch(0.52 0.09 310 / 0.11);
   --method-delete-bg: oklch(0.52 0.18 25 / 0.11);
   --workspace-gradient: var(--background);
 }
@@ -343,13 +343,13 @@ html[data-theme="lavender"] {
   --info: oklch(0.54 0.1 230);
   --method-get: oklch(0.48 0.13 155);
   --method-post: oklch(0.58 0.13 55);
-  --method-put: oklch(0.5 0.11 230);
-  --method-patch: oklch(0.52 0.09 200);
+  --method-put: oklch(0.5 0.11 255);
+  --method-patch: oklch(0.52 0.09 310);
   --method-delete: oklch(0.52 0.18 25);
   --method-get-bg: oklch(0.48 0.13 155 / 0.11);
   --method-post-bg: oklch(0.58 0.13 55 / 0.11);
-  --method-put-bg: oklch(0.5 0.11 230 / 0.11);
-  --method-patch-bg: oklch(0.52 0.09 200 / 0.11);
+  --method-put-bg: oklch(0.5 0.11 255 / 0.11);
+  --method-patch-bg: oklch(0.52 0.09 310 / 0.11);
   --method-delete-bg: oklch(0.52 0.18 25 / 0.11);
   --workspace-gradient: var(--background);
 }
@@ -402,13 +402,13 @@ html[data-theme="citrus"] {
   --info: oklch(0.54 0.1 230);
   --method-get: oklch(0.48 0.13 155);
   --method-post: oklch(0.58 0.13 55);
-  --method-put: oklch(0.5 0.11 230);
-  --method-patch: oklch(0.52 0.09 200);
+  --method-put: oklch(0.5 0.11 255);
+  --method-patch: oklch(0.52 0.09 310);
   --method-delete: oklch(0.52 0.18 25);
   --method-get-bg: oklch(0.48 0.13 155 / 0.11);
   --method-post-bg: oklch(0.58 0.13 55 / 0.11);
-  --method-put-bg: oklch(0.5 0.11 230 / 0.11);
-  --method-patch-bg: oklch(0.52 0.09 200 / 0.11);
+  --method-put-bg: oklch(0.5 0.11 255 / 0.11);
+  --method-patch-bg: oklch(0.52 0.09 310 / 0.11);
   --method-delete-bg: oklch(0.52 0.18 25 / 0.11);
   --workspace-gradient: var(--background);
 }
@@ -461,13 +461,13 @@ html[data-theme="nord"] {
   --info: oklch(0.52 0.08 235);
   --method-get: oklch(0.48 0.13 155);
   --method-post: oklch(0.58 0.13 55);
-  --method-put: oklch(0.5 0.08 235);
-  --method-patch: oklch(0.52 0.07 220);
+  --method-put: oklch(0.5 0.08 255);
+  --method-patch: oklch(0.52 0.07 310);
   --method-delete: oklch(0.52 0.18 25);
   --method-get-bg: oklch(0.48 0.13 155 / 0.11);
   --method-post-bg: oklch(0.58 0.13 55 / 0.11);
-  --method-put-bg: oklch(0.5 0.08 235 / 0.11);
-  --method-patch-bg: oklch(0.52 0.07 220 / 0.11);
+  --method-put-bg: oklch(0.5 0.08 255 / 0.11);
+  --method-patch-bg: oklch(0.52 0.07 310 / 0.11);
   --method-delete-bg: oklch(0.52 0.18 25 / 0.11);
   --workspace-gradient: var(--background);
 }
@@ -520,13 +520,13 @@ html[data-theme="paper"] {
   --info: oklch(0.48 0.06 230);
   --method-get: oklch(0.48 0.13 155);
   --method-post: oklch(0.58 0.13 55);
-  --method-put: oklch(0.48 0.06 230);
-  --method-patch: oklch(0.5 0.05 200);
+  --method-put: oklch(0.48 0.06 255);
+  --method-patch: oklch(0.5 0.05 310);
   --method-delete: oklch(0.52 0.18 25);
   --method-get-bg: oklch(0.48 0.13 155 / 0.11);
   --method-post-bg: oklch(0.58 0.13 55 / 0.11);
-  --method-put-bg: oklch(0.48 0.06 230 / 0.11);
-  --method-patch-bg: oklch(0.5 0.05 200 / 0.11);
+  --method-put-bg: oklch(0.48 0.06 255 / 0.11);
+  --method-patch-bg: oklch(0.5 0.05 310 / 0.11);
   --method-delete-bg: oklch(0.52 0.18 25 / 0.11);
   --workspace-gradient: var(--background);
 }
@@ -579,13 +579,13 @@ html[data-theme="sky"] {
   --info: oklch(0.55 0.14 240);
   --method-get: oklch(0.48 0.13 155);
   --method-post: oklch(0.58 0.13 55);
-  --method-put: oklch(0.55 0.14 240);
-  --method-patch: oklch(0.52 0.09 200);
+  --method-put: oklch(0.55 0.14 255);
+  --method-patch: oklch(0.52 0.09 310);
   --method-delete: oklch(0.52 0.18 25);
   --method-get-bg: oklch(0.48 0.13 155 / 0.11);
   --method-post-bg: oklch(0.58 0.13 55 / 0.11);
-  --method-put-bg: oklch(0.55 0.14 240 / 0.11);
-  --method-patch-bg: oklch(0.52 0.09 200 / 0.11);
+  --method-put-bg: oklch(0.55 0.14 255 / 0.11);
+  --method-patch-bg: oklch(0.52 0.09 310 / 0.11);
   --method-delete-bg: oklch(0.52 0.18 25 / 0.11);
   --workspace-gradient: var(--background);
 }
@@ -638,13 +638,13 @@ html[data-theme="blossom"] {
   --info: oklch(0.54 0.1 230);
   --method-get: oklch(0.48 0.13 155);
   --method-post: oklch(0.58 0.13 55);
-  --method-put: oklch(0.54 0.1 230);
-  --method-patch: oklch(0.52 0.09 200);
+  --method-put: oklch(0.54 0.1 255);
+  --method-patch: oklch(0.52 0.09 310);
   --method-delete: oklch(0.52 0.18 25);
   --method-get-bg: oklch(0.48 0.13 155 / 0.11);
   --method-post-bg: oklch(0.58 0.13 55 / 0.11);
-  --method-put-bg: oklch(0.54 0.1 230 / 0.11);
-  --method-patch-bg: oklch(0.52 0.09 200 / 0.11);
+  --method-put-bg: oklch(0.54 0.1 255 / 0.11);
+  --method-patch-bg: oklch(0.52 0.09 310 / 0.11);
   --method-delete-bg: oklch(0.52 0.18 25 / 0.11);
   --workspace-gradient: var(--background);
 }
@@ -699,13 +699,13 @@ html[data-theme="midnight"] {
   --info: oklch(0.66 0.09 230);
   --method-get: oklch(0.72 0.11 155);
   --method-post: oklch(0.76 0.11 55);
-  --method-put: oklch(0.7 0.09 230);
-  --method-patch: oklch(0.72 0.07 200);
+  --method-put: oklch(0.7 0.09 255);
+  --method-patch: oklch(0.72 0.07 310);
   --method-delete: oklch(0.66 0.15 25);
   --method-get-bg: oklch(0.72 0.11 155 / 0.14);
   --method-post-bg: oklch(0.76 0.11 55 / 0.14);
-  --method-put-bg: oklch(0.7 0.09 230 / 0.14);
-  --method-patch-bg: oklch(0.72 0.07 200 / 0.14);
+  --method-put-bg: oklch(0.7 0.09 255 / 0.14);
+  --method-patch-bg: oklch(0.72 0.07 310 / 0.14);
   --method-delete-bg: oklch(0.66 0.15 25 / 0.14);
   --workspace-gradient: var(--background);
 }
@@ -758,13 +758,13 @@ html[data-theme="graphite"] {
   --info: oklch(0.66 0.09 230);
   --method-get: oklch(0.72 0.11 155);
   --method-post: oklch(0.76 0.11 55);
-  --method-put: oklch(0.7 0.09 230);
-  --method-patch: oklch(0.72 0.07 200);
+  --method-put: oklch(0.7 0.09 255);
+  --method-patch: oklch(0.72 0.07 310);
   --method-delete: oklch(0.66 0.15 25);
   --method-get-bg: oklch(0.72 0.11 155 / 0.14);
   --method-post-bg: oklch(0.76 0.11 55 / 0.14);
-  --method-put-bg: oklch(0.7 0.09 230 / 0.14);
-  --method-patch-bg: oklch(0.72 0.07 200 / 0.14);
+  --method-put-bg: oklch(0.7 0.09 255 / 0.14);
+  --method-patch-bg: oklch(0.72 0.07 310 / 0.14);
   --method-delete-bg: oklch(0.66 0.15 25 / 0.14);
   --workspace-gradient: var(--background);
 }
@@ -817,13 +817,13 @@ html[data-theme="amethyst"] {
   --info: oklch(0.66 0.09 230);
   --method-get: oklch(0.72 0.11 155);
   --method-post: oklch(0.76 0.11 55);
-  --method-put: oklch(0.7 0.09 230);
-  --method-patch: oklch(0.72 0.07 200);
+  --method-put: oklch(0.7 0.09 255);
+  --method-patch: oklch(0.72 0.07 310);
   --method-delete: oklch(0.66 0.15 25);
   --method-get-bg: oklch(0.72 0.11 155 / 0.14);
   --method-post-bg: oklch(0.76 0.11 55 / 0.14);
-  --method-put-bg: oklch(0.7 0.09 230 / 0.14);
-  --method-patch-bg: oklch(0.72 0.07 200 / 0.14);
+  --method-put-bg: oklch(0.7 0.09 255 / 0.14);
+  --method-patch-bg: oklch(0.72 0.07 310 / 0.14);
   --method-delete-bg: oklch(0.66 0.15 25 / 0.14);
   --workspace-gradient: var(--background);
 }
@@ -876,13 +876,13 @@ html[data-theme="obsidian"] {
   --info: oklch(0.64 0.08 230);
   --method-get: oklch(0.7 0.1 155);
   --method-post: oklch(0.74 0.1 55);
-  --method-put: oklch(0.68 0.08 230);
-  --method-patch: oklch(0.7 0.06 200);
+  --method-put: oklch(0.68 0.08 255);
+  --method-patch: oklch(0.7 0.06 310);
   --method-delete: oklch(0.64 0.14 25);
   --method-get-bg: oklch(0.7 0.1 155 / 0.12);
   --method-post-bg: oklch(0.74 0.1 55 / 0.12);
-  --method-put-bg: oklch(0.68 0.08 230 / 0.12);
-  --method-patch-bg: oklch(0.7 0.06 200 / 0.12);
+  --method-put-bg: oklch(0.68 0.08 255 / 0.12);
+  --method-patch-bg: oklch(0.7 0.06 310 / 0.12);
   --method-delete-bg: oklch(0.64 0.14 25 / 0.12);
   --workspace-gradient: var(--background);
   --shadow-2xs: 0px 1px 2px 0px hsl(0 0% 0% / 0.35);
@@ -943,13 +943,13 @@ html[data-theme="ember"] {
   --info: oklch(0.66 0.09 230);
   --method-get: oklch(0.72 0.11 155);
   --method-post: oklch(0.76 0.12 55);
-  --method-put: oklch(0.7 0.09 230);
-  --method-patch: oklch(0.72 0.07 200);
+  --method-put: oklch(0.7 0.09 255);
+  --method-patch: oklch(0.72 0.07 310);
   --method-delete: oklch(0.66 0.15 25);
   --method-get-bg: oklch(0.72 0.11 155 / 0.14);
   --method-post-bg: oklch(0.76 0.12 55 / 0.14);
-  --method-put-bg: oklch(0.7 0.09 230 / 0.14);
-  --method-patch-bg: oklch(0.72 0.07 200 / 0.14);
+  --method-put-bg: oklch(0.7 0.09 255 / 0.14);
+  --method-patch-bg: oklch(0.72 0.07 310 / 0.14);
   --method-delete-bg: oklch(0.66 0.15 25 / 0.14);
   --workspace-gradient: var(--background);
 }
@@ -1002,13 +1002,13 @@ html[data-theme="slate"] {
   --info: oklch(0.66 0.09 230);
   --method-get: oklch(0.72 0.11 155);
   --method-post: oklch(0.76 0.11 55);
-  --method-put: oklch(0.7 0.09 230);
-  --method-patch: oklch(0.72 0.07 200);
+  --method-put: oklch(0.7 0.09 255);
+  --method-patch: oklch(0.72 0.07 310);
   --method-delete: oklch(0.66 0.15 25);
   --method-get-bg: oklch(0.72 0.11 155 / 0.14);
   --method-post-bg: oklch(0.76 0.11 55 / 0.14);
-  --method-put-bg: oklch(0.7 0.09 230 / 0.14);
-  --method-patch-bg: oklch(0.72 0.07 200 / 0.14);
+  --method-put-bg: oklch(0.7 0.09 255 / 0.14);
+  --method-patch-bg: oklch(0.72 0.07 310 / 0.14);
   --method-delete-bg: oklch(0.66 0.15 25 / 0.14);
   --workspace-gradient: var(--background);
 }
@@ -1061,13 +1061,13 @@ html[data-theme="aurora"] {
   --info: oklch(0.66 0.09 230);
   --method-get: oklch(0.72 0.11 155);
   --method-post: oklch(0.76 0.11 55);
-  --method-put: oklch(0.7 0.09 230);
-  --method-patch: oklch(0.72 0.07 200);
+  --method-put: oklch(0.7 0.09 255);
+  --method-patch: oklch(0.72 0.07 310);
   --method-delete: oklch(0.66 0.15 25);
   --method-get-bg: oklch(0.72 0.11 155 / 0.14);
   --method-post-bg: oklch(0.76 0.11 55 / 0.14);
-  --method-put-bg: oklch(0.7 0.09 230 / 0.14);
-  --method-patch-bg: oklch(0.72 0.07 200 / 0.14);
+  --method-put-bg: oklch(0.7 0.09 255 / 0.14);
+  --method-patch-bg: oklch(0.72 0.07 310 / 0.14);
   --method-delete-bg: oklch(0.66 0.15 25 / 0.14);
   --workspace-gradient: var(--background);
 }
@@ -1120,13 +1120,13 @@ html[data-theme="polar"] {
   --info: oklch(0.72 0.08 220);
   --method-get: oklch(0.72 0.11 155);
   --method-post: oklch(0.76 0.11 55);
-  --method-put: oklch(0.72 0.08 220);
-  --method-patch: oklch(0.72 0.07 200);
+  --method-put: oklch(0.72 0.08 255);
+  --method-patch: oklch(0.72 0.07 310);
   --method-delete: oklch(0.66 0.15 25);
   --method-get-bg: oklch(0.72 0.11 155 / 0.14);
   --method-post-bg: oklch(0.76 0.11 55 / 0.14);
-  --method-put-bg: oklch(0.72 0.08 220 / 0.14);
-  --method-patch-bg: oklch(0.72 0.07 200 / 0.14);
+  --method-put-bg: oklch(0.72 0.08 255 / 0.14);
+  --method-patch-bg: oklch(0.72 0.07 310 / 0.14);
   --method-delete-bg: oklch(0.66 0.15 25 / 0.14);
   --workspace-gradient: var(--background);
 }
@@ -1179,13 +1179,13 @@ html[data-theme="dracula"] {
   --info: oklch(0.68 0.12 195);
   --method-get: oklch(0.72 0.11 155);
   --method-post: oklch(0.76 0.11 55);
-  --method-put: oklch(0.68 0.12 195);
-  --method-patch: oklch(0.72 0.07 200);
+  --method-put: oklch(0.68 0.12 255);
+  --method-patch: oklch(0.72 0.07 310);
   --method-delete: oklch(0.66 0.15 25);
   --method-get-bg: oklch(0.72 0.11 155 / 0.14);
   --method-post-bg: oklch(0.76 0.11 55 / 0.14);
-  --method-put-bg: oklch(0.68 0.12 195 / 0.14);
-  --method-patch-bg: oklch(0.72 0.07 200 / 0.14);
+  --method-put-bg: oklch(0.68 0.12 255 / 0.14);
+  --method-patch-bg: oklch(0.72 0.07 310 / 0.14);
   --method-delete-bg: oklch(0.66 0.15 25 / 0.14);
   --workspace-gradient: var(--background);
 }
@@ -1238,13 +1238,13 @@ html[data-theme="coffee"] {
   --info: oklch(0.68 0.08 230);
   --method-get: oklch(0.72 0.11 155);
   --method-post: oklch(0.76 0.11 55);
-  --method-put: oklch(0.68 0.08 230);
-  --method-patch: oklch(0.72 0.07 200);
+  --method-put: oklch(0.68 0.08 255);
+  --method-patch: oklch(0.72 0.07 310);
   --method-delete: oklch(0.66 0.15 25);
   --method-get-bg: oklch(0.72 0.11 155 / 0.14);
   --method-post-bg: oklch(0.76 0.11 55 / 0.14);
-  --method-put-bg: oklch(0.68 0.08 230 / 0.14);
-  --method-patch-bg: oklch(0.72 0.07 200 / 0.14);
+  --method-put-bg: oklch(0.68 0.08 255 / 0.14);
+  --method-patch-bg: oklch(0.72 0.07 310 / 0.14);
   --method-delete-bg: oklch(0.66 0.15 25 / 0.14);
   --workspace-gradient: var(--background);
 }
@@ -1295,15 +1295,15 @@ html[data-theme="neon"] {
   --success: oklch(0.78 0.18 165);
   --warning: oklch(0.78 0.16 55);
   --info: oklch(0.72 0.16 195);
-  --method-get: oklch(0.78 0.18 165);
+  --method-get: oklch(0.78 0.18 155);
   --method-post: oklch(0.78 0.16 55);
-  --method-put: oklch(0.72 0.16 195);
-  --method-patch: oklch(0.72 0.12 230);
+  --method-put: oklch(0.72 0.16 255);
+  --method-patch: oklch(0.72 0.12 310);
   --method-delete: oklch(0.66 0.18 25);
-  --method-get-bg: oklch(0.78 0.18 165 / 0.14);
+  --method-get-bg: oklch(0.78 0.18 155 / 0.14);
   --method-post-bg: oklch(0.78 0.16 55 / 0.14);
-  --method-put-bg: oklch(0.72 0.16 195 / 0.14);
-  --method-patch-bg: oklch(0.72 0.12 230 / 0.14);
+  --method-put-bg: oklch(0.72 0.16 255 / 0.14);
+  --method-patch-bg: oklch(0.72 0.12 310 / 0.14);
   --method-delete-bg: oklch(0.66 0.18 25 / 0.14);
   --workspace-gradient: var(--background);
 }
@@ -1358,13 +1358,13 @@ html[data-theme="violet"] {
   --info: oklch(0.52 0.14 280);
   --method-get: oklch(0.48 0.13 155);
   --method-post: oklch(0.58 0.13 55);
-  --method-put: oklch(0.5 0.14 280);
-  --method-patch: oklch(0.52 0.12 295);
+  --method-put: oklch(0.5 0.14 255);
+  --method-patch: oklch(0.52 0.12 310);
   --method-delete: oklch(0.52 0.18 25);
   --method-get-bg: oklch(0.48 0.13 155 / 0.11);
   --method-post-bg: oklch(0.58 0.13 55 / 0.11);
-  --method-put-bg: oklch(0.5 0.14 280 / 0.11);
-  --method-patch-bg: oklch(0.52 0.12 295 / 0.11);
+  --method-put-bg: oklch(0.5 0.14 255 / 0.11);
+  --method-patch-bg: oklch(0.52 0.12 310 / 0.11);
   --method-delete-bg: oklch(0.52 0.18 25 / 0.11);
   --workspace-gradient: var(--background);
 }
@@ -1416,14 +1416,14 @@ html[data-theme="coral"] {
   --warning: oklch(0.68 0.14 55);
   --info: oklch(0.52 0.1 220);
   --method-get: oklch(0.48 0.13 155);
-  --method-post: oklch(0.62 0.15 45);
-  --method-put: oklch(0.5 0.1 220);
-  --method-patch: oklch(0.55 0.1 200);
+  --method-post: oklch(0.62 0.15 55);
+  --method-put: oklch(0.5 0.1 255);
+  --method-patch: oklch(0.55 0.1 310);
   --method-delete: oklch(0.52 0.18 25);
   --method-get-bg: oklch(0.48 0.13 155 / 0.11);
-  --method-post-bg: oklch(0.62 0.15 45 / 0.11);
-  --method-put-bg: oklch(0.5 0.1 220 / 0.11);
-  --method-patch-bg: oklch(0.55 0.1 200 / 0.11);
+  --method-post-bg: oklch(0.62 0.15 55 / 0.11);
+  --method-put-bg: oklch(0.5 0.1 255 / 0.11);
+  --method-patch-bg: oklch(0.55 0.1 310 / 0.11);
   --method-delete-bg: oklch(0.52 0.18 25 / 0.11);
   --workspace-gradient: var(--background);
 }
@@ -1475,14 +1475,14 @@ html[data-theme="honey"] {
   --warning: oklch(0.7 0.14 70);
   --info: oklch(0.52 0.1 220);
   --method-get: oklch(0.48 0.13 155);
-  --method-post: oklch(0.68 0.14 70);
-  --method-put: oklch(0.5 0.1 220);
-  --method-patch: oklch(0.55 0.1 200);
+  --method-post: oklch(0.68 0.14 55);
+  --method-put: oklch(0.5 0.1 255);
+  --method-patch: oklch(0.55 0.1 310);
   --method-delete: oklch(0.52 0.18 25);
   --method-get-bg: oklch(0.48 0.13 155 / 0.11);
-  --method-post-bg: oklch(0.68 0.14 70 / 0.11);
-  --method-put-bg: oklch(0.5 0.1 220 / 0.11);
-  --method-patch-bg: oklch(0.55 0.1 200 / 0.11);
+  --method-post-bg: oklch(0.68 0.14 55 / 0.11);
+  --method-put-bg: oklch(0.5 0.1 255 / 0.11);
+  --method-patch-bg: oklch(0.55 0.1 310 / 0.11);
   --method-delete-bg: oklch(0.52 0.18 25 / 0.11);
   --workspace-gradient: var(--background);
 }
@@ -1535,15 +1535,15 @@ html[data-theme="moss"] {
   --success: oklch(0.72 0.14 150);
   --warning: oklch(0.76 0.12 85);
   --info: oklch(0.68 0.08 200);
-  --method-get: oklch(0.72 0.14 150);
-  --method-post: oklch(0.76 0.12 85);
-  --method-put: oklch(0.68 0.08 200);
-  --method-patch: oklch(0.7 0.08 180);
+  --method-get: oklch(0.72 0.14 155);
+  --method-post: oklch(0.76 0.12 55);
+  --method-put: oklch(0.68 0.08 255);
+  --method-patch: oklch(0.7 0.08 310);
   --method-delete: oklch(0.66 0.15 25);
-  --method-get-bg: oklch(0.72 0.14 150 / 0.14);
-  --method-post-bg: oklch(0.76 0.12 85 / 0.14);
-  --method-put-bg: oklch(0.68 0.08 200 / 0.14);
-  --method-patch-bg: oklch(0.7 0.08 180 / 0.14);
+  --method-get-bg: oklch(0.72 0.14 155 / 0.14);
+  --method-post-bg: oklch(0.76 0.12 55 / 0.14);
+  --method-put-bg: oklch(0.68 0.08 255 / 0.14);
+  --method-patch-bg: oklch(0.7 0.08 310 / 0.14);
   --method-delete-bg: oklch(0.66 0.15 25 / 0.14);
   --workspace-gradient: var(--background);
 }
@@ -1596,14 +1596,14 @@ html[data-theme="crimson"] {
   --info: oklch(0.68 0.08 230);
   --method-get: oklch(0.7 0.12 155);
   --method-post: oklch(0.76 0.12 55);
-  --method-put: oklch(0.68 0.08 230);
-  --method-patch: oklch(0.7 0.08 200);
-  --method-delete: oklch(0.68 0.18 15);
+  --method-put: oklch(0.68 0.08 255);
+  --method-patch: oklch(0.7 0.08 310);
+  --method-delete: oklch(0.68 0.18 25);
   --method-get-bg: oklch(0.7 0.12 155 / 0.14);
   --method-post-bg: oklch(0.76 0.12 55 / 0.14);
-  --method-put-bg: oklch(0.68 0.08 230 / 0.14);
-  --method-patch-bg: oklch(0.7 0.08 200 / 0.14);
-  --method-delete-bg: oklch(0.68 0.18 15 / 0.14);
+  --method-put-bg: oklch(0.68 0.08 255 / 0.14);
+  --method-patch-bg: oklch(0.7 0.08 310 / 0.14);
+  --method-delete-bg: oklch(0.68 0.18 25 / 0.14);
   --workspace-gradient: var(--background);
 }
 
@@ -1654,14 +1654,14 @@ html[data-theme="copper"] {
   --warning: oklch(0.78 0.12 70);
   --info: oklch(0.68 0.08 230);
   --method-get: oklch(0.7 0.11 155);
-  --method-post: oklch(0.78 0.12 70);
-  --method-put: oklch(0.68 0.08 230);
-  --method-patch: oklch(0.72 0.08 200);
+  --method-post: oklch(0.78 0.12 55);
+  --method-put: oklch(0.68 0.08 255);
+  --method-patch: oklch(0.72 0.08 310);
   --method-delete: oklch(0.66 0.15 25);
   --method-get-bg: oklch(0.7 0.11 155 / 0.14);
-  --method-post-bg: oklch(0.78 0.12 70 / 0.14);
-  --method-put-bg: oklch(0.68 0.08 230 / 0.14);
-  --method-patch-bg: oklch(0.72 0.08 200 / 0.14);
+  --method-post-bg: oklch(0.78 0.12 55 / 0.14);
+  --method-put-bg: oklch(0.68 0.08 255 / 0.14);
+  --method-patch-bg: oklch(0.72 0.08 310 / 0.14);
   --method-delete-bg: oklch(0.66 0.15 25 / 0.14);
   --workspace-gradient: var(--background);
 }

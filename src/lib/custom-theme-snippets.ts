@@ -71,18 +71,22 @@ export const CUSTOM_CSS_SNIPPETS: CustomCssSnippet[] = [
     label: "Vivid methods",
     description: "HTTP method colors",
     css: `:root {
-  --method-get: oklch(0.5 0.16 155);
-  --method-post: oklch(0.58 0.16 55);
-  --method-put: oklch(0.52 0.14 230);
-  --method-patch: oklch(0.54 0.12 200);
-  --method-delete: oklch(0.52 0.2 25);
-  --method-query: oklch(0.52 0.14 285);
-  --method-get-bg: oklch(0.5 0.16 155 / 0.14);
-  --method-post-bg: oklch(0.58 0.16 55 / 0.14);
-  --method-put-bg: oklch(0.52 0.14 230 / 0.14);
-  --method-patch-bg: oklch(0.54 0.12 200 / 0.14);
-  --method-delete-bg: oklch(0.52 0.2 25 / 0.14);
-  --method-query-bg: oklch(0.52 0.14 285 / 0.14);
+  --method-get: oklch(0.5 0.17 155);
+  --method-post: oklch(0.56 0.18 55);
+  --method-put: oklch(0.5 0.16 255);
+  --method-patch: oklch(0.52 0.16 310);
+  --method-delete: oklch(0.5 0.2 25);
+  --method-query: oklch(0.5 0.16 275);
+  --method-head: oklch(0.5 0.05 240);
+  --method-options: oklch(0.5 0.05 80);
+  --method-get-bg: oklch(0.5 0.17 155 / 0.14);
+  --method-post-bg: oklch(0.56 0.18 55 / 0.14);
+  --method-put-bg: oklch(0.5 0.16 255 / 0.14);
+  --method-patch-bg: oklch(0.52 0.16 310 / 0.14);
+  --method-delete-bg: oklch(0.5 0.2 25 / 0.14);
+  --method-query-bg: oklch(0.5 0.16 275 / 0.14);
+  --method-head-bg: oklch(0.5 0.05 240 / 0.12);
+  --method-options-bg: oklch(0.5 0.05 80 / 0.12);
 }`,
   },
   {
