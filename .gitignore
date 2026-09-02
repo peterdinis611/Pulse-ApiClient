@@ -30,3 +30,6 @@ docs/site/.source
 .venv
 __pycache__/
 *.pyc
+
+# Rust / Cargo (src-tauri has its own /target/; this covers crates/*)
+target/

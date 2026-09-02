@@ -4,7 +4,7 @@
   "version": "0.7.0",
   "identifier": "com.peterdinis.api-client",
   "build": {
-    "beforeDevCommand": "bun run dev",
+    "beforeDevCommand": "bun scripts/ensure-pulse-cli.ts && bun run dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "bun run build",
     "frontendDist": "../dist"

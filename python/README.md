@@ -1,21 +1,27 @@
 # Pulse Python tooling
 
-Satellite tools around the Rust engine. They are **not** shipped inside the Tauri app.
+Satellite tools around the Rust engine. They are **not** shipped inside the Tauri app and do not run as a background process.
+
+`bun run tauri dev` prepares the CLI automatically (creates `.venv` and builds `pulse_native` if missing). Skip with `PULSE_SKIP_CLI=1`. Force a rebuild with `bun run pulse:cli:install`.
 
 ## CLI (PyO3)
 
-On macOS use `python3` — there is no `python` or `pip` command. Maturin also needs a virtualenv:
+On macOS use `python3` — there is no `python` or `pip` command.
+
+```bash
+bun run tauri dev
+bun run pulse:cli interpolate 'https://api.test/{{id}}' --env '{"id":"1"}'
+bun run pulse:cli test ./script.js ./response.json
+bun run pulse:cli run ./collection-run.json
+```
+
+Manual setup (same as the automatic hook):
 
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install maturin
 .venv/bin/python -m maturin develop --manifest-path crates/pulse-native/Cargo.toml
-.venv/bin/python python/pulse_cli.py interpolate 'https://api.test/{{id}}' --env '{"id":"1"}'
-.venv/bin/python python/pulse_cli.py test ./script.js ./response.json
-.venv/bin/python python/pulse_cli.py run ./collection-run.json
 ```
-
-Or from the repo root: `bun run pulse:cli:install` once, then `bun run pulse:cli interpolate 'https://api.test/{{id}}' --env '{"id":"1"}'`.
 
 `collection-run.json` matches the native `CollectionRunInput` shape (`collectionId`, `requests`, `environment`, `globals`, `dataRows`, …).
 

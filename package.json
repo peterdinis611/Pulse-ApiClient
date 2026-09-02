@@ -14,7 +14,7 @@
     "docs:dev": "bun scripts/sync-docs.ts && bun run --cwd docs/site dev",
     "docs:build": "bun scripts/sync-docs.ts && bun run --cwd docs/site build",
     "pulse:cli": ".venv/bin/python python/pulse_cli.py",
-    "pulse:cli:install": "python3 -m venv .venv && .venv/bin/python -m pip install maturin && .venv/bin/python -m maturin develop --manifest-path crates/pulse-native/Cargo.toml"
+    "pulse:cli:install": "bun scripts/ensure-pulse-cli.ts --require"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.23",
