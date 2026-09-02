@@ -27,7 +27,7 @@ jobs:
 
       - uses: swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: "."
 
       - name: Linux webkit/gtk (build + runtime)
         if: matrix.platform == 'ubuntu-latest'
@@ -48,8 +48,11 @@ jobs:
       - name: Unit tests (JS)
         run: bun run test
 
+      - name: Typecheck
+        run: bun run typecheck
+
       - name: Unit tests (Rust)
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+        run: cargo test --workspace --exclude pulse-native
         env:
           CARGO_TERM_COLOR: always
 

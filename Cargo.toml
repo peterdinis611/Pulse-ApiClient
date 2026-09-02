@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = ["src-tauri", "crates/pulse-core", "crates/pulse-native"]
+default-members = ["src-tauri", "crates/pulse-core"]
+
+[profile.dev]
+incremental = true
+debug = "line-tables-only"
+
+# Skip DWARF for crates.io deps — biggest macOS link-time win.
+[profile.dev.package."*"]
+debug = false
+
+[profile.release]
+strip = "debuginfo"

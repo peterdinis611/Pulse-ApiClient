@@ -82,7 +82,9 @@ File pickers (custom CSS, runner data files) go through the OS dialog and Rust `
 bun run tauri build
 ```
 
-CI (`.github/workflows/ci.yml`) runs `bun run test`, `cargo test`, and `tauri build` on `macos-latest`, `ubuntu-latest`, and `windows-latest`.
+Dev rebuilds share one Cargo `target/` (workspace). Skip fat debuginfo on dependencies. Production frontend skips `tsc` (`bun run typecheck` still runs in CI).
+
+CI (`.github/workflows/ci.yml`) runs `bun run test`, `bun run typecheck`, `cargo test`, and `tauri build` on `macos-latest`, `ubuntu-latest`, and `windows-latest`.
 
 ## Docs site (Fumadocs)
 
