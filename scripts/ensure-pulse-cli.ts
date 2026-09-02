@@ -20,7 +20,11 @@ function run(command: string, args: string[]) {
 }
 
 function canImportNative(python: string) {
-  return spawnSync(python, ["-c", "import pulse_native"], { cwd: root }).status === 0;
+  return (
+    spawnSync(python, ["-c", "import pulse_native; assert hasattr(pulse_native, 'send_once_json')"], {
+      cwd: root,
+    }).status === 0
+  );
 }
 
 function python3(): string | null {

@@ -3,6 +3,7 @@
   "pages": [
     "index",
     "search",
-    "data"
+    "data",
+    "python-cli"
   ]
 }

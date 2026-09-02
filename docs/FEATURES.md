@@ -314,3 +314,20 @@ Workspace data is local to your account on this device.
 - File pickers (custom CSS, runner data) are OS-agnostic — no hardcoded `~/Library` paths
 
 > Linux AppImage and .deb need webkit2gtk 4.1 at runtime, not only when compiling. Install `libwebkit2gtk-4.1-0` (Debian/Ubuntu) if the window fails to open.
+
+### Python CLI & CI
+
+Satellite around the Rust engine — collection runs, benches, OpenAPI/HAR import. Not inside the desktop app.
+
+- `bun run pulse:cli run collection.json` — Pulse export or CollectionRunInput, optional `.env` / CSV iterations
+- JUnit XML and a p50/p95 timing summary for GitHub Actions
+- `bench` repeats a collection and fails if p95 exceeds a budget or a previous baseline
+- OpenAPI import fills path params, query, JSON examples, tag folders, and a 2xx status test
+- HAR capture → Pulse collection; JSON Schema subset for response bodies
+- HTTP still goes through Rust (`pulse_native`); Python only prepares inputs and reports
+
+**How to**
+
+1. First `bun run tauri dev` (or `bun run pulse:cli:install`) builds the PyO3 module into `.venv`.
+2. Export a collection from Pulse, then `bun run pulse:cli run pets.json --env-file staging.env --summary --junit junit.xml`.
+3. Keep a `bench.json` from a good run and compare with `--baseline bench.json --factor 1.2`.

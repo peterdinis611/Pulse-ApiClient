@@ -1,6 +1,6 @@
 [package]
 name = "api-client"
-version = "0.7.0"
+version = "0.3.0"
 description = "Pulse — desktop API client"
 authors = ["you"]
 edition = "2021"

@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "collectionGroups": [
+    {
+      "id": "col_jsonplaceholder",
+      "name": "jsonplaceholder",
+      "source": "pulse",
+      "folders": []
+    }
+  ],
+  "collections": [
+    {
+      "id": "saved_get",
+      "name": "Get post 1",
+      "collectionId": "col_jsonplaceholder",
+      "request": {
+        "id": "req_get",
+        "name": "Get post 1",
+        "protocol": "http",
+        "method": "GET",
+        "url": "{{baseUrl}}/posts/1",
+        "headers": [{ "id": "kv_accept", "key": "Accept", "value": "application/json", "enabled": true }],
+        "query": [],
+        "pathParams": [],
+        "bodyKind": "none",
+        "body": "",
+        "form": [],
+        "multipart": [],
+        "auth": { "authType": "none" },
+        "tests": "pulse.test(\"status\", function () {\n    pulse.response.to.have.status(200);\n});\n",
+        "preRequestScript": ""
+      }
+    },
+    {
+      "id": "saved_id",
+      "name": "Get post by id",
+      "collectionId": "col_jsonplaceholder",
+      "request": {
+        "id": "req_id",
+        "name": "Get post by id",
+        "protocol": "http",
+        "method": "GET",
+        "url": "{{baseUrl}}/posts/{{id}}",
+        "headers": [],
+        "query": [],
+        "pathParams": [{ "id": "kv_id", "key": "id", "value": "{{id}}", "enabled": true }],
+        "bodyKind": "none",
+        "body": "",
+        "form": [],
+        "multipart": [],
+        "auth": { "authType": "none" },
+        "tests": "pulse.test(\"status\", function () {\n    pulse.response.to.have.status(200);\n});\n",
+        "preRequestScript": ""
+      }
+    }
+  ]
+}

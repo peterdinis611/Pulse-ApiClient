@@ -373,6 +373,25 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
       "Linux AppImage and .deb need webkit2gtk 4.1 at runtime, not only when compiling. Install `libwebkit2gtk-4.1-0` (Debian/Ubuntu) if the window fails to open.",
     ],
   },
+  {
+    id: "python-cli",
+    title: "Python CLI & CI",
+    summary: "Satellite around the Rust engine — collection runs, benches, OpenAPI/HAR import. Not inside the desktop app.",
+    group: "Productivity",
+    items: [
+      "`bun run pulse:cli run collection.json` — Pulse export or CollectionRunInput, optional `.env` / CSV iterations",
+      "JUnit XML and a p50/p95 timing summary for GitHub Actions",
+      "`bench` repeats a collection and fails if p95 exceeds a budget or a previous baseline",
+      "OpenAPI import fills path params, query, JSON examples, tag folders, and a 2xx status test",
+      "HAR capture → Pulse collection; JSON Schema subset for response bodies",
+      "HTTP still goes through Rust (`pulse_native`); Python only prepares inputs and reports",
+    ],
+    howTo: [
+      "First `bun run tauri dev` (or `bun run pulse:cli:install`) builds the PyO3 module into `.venv`.",
+      "Export a collection from Pulse, then `bun run pulse:cli run pets.json --env-file staging.env --summary --junit junit.xml`.",
+      "Keep a `bench.json` from a good run and compare with `--baseline bench.json --factor 1.2`.",
+    ],
+  },
 ];
 
 export const FEATURE_DOC_GROUPS: FeatureDocGroup[] = [
@@ -388,7 +407,7 @@ export const FEATURE_DOC_GROUP_BLURBS: Record<FeatureDocGroup, string> = {
   Scripting: "Pre-request scripts, tests, and the bottom console against the last response.",
   Data: "Collections, environments, history, cookies, and the HTTP engine.",
   Appearance: "Built-in themes and a custom CSS overlay that can restyle the chrome.",
-  Productivity: "Search, shortcuts, and what stays on this machine.",
+  Productivity: "Search, shortcuts, the Python CI satellite, and what stays on this machine.",
 };
 
 const FUMADOCS_SCREENSHOTS: Partial<Record<string, { src: string; alt: string }>> = {

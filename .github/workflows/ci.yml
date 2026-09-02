@@ -56,6 +56,9 @@ jobs:
         env:
           CARGO_TERM_COLOR: always
 
+      - name: Unit tests (Python satellite)
+        run: python3 -m unittest discover -s python/tests -p "test_*.py"
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

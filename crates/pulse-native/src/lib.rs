@@ -3,7 +3,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyModule;
 use pulse_core::{
     run_collection, run_http_tests, run_pre_request_script_with_env, substitute_variables, CollectionRunInput,
-    HttpResponsePayload,
+    HttpRequestPayload, HttpResponsePayload,
 };
 use pulse_core::simple_http::send_once;
 use pulse_core::types::EnvVariable;
@@ -69,11 +69,20 @@ fn run_collection_json(input_json: String) -> PyResult<String> {
     serde_json::to_string(&result).map_err(py_err)
 }
 
+#[pyfunction]
+fn send_once_json(payload_json: String) -> PyResult<String> {
+    let payload: HttpRequestPayload = serde_json::from_str(&payload_json).map_err(py_err)?;
+    let runtime = tokio::runtime::Runtime::new().map_err(py_err)?;
+    let response = runtime.block_on(send_once(payload)).map_err(py_err)?;
+    serde_json::to_string(&response).map_err(py_err)
+}
+
 #[pymodule]
 fn pulse_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(interpolate, m)?)?;
     m.add_function(wrap_pyfunction!(run_tests, m)?)?;
     m.add_function(wrap_pyfunction!(run_pre_request, m)?)?;
     m.add_function(wrap_pyfunction!(run_collection_json, m)?)?;
+    m.add_function(wrap_pyfunction!(send_once_json, m)?)?;
     Ok(())
 }

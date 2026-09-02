@@ -27,6 +27,7 @@ describe("feature-docs", () => {
         "console",
         "search",
         "data",
+        "python-cli",
       ]),
     );
     expect(FEATURE_DOC_SECTIONS.every((section) => section.items.length > 0)).toBe(true);

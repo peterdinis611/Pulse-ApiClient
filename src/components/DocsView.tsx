@@ -23,6 +23,7 @@ import {
   Send,
   Sparkles,
   Terminal,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
@@ -58,6 +59,7 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
   themes: Palette,
   search: Keyboard,
   data: Database,
+  "python-cli": Zap,
 };
 
 function DocInlineText({ text }: { text: string }) {

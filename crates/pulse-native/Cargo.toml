@@ -1,6 +1,6 @@
 [package]
 name = "pulse-native"
-version = "0.7.0"
+version = "0.3.0"
 edition = "2021"
 description = "PyO3 bindings for the Pulse engine"
 

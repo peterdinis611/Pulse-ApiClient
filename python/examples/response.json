@@ -1,0 +1,11 @@
+{
+  "status": 200,
+  "statusText": "OK",
+  "headers": [{ "key": "content-type", "value": "application/json" }],
+  "body": "{\"ok\":true}",
+  "bodyEncoding": "utf8",
+  "elapsedMs": 12,
+  "sizeBytes": 11,
+  "contentType": "application/json",
+  "fromCache": false
+}
