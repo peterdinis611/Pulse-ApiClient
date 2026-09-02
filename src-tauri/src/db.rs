@@ -198,26 +198,12 @@ impl DbState {
 
     pub fn load_workspace(&self) -> Result<Option<String>, String> {
         let conn = self.user_conn.lock().map_err(|e| e.to_string())?;
-        let mut stmt = conn
-            .prepare("SELECT payload FROM workspace WHERE id = 1")
-            .map_err(|e| e.to_string())?;
-        let mut rows = stmt.query([]).map_err(|e| e.to_string())?;
-        if let Some(row) = rows.next().map_err(|e| e.to_string())? {
-            return Ok(Some(row.get(0).map_err(|e| e.to_string())?));
-        }
-        Ok(None)
+        crate::workspace_store::load_normalized_workspace(&conn)
     }
 
     pub fn save_workspace(&self, payload: &str) -> Result<(), String> {
         let conn = self.user_conn.lock().map_err(|e| e.to_string())?;
-        let updated_at = chrono_now();
-        conn.execute(
-            "INSERT INTO workspace (id, payload, updated_at) VALUES (1, ?1, ?2)
-             ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at",
-            params![payload, updated_at],
-        )
-        .map_err(|e| e.to_string())?;
-        Ok(())
+        crate::workspace_store::save_normalized_workspace(&conn, payload, &chrono_now())
     }
 
     pub fn register_account(
@@ -502,6 +488,7 @@ fn run_user_migration(conn: &Connection) -> Result<(), String> {
         ",
     )
     .map_err(|e| e.to_string())?;
+    crate::workspace_store::migrate_workspace_tables(conn)?;
     Ok(())
 }
 

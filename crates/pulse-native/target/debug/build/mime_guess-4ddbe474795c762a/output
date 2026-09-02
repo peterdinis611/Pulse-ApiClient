@@ -1,0 +1,1 @@
+cargo:rustc-env=MIME_TYPES_GENERATED_PATH=/Users/peterdinis/Desktop/work/api-client/crates/pulse-native/target/debug/build/mime_guess-4ddbe474795c762a/out/mime_types_generated.rs

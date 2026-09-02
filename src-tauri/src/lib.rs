@@ -3,6 +3,7 @@
 mod http_integration;
 
 pub mod cache;
+pub mod collection_run;
 pub mod cookies;
 pub mod custom_theme;
 pub mod db;
@@ -18,6 +19,7 @@ pub mod state;
 pub mod test_runner;
 pub mod websocket;
 pub mod windows;
+pub mod workspace_store;
 pub mod ws_state;
 
 use cache::CacheConfig;
@@ -30,6 +32,7 @@ use settings::AppSettings;
 use state::HttpState;
 use std::sync::Arc;
 use test_runner::{PreRequestResult, TestRunResult};
+use pulse_core::CollectionRunInput;
 use tauri::{AppHandle, Manager, State};
 use websocket::WsConnectResult;
 use windows::{AppWindowInfo, PendingWindowInit};
@@ -150,6 +153,15 @@ fn run_http_tests(
 #[tauri::command]
 fn run_pre_request_script(script: String) -> Result<PreRequestResult, String> {
     Ok(test_runner::run_pre_request_script(&script))
+}
+
+#[tauri::command]
+async fn run_collection(
+    app: AppHandle,
+    state: State<'_, HttpState>,
+    input: CollectionRunInput,
+) -> Result<pulse_core::CollectionRunResult, String> {
+    Ok(collection_run::run_native_collection(&app, state.inner(), input).await)
 }
 
 #[tauri::command]
@@ -437,6 +449,7 @@ pub fn run() {
             set_custom_theme_css,
             run_http_tests,
             run_pre_request_script,
+            run_collection,
             exchange_oauth_token,
             db_load_workspace,
             db_save_workspace,

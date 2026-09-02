@@ -25,3 +25,8 @@ docs/site/.source
 *.njsproj
 *.sln
 *.sw?
+
+# Python
+.venv
+__pycache__/
+*.pyc

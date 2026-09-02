@@ -2,7 +2,6 @@ use base64::Engine;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest::multipart::{Form, Part};
 use reqwest::Method;
-use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::time::Instant;
 
@@ -11,103 +10,11 @@ use crate::dns_timing::TimingResolver;
 use crate::state::HttpState;
 use std::time::Duration;
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct KeyValue {
-    pub key: String,
-    pub value: String,
-    pub enabled: bool,
-}
+pub use pulse_core::types::{
+    AuthConfig, BatchItemResult, HttpRequestPayload, HttpResponsePayload, KeyValue, MultipartField,
+    ResponseHeader,
+};
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MultipartField {
-    pub key: String,
-    pub enabled: bool,
-    pub field_type: String,
-    pub value: String,
-    pub file_name: Option<String>,
-    pub mime_type: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AuthConfig {
-    pub auth_type: String,
-    pub bearer_token: Option<String>,
-    pub basic_username: Option<String>,
-    pub basic_password: Option<String>,
-    pub api_key_key: Option<String>,
-    pub api_key_value: Option<String>,
-    pub api_key_in: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HttpRequestPayload {
-    pub method: String,
-    pub url: String,
-    pub headers: Vec<KeyValue>,
-    pub query: Vec<KeyValue>,
-    pub body_kind: String,
-    pub body: String,
-    pub form: Vec<KeyValue>,
-    pub multipart: Vec<MultipartField>,
-    pub auth: AuthConfig,
-    #[serde(default)]
-    pub use_cache: Option<bool>,
-    #[serde(default)]
-    pub request_id: Option<String>,
-    #[serde(default)]
-    pub timeout_ms: Option<u64>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BatchItemResult {
-    pub response: Option<HttpResponsePayload>,
-    pub error: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ResponseHeader {
-    pub key: String,
-    pub value: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HttpResponsePayload {
-    pub status: u16,
-    pub status_text: String,
-    pub headers: Vec<ResponseHeader>,
-    pub body: String,
-    /// `"utf8"` (default) or `"base64"` for binary/media bodies.
-    #[serde(default = "default_body_encoding")]
-    pub body_encoding: String,
-    pub elapsed_ms: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub dns_ms: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tls_ms: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ttfb_ms: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub download_ms: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub total_ms: Option<u64>,
-    pub size_bytes: usize,
-    pub content_type: Option<String>,
-    pub from_cache: bool,
-    pub cache_age_ms: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub request_id: Option<String>,
-}
-
-fn default_body_encoding() -> String {
-    "utf8".to_string()
-}
 
 pub(crate) fn encode_response_body(bytes: &[u8], content_type: Option<&str>) -> (String, String) {
     let mime = content_type.unwrap_or("").to_ascii_lowercase();

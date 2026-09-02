@@ -1,0 +1,15 @@
+[package]
+name = "pulse-native"
+version = "0.7.0"
+edition = "2021"
+description = "PyO3 bindings for the Pulse engine"
+
+[lib]
+name = "pulse_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+pulse-core = { path = "../pulse-core" }
+pyo3 = { version = "0.25", features = ["extension-module", "abi3-py310"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

@@ -8,6 +8,9 @@ import { runEffect } from "@/lib/effect/run";
 import { runHttpTestsEffect, runPreRequestScriptEffect } from "@/lib/http-ipc";
 import { sendRequest, sendRequestsBatch } from "@/lib/http-client";
 import type { RunnerDataRow } from "@/lib/runner-data";
+import { canUseTauriIpc } from "@/lib/tauri-runtime";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 export type CollectionRunStep = {
   saved: SavedRequest;
@@ -215,6 +218,9 @@ export async function runCollectionAuto(
   onStep?: (step: CollectionRunStep, index: number, total: number) => void,
   extras?: CollectionRunExtras,
 ): Promise<CollectionRunResult> {
+  if (canUseTauriIpc()) {
+    return runCollectionNative(collectionId, collectionName, requests, environment, onStep, extras);
+  }
   const needsSequential =
     Boolean(extras?.dataRows?.length)
     || requests.some((item) => item.request.preRequestScript?.trim())
@@ -224,6 +230,43 @@ export async function runCollectionAuto(
     return runCollection(collectionId, collectionName, requests, environment, onStep, extras);
   }
   return runCollectionParallel(collectionId, collectionName, requests, environment, onStep, extras);
+}
+
+async function runCollectionNative(
+  collectionId: string,
+  collectionName: string,
+  requests: SavedRequest[],
+  environment: Environment | null,
+  onStep?: (step: CollectionRunStep, index: number, total: number) => void,
+  extras?: CollectionRunExtras,
+): Promise<CollectionRunResult> {
+  const unlisten = await listen<{ index: number; total: number }>("collection-run-progress", (event) => {
+    const index = Math.max(0, event.payload.index - 1);
+    onStep?.(
+      { saved: requests[Math.min(index, requests.length - 1)] ?? requests[0]! },
+      index,
+      event.payload.total,
+    );
+  });
+  try {
+    const result = await invoke<CollectionRunResult>("run_collection", {
+      input: {
+        collectionId,
+        collectionName,
+        requests,
+        environment,
+        globals: extras?.globals ?? [],
+        collection: extras?.collection ?? null,
+        dataRows: extras?.dataRows ?? [],
+        dataFileName: extras?.dataFileName ?? null,
+        folderPath: extras?.folderPath ?? null,
+      },
+    });
+    result.steps.forEach((step, index) => onStep?.(step, index, result.steps.length));
+    return result;
+  } finally {
+    unlisten();
+  }
 }
 
 export async function runCollectionParallel(

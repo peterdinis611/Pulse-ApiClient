@@ -203,6 +203,18 @@ fn runs_json_exists_json_assertion() {
 }
 
 #[test]
+fn runs_real_javascript_expressions() {
+    let script = r#"
+pulse.test("Computed", function () {
+    var n = 20 + 22;
+    pulse.expect(n).to.eql(42);
+});
+"#;
+    let result = run_http_tests(script, &sample_response(200, "{}", 10));
+    assert_eq!(result.passed, 1);
+}
+
+#[test]
 fn extracts_environment_set_mutations() {
     let script = r#"
 pulse.environment.set("token", "abc123");
