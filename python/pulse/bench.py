@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from .report import percentile, summarize_run, step_elapsed_ms
 
 
-def run_bench(run_once, repeats: int) -> dict:
+def run_bench(run_once, repeats: int, on_repeat: Callable[[int, int, dict], None] | None = None) -> dict:
     if repeats < 1:
         raise ValueError("repeats must be >= 1")
     runs = []
@@ -13,6 +15,8 @@ def run_bench(run_once, repeats: int) -> dict:
         result = run_once()
         summary = summarize_run(result)
         runs.append(summary)
+        if on_repeat:
+            on_repeat(index + 1, repeats, summary)
         if summary["failed"] or summary["httpErrors"]:
             failed_runs += 1
         all_ms.extend(

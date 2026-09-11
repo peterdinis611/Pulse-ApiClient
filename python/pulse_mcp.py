@@ -44,7 +44,7 @@ def main() -> int:
         if incoming is None:
             return 0
         try:
-            outgoing = handle_message(incoming)
+            outgoing = handle_message(incoming, notify=_write)
         except Exception as error:
             msg_id = incoming.get("id") if isinstance(incoming, dict) else None
             if msg_id is None:

@@ -3,12 +3,22 @@
 from __future__ import annotations
 
 import json
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Callable
 
+from .bench import compare_bench, run_bench
 from .envfile import load_data_rows
 from .export import to_run_input
 from .har import har_to_pulse
+from .mcp_prompts import get_prompt, list_prompts
+from .mcp_resources import (
+    list_resource_templates,
+    list_resources,
+    read_resource,
+    save_last_run,
+    write_collection_file,
+)
 from .openapi import convert as convert_openapi
 from .openapi import load_spec
 from .report import summarize_run
@@ -20,6 +30,10 @@ SERVER_VERSION = "0.3.0"
 
 PYTHON_ROOT = Path(__file__).resolve().parent.parent
 REPO_ROOT = PYTHON_ROOT.parent
+
+Notify = Callable[[dict], None]
+_notify: ContextVar[Notify | None] = ContextVar("pulse_mcp_notify", default=None)
+_progress_token: ContextVar[object | None] = ContextVar("pulse_mcp_progress_token", default=None)
 
 
 def _text(text: str, *, error: bool = False) -> dict:
@@ -61,6 +75,90 @@ def _native():
     return load_native()
 
 
+def emit_step(event: dict) -> None:
+    notify = _notify.get()
+    if notify is None:
+        return
+    index = int(event.get("index") or 0)
+    total = int(event.get("total") or 0)
+    name = str(event.get("name") or "")
+    status = str(event.get("status") or "")
+    ms = event.get("ms")
+    message = name
+    if status:
+        message = f"{name} {status}".strip()
+    if ms is not None and ms != "":
+        message = f"{message} {ms}ms".strip()
+    token = _progress_token.get()
+    if token is not None:
+        progress: dict[str, Any] = {
+            "progressToken": token,
+            "progress": index,
+            "message": message,
+        }
+        if total:
+            progress["total"] = total
+        notify({"jsonrpc": "2.0", "method": "notifications/progress", "params": progress})
+    notify(
+        {
+            "jsonrpc": "2.0",
+            "method": "notifications/pulse/step",
+            "params": {
+                "name": name,
+                "status": status,
+                "ms": ms,
+                "index": index,
+                "total": total,
+                "error": event.get("error"),
+                "failed": event.get("failed") or 0,
+            },
+        }
+    )
+
+
+def _on_native_progress(event_json: str) -> None:
+    try:
+        emit_step(json.loads(event_json))
+    except Exception:
+        return
+
+
+def _run_collection_json(run_input: dict) -> dict:
+    native = _native()
+    payload = json.dumps(run_input)
+    try:
+        raw = native.run_collection_json(payload, _on_native_progress)
+    except TypeError:
+        raw = native.run_collection_json(payload)
+    return json.loads(raw)
+
+
+def _run_input_from_args(arguments: dict) -> tuple[dict | None, dict | None]:
+    path = Path(arguments.get("path") or "")
+    if not path.is_file():
+        path = REPO_ROOT / path
+    if not path.is_file():
+        return None, _text(f"No such collection file: {arguments.get('path')}", error=True)
+    payload = json.loads(path.read_text())
+    env = _env_map(arguments.get("env"))
+    data_path = arguments.get("dataPath")
+    data_rows = None
+    if data_path:
+        data_file = Path(data_path)
+        if not data_file.is_file():
+            data_file = REPO_ROOT / data_path
+        data_rows = load_data_rows(data_file)
+    return (
+        to_run_input(
+            payload,
+            env=env or None,
+            collection_id=arguments.get("collectionId"),
+            data_rows=data_rows,
+        ),
+        None,
+    )
+
+
 def tool_interpolate(arguments: dict) -> dict:
     template = arguments.get("template") or ""
     env = _env_map(arguments.get("env"))
@@ -89,31 +187,63 @@ def tool_send(arguments: dict) -> dict:
 
 
 def tool_run_collection(arguments: dict) -> dict:
-    path = Path(arguments.get("path") or "")
-    if not path.is_file():
-        path = REPO_ROOT / path
-    if not path.is_file():
-        return _text(f"No such collection file: {arguments.get('path')}", error=True)
-    payload = json.loads(path.read_text())
-    env = _env_map(arguments.get("env"))
-    data_path = arguments.get("dataPath")
-    data_rows = None
-    if data_path:
-        data_file = Path(data_path)
-        if not data_file.is_file():
-            data_file = REPO_ROOT / data_path
-        data_rows = load_data_rows(data_file)
-    run_input = to_run_input(
-        payload,
-        env=env or None,
-        collection_id=arguments.get("collectionId"),
-        data_rows=data_rows,
-    )
-    result = json.loads(_native().run_collection_json(json.dumps(run_input)))
+    run_input, error = _run_input_from_args(arguments)
+    if error:
+        return error
+    result = _run_collection_json(run_input or {})
+    save_last_run(result)
     summary = arguments.get("summary")
     if summary is None or summary is True:
         return _json(summarize_run(result))
     return _json(result)
+
+
+def tool_bench(arguments: dict) -> dict:
+    run_input, error = _run_input_from_args(arguments)
+    if error:
+        return error
+    repeats = int(arguments.get("repeats") or 5)
+    factor = float(arguments.get("factor") or 1.2)
+    budget = arguments.get("p95Budget")
+    if budget is None:
+        budget = arguments.get("budgetP95")
+    p95_budget = float(budget) if budget is not None else None
+    baseline_arg = arguments.get("baseline")
+    baseline: dict = {}
+    if isinstance(baseline_arg, dict):
+        baseline = baseline_arg
+    elif baseline_arg:
+        baseline_path = Path(str(baseline_arg))
+        if not baseline_path.is_file():
+            baseline_path = REPO_ROOT / str(baseline_arg)
+        if not baseline_path.is_file():
+            return _text(f"No such baseline file: {baseline_arg}", error=True)
+        loaded = json.loads(baseline_path.read_text())
+        if not isinstance(loaded, dict):
+            return _text("baseline must be a JSON object", error=True)
+        baseline = loaded
+
+    payload = run_input or {}
+
+    def once() -> dict:
+        return _run_collection_json(payload)
+
+    def on_repeat(index: int, total: int, summary: dict) -> None:
+        emit_step(
+            {
+                "index": index,
+                "total": total,
+                "name": f"bench {index}/{total}",
+                "status": "fail" if (summary.get("failed") or summary.get("httpErrors")) else "ok",
+                "ms": (summary.get("timing") or {}).get("p95Ms"),
+                "failed": summary.get("failed") or 0,
+            }
+        )
+
+    report = run_bench(once, repeats, on_repeat=on_repeat)
+    errors = compare_bench(report, baseline, p95_budget=p95_budget, factor=factor)
+    body = {**report, "ok": not errors, "errors": errors}
+    return _json(body, error=bool(errors))
 
 
 def tool_run_tests(arguments: dict) -> dict:
@@ -124,13 +254,28 @@ def tool_run_tests(arguments: dict) -> dict:
     return _text(_native().run_tests(str(script), json.dumps(response)))
 
 
+def _written(payload: dict, name: str | None) -> dict:
+    path = write_collection_file(payload, name)
+    groups = payload.get("collectionGroups") or []
+    return _json(
+        {
+            "path": str(path),
+            "name": (groups[0] or {}).get("name") if groups else Path(path).stem,
+            "requests": len(payload.get("collections") or []),
+        }
+    )
+
+
 def tool_openapi(arguments: dict) -> dict:
     path = Path(arguments.get("path") or "")
     if not path.is_file():
         path = REPO_ROOT / path
     if not path.is_file():
         return _text(f"No such OpenAPI file: {arguments.get('path')}", error=True)
-    return _json(convert_openapi(load_spec(path)))
+    payload = convert_openapi(load_spec(path))
+    if arguments.get("inline"):
+        return _json(payload)
+    return _written(payload, arguments.get("name") or path.stem)
 
 
 def tool_har(arguments: dict) -> dict:
@@ -139,7 +284,25 @@ def tool_har(arguments: dict) -> dict:
         path = REPO_ROOT / path
     if not path.is_file():
         return _text(f"No such HAR file: {arguments.get('path')}", error=True)
-    return _json(har_to_pulse(json.loads(path.read_text())))
+    payload = har_to_pulse(json.loads(path.read_text()))
+    if arguments.get("inline"):
+        return _json(payload)
+    return _written(payload, arguments.get("name") or path.stem)
+
+
+def tool_write_collection(arguments: dict) -> dict:
+    payload = arguments.get("collection")
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+    if not isinstance(payload, dict):
+        return _text("collection must be a Pulse export JSON object", error=True)
+    return _written(payload, arguments.get("name"))
+
+
+def tool_pre_request(arguments: dict) -> dict:
+    script = arguments.get("script") or ""
+    env = _env_map(arguments.get("env"))
+    return _text(_native().run_pre_request(str(script), json.dumps(env)))
 
 
 def tool_schema(arguments: dict) -> dict:
@@ -159,9 +322,12 @@ TOOLS: dict[str, Callable[[dict], dict]] = {
     "pulse_interpolate": tool_interpolate,
     "pulse_send": tool_send,
     "pulse_run_collection": tool_run_collection,
+    "pulse_bench": tool_bench,
     "pulse_run_tests": tool_run_tests,
     "pulse_openapi": tool_openapi,
     "pulse_har": tool_har,
+    "pulse_write_collection": tool_write_collection,
+    "pulse_pre_request": tool_pre_request,
     "pulse_schema": tool_schema,
 }
 
@@ -211,6 +377,26 @@ TOOL_DEFS = [
         },
     },
     {
+        "name": "pulse_bench",
+        "description": "Repeat a collection run and check p95 against a budget or baseline (did it get slower?).",
+        "inputSchema": {
+            "type": "object",
+            "required": ["path"],
+            "properties": {
+                "path": {"type": "string", "description": "Path to collection JSON, relative to the repo root"},
+                "env": {"type": "object", "additionalProperties": {"type": "string"}},
+                "dataPath": {"type": "string"},
+                "collectionId": {"type": "string"},
+                "repeats": {"type": "integer", "default": 5, "minimum": 1},
+                "p95Budget": {"type": "number", "description": "Fail if p95 ms exceeds this budget"},
+                "baseline": {
+                    "description": "Path to a previous bench JSON, or the JSON object itself",
+                },
+                "factor": {"type": "number", "default": 1.2, "description": "Allowed p95 multiplier vs baseline when p95Budget is omitted"},
+            },
+        },
+    },
+    {
         "name": "pulse_run_tests",
         "description": "Run a Pulse/Postman test script against a saved response JSON.",
         "inputSchema": {
@@ -224,20 +410,52 @@ TOOL_DEFS = [
     },
     {
         "name": "pulse_openapi",
-        "description": "Convert an OpenAPI 3 JSON/YAML spec into a Pulse collection export.",
+        "description": "Convert OpenAPI 3 into a Pulse collection file (python/examples/.out/).",
         "inputSchema": {
             "type": "object",
             "required": ["path"],
-            "properties": {"path": {"type": "string"}},
+            "properties": {
+                "path": {"type": "string"},
+                "name": {"type": "string", "description": "Output filename stem under python/examples/.out/"},
+                "inline": {"type": "boolean", "description": "Return the collection JSON instead of writing a file"},
+            },
         },
     },
     {
         "name": "pulse_har",
-        "description": "Convert a HAR capture into a Pulse collection export.",
+        "description": "Convert a HAR capture into a Pulse collection file (python/examples/.out/).",
         "inputSchema": {
             "type": "object",
             "required": ["path"],
-            "properties": {"path": {"type": "string"}},
+            "properties": {
+                "path": {"type": "string"},
+                "name": {"type": "string"},
+                "inline": {"type": "boolean"},
+            },
+        },
+    },
+    {
+        "name": "pulse_write_collection",
+        "description": "Write a Pulse collection JSON to python/examples/.out/ and return the path.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["collection"],
+            "properties": {
+                "collection": {"type": "object"},
+                "name": {"type": "string"},
+            },
+        },
+    },
+    {
+        "name": "pulse_pre_request",
+        "description": "Run a Pulse pre-request script and return environment mutations.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["script"],
+            "properties": {
+                "script": {"type": "string"},
+                "env": {"type": "object", "additionalProperties": {"type": "string"}},
+            },
         },
     },
     {
@@ -255,11 +473,25 @@ TOOL_DEFS = [
 ]
 
 
-def handle_message(message: dict) -> dict | None:
+def handle_message(message: dict, notify: Notify | None = None) -> dict | None:
     method = message.get("method")
     msg_id = message.get("id")
     params = message.get("params") or {}
+    meta = params.get("_meta") if isinstance(params, dict) else None
+    if not isinstance(meta, dict):
+        top = message.get("_meta")
+        meta = top if isinstance(top, dict) else None
+    token = meta.get("progressToken") if isinstance(meta, dict) else None
+    notify_token = _notify.set(notify)
+    progress_reset = _progress_token.set(token)
+    try:
+        return _dispatch(method, msg_id, params)
+    finally:
+        _notify.reset(notify_token)
+        _progress_token.reset(progress_reset)
 
+
+def _dispatch(method: object, msg_id: object, params: dict) -> dict | None:
     if method == "initialize":
         version = params.get("protocolVersion") or PROTOCOL_VERSION
         return {
@@ -267,7 +499,11 @@ def handle_message(message: dict) -> dict | None:
             "id": msg_id,
             "result": {
                 "protocolVersion": version,
-                "capabilities": {"tools": {"listChanged": False}},
+                "capabilities": {
+                    "tools": {"listChanged": False},
+                    "resources": {"subscribe": False, "listChanged": False},
+                    "prompts": {"listChanged": False},
+                },
                 "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
             },
         }
@@ -280,6 +516,37 @@ def handle_message(message: dict) -> dict | None:
 
     if method == "tools/list":
         return {"jsonrpc": "2.0", "id": msg_id, "result": {"tools": TOOL_DEFS}}
+
+    if method == "prompts/list":
+        return {"jsonrpc": "2.0", "id": msg_id, "result": {"prompts": list_prompts()}}
+
+    if method == "prompts/get":
+        name = params.get("name") or ""
+        prompt = get_prompt(str(name), params.get("arguments") or {})
+        if prompt is None:
+            return {
+                "jsonrpc": "2.0",
+                "id": msg_id,
+                "error": {"code": -32602, "message": f"Unknown prompt: {name}"},
+            }
+        return {"jsonrpc": "2.0", "id": msg_id, "result": prompt}
+
+    if method == "resources/list":
+        return {"jsonrpc": "2.0", "id": msg_id, "result": {"resources": list_resources()}}
+
+    if method == "resources/templates/list":
+        return {"jsonrpc": "2.0", "id": msg_id, "result": {"resourceTemplates": list_resource_templates()}}
+
+    if method == "resources/read":
+        uri = params.get("uri") or ""
+        contents = read_resource(uri)
+        if contents is None:
+            return {
+                "jsonrpc": "2.0",
+                "id": msg_id,
+                "error": {"code": -32002, "message": f"Resource not found: {uri}"},
+            }
+        return {"jsonrpc": "2.0", "id": msg_id, "result": contents}
 
     if method == "tools/call":
         name = params.get("name")

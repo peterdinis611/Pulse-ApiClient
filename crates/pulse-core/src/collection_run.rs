@@ -146,14 +146,30 @@ fn tally(result: &mut CollectionRunResult, step: &CollectionRunStep) {
 
 pub async fn run_collection<S, F, B, BF>(
     input: CollectionRunInput,
-    mut send: S,
-    mut send_batch: Option<B>,
+    send: S,
+    send_batch: Option<B>,
 ) -> CollectionRunResult
 where
     S: FnMut(HttpRequestPayload) -> F,
     F: Future<Output = Result<HttpResponsePayload, String>>,
     B: FnMut(Vec<HttpRequestPayload>) -> BF,
     BF: Future<Output = Vec<(Option<HttpResponsePayload>, Option<String>)>>,
+{
+    run_collection_with_progress(input, send, send_batch, |_, _, _| {}).await
+}
+
+pub async fn run_collection_with_progress<S, F, B, BF, P>(
+    input: CollectionRunInput,
+    mut send: S,
+    mut send_batch: Option<B>,
+    mut on_step: P,
+) -> CollectionRunResult
+where
+    S: FnMut(HttpRequestPayload) -> F,
+    F: Future<Output = Result<HttpResponsePayload, String>>,
+    B: FnMut(Vec<HttpRequestPayload>) -> BF,
+    BF: Future<Output = Vec<(Option<HttpResponsePayload>, Option<String>)>>,
+    P: FnMut(&CollectionRunStep, u32, u32),
 {
     let rows: Vec<Option<HashMap<String, String>>> = if input.data_rows.is_empty() {
         vec![None]
@@ -190,16 +206,20 @@ where
                 })
                 .collect();
             let batch_results = batch(payloads).await;
+            let total = input.requests.len() as u32;
             for (index, saved) in input.requests.into_iter().enumerate() {
                 let (response, error) = batch_results.get(index).cloned().unwrap_or((None, Some("missing batch result".into())));
                 let step = evaluate_step(saved, response, error);
                 tally(&mut result, &step);
+                on_step(&step, (index as u32) + 1, total);
                 result.steps.push(step);
             }
             return result;
         }
     }
 
+    let total = (rows.len() * input.requests.len()) as u32;
+    let mut n = 0u32;
     let mut active_env: Vec<EnvVariable>;
     for (iteration, row) in rows.iter().enumerate() {
         active_env = with_data_row(
@@ -232,7 +252,9 @@ where
             if rows.len() > 1 {
                 step.iteration = Some((iteration + 1) as u32);
             }
+            n += 1;
             tally(&mut result, &step);
+            on_step(&step, n, total);
             result.steps.push(step);
         }
     }

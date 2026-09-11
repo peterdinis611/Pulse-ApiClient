@@ -32,7 +32,19 @@ Pulse exposes the same engine as an MCP stdio server. Project config is `.cursor
 2. Reload Cursor (**Settings → MCP** or restart)
 3. Enable the **pulse** server if Cursor asks
 
-Tools: `pulse_send`, `pulse_run_collection`, `pulse_interpolate`, `pulse_run_tests`, `pulse_openapi`, `pulse_har`, `pulse_schema`.
+Tools: `pulse_send`, `pulse_run_collection`, `pulse_bench`, `pulse_write_collection`, `pulse_pre_request`, `pulse_interpolate`, `pulse_run_tests`, `pulse_openapi`, `pulse_har`, `pulse_schema`.
+
+Prompts (Cursor can pick these without knowing tool names): `run_and_explain`, `openapi_to_pulse`, `compare_responses`.
+
+`pulse_run_collection` and `pulse_bench` emit `notifications/progress` (when the client sends `_meta.progressToken`) plus `notifications/pulse/step` with `{ name, status, ms }` after each request.
+
+Resources (Cursor can read these without a path argument):
+
+- `pulse://examples/pets.json` (and other files in `python/examples/`)
+- `pulse://last-run` — last collection run
+- `pulse://openapi/{file}` — e.g. `pulse://openapi/openapi.json`
+
+`pulse_openapi` / `pulse_har` write to `python/examples/.out/` and return `{ path, requests }`. Pass `"inline": true` only if you need the full JSON. `pulse_write_collection` does the same for a collection object already in the conversation.
 
 Smoke the protocol without Cursor:
 

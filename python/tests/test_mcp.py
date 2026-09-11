@@ -19,11 +19,16 @@ class McpProtocolTests(unittest.TestCase):
             }
         )
         self.assertEqual(init["result"]["serverInfo"]["name"], "pulse")
+        self.assertIn("resources", init["result"]["capabilities"])
+        self.assertIn("prompts", init["result"]["capabilities"])
         self.assertIsNone(handle_message({"jsonrpc": "2.0", "method": "notifications/initialized"}))
         listed = handle_message({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
         names = {tool["name"] for tool in listed["result"]["tools"]}
         self.assertEqual(names, {tool["name"] for tool in TOOL_DEFS})
         self.assertIn("pulse_send", names)
+        self.assertIn("pulse_write_collection", names)
+        self.assertIn("pulse_pre_request", names)
+        self.assertIn("pulse_bench", names)
 
     def test_schema_tool(self) -> None:
         result = handle_message(
@@ -49,7 +54,7 @@ class McpProtocolTests(unittest.TestCase):
                 "jsonrpc": "2.0",
                 "id": 4,
                 "method": "tools/call",
-                "params": {"name": "pulse_openapi", "arguments": {"path": str(spec)}},
+                "params": {"name": "pulse_openapi", "arguments": {"path": str(spec), "inline": True}},
             }
         )
         payload = json.loads(result["result"]["content"][0]["text"])
@@ -66,6 +71,189 @@ class McpProtocolTests(unittest.TestCase):
             }
         )
         self.assertEqual(result["error"]["code"], -32601)
+
+    def test_resources_list_and_read_examples(self) -> None:
+        listed = handle_message({"jsonrpc": "2.0", "id": 6, "method": "resources/list"})
+        uris = {item["uri"] for item in listed["result"]["resources"]}
+        self.assertIn("pulse://last-run", uris)
+        self.assertIn("pulse://examples/pets.json", uris)
+        templates = handle_message({"jsonrpc": "2.0", "id": 7, "method": "resources/templates/list"})
+        self.assertEqual(templates["result"]["resourceTemplates"][0]["uriTemplate"], "pulse://openapi/{file}")
+        pets = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 8,
+                "method": "resources/read",
+                "params": {"uri": "pulse://examples/pets.json"},
+            }
+        )
+        payload = json.loads(pets["result"]["contents"][0]["text"])
+        self.assertEqual(payload["collectionGroups"][0]["name"], "jsonplaceholder")
+        spec = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 9,
+                "method": "resources/read",
+                "params": {"uri": "pulse://openapi/openapi.json"},
+            }
+        )
+        self.assertIn("openapi", spec["result"]["contents"][0]["text"])
+        missing = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 10,
+                "method": "resources/read",
+                "params": {"uri": "pulse://examples/../../Cargo.toml"},
+            }
+        )
+        self.assertEqual(missing["error"]["code"], -32002)
+
+    def test_write_collection_and_last_run_resource(self) -> None:
+        from pulse.mcp_resources import LAST_RUN_PATH, OUT_DIR, save_last_run
+
+        written = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 11,
+                "method": "tools/call",
+                "params": {
+                    "name": "pulse_write_collection",
+                    "arguments": {
+                        "name": "mcp-test-col",
+                        "collection": {
+                            "version": 1,
+                            "collectionGroups": [{"id": "col_x", "name": "mcp-test-col", "folders": []}],
+                            "collections": [],
+                        },
+                    },
+                },
+            }
+        )
+        info = json.loads(written["result"]["content"][0]["text"])
+        self.assertEqual(info["path"], "python/examples/.out/mcp-test-col.json")
+        self.assertTrue((OUT_DIR / "mcp-test-col.json").is_file())
+        save_last_run({"collectionName": "mcp-test-col", "passed": 1, "failed": 0, "steps": []})
+        last = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 12,
+                "method": "resources/read",
+                "params": {"uri": "pulse://last-run"},
+            }
+        )
+        body = json.loads(last["result"]["contents"][0]["text"])
+        self.assertEqual(body["collectionName"], "mcp-test-col")
+        self.assertTrue(LAST_RUN_PATH.is_file())
+
+    def test_openapi_writes_file_by_default(self) -> None:
+        spec = Path(__file__).resolve().parents[1] / "examples" / "openapi.json"
+        result = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 13,
+                "method": "tools/call",
+                "params": {"name": "pulse_openapi", "arguments": {"path": str(spec), "name": "from-openapi-test"}},
+            }
+        )
+        info = json.loads(result["result"]["content"][0]["text"])
+        self.assertEqual(info["path"], "python/examples/.out/from-openapi-test.json")
+        self.assertGreater(info["requests"], 0)
+
+    def test_prompts_list_and_get(self) -> None:
+        listed = handle_message({"jsonrpc": "2.0", "id": 14, "method": "prompts/list"})
+        names = {item["name"] for item in listed["result"]["prompts"]}
+        self.assertEqual(names, {"run_and_explain", "openapi_to_pulse", "compare_responses"})
+        got = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 15,
+                "method": "prompts/get",
+                "params": {
+                    "name": "run_and_explain",
+                    "arguments": {"path": "python/examples/pets.json"},
+                },
+            }
+        )
+        text = got["result"]["messages"][0]["content"]["text"]
+        self.assertIn("pulse_run_collection", text)
+        self.assertIn("pets.json", text)
+        openapi = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 16,
+                "method": "prompts/get",
+                "params": {"name": "openapi_to_pulse", "arguments": {"path": "python/examples/openapi.json"}},
+            }
+        )
+        openapi_text = openapi["result"]["messages"][0]["content"]["text"]
+        self.assertIn("pulse_openapi", openapi_text)
+        self.assertIn("pulse_run_collection", openapi_text)
+        compare = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 17,
+                "method": "prompts/get",
+                "params": {
+                    "name": "compare_responses",
+                    "arguments": {
+                        "a": "https://jsonplaceholder.typicode.com/posts/1",
+                        "b": "https://jsonplaceholder.typicode.com/posts/2",
+                    },
+                },
+            }
+        )
+        compare_text = compare["result"]["messages"][0]["content"]["text"]
+        self.assertIn("pulse_send", compare_text)
+        missing = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 18,
+                "method": "prompts/get",
+                "params": {"name": "nope"},
+            }
+        )
+        self.assertEqual(missing["error"]["code"], -32602)
+
+    def test_bench_missing_collection(self) -> None:
+        result = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 19,
+                "method": "tools/call",
+                "params": {"name": "pulse_bench", "arguments": {"path": "no-such-collection.json"}},
+            }
+        )
+        self.assertTrue(result["result"]["isError"])
+        self.assertIn("No such collection", result["result"]["content"][0]["text"])
+
+    def test_progress_notifications(self) -> None:
+        from pulse.mcp_protocol import _notify, _progress_token, emit_step
+
+        notes: list[dict] = []
+        notify_token = _notify.set(notes.append)
+        progress_token = _progress_token.set("tok-1")
+        try:
+            emit_step(
+                {
+                    "index": 1,
+                    "total": 2,
+                    "name": "Get user",
+                    "status": "ok",
+                    "ms": 12,
+                    "failed": 0,
+                }
+            )
+        finally:
+            _notify.reset(notify_token)
+            _progress_token.reset(progress_token)
+        methods = [item["method"] for item in notes]
+        self.assertEqual(methods, ["notifications/progress", "notifications/pulse/step"])
+        self.assertEqual(notes[0]["params"]["progressToken"], "tok-1")
+        self.assertEqual(notes[0]["params"]["progress"], 1)
+        self.assertEqual(notes[0]["params"]["total"], 2)
+        self.assertIn("Get user", notes[0]["params"]["message"])
+        self.assertEqual(notes[1]["params"]["name"], "Get user")
+        self.assertEqual(notes[1]["params"]["ms"], 12)
 
 
 if __name__ == "__main__":

@@ -395,11 +395,15 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
   {
     id: "mcp",
     title: "MCP",
-    summary: "Cursor (and other MCP clients) can call the Pulse Rust engine over stdio — send, run collections, OpenAPI.",
+    summary: "Cursor (and other MCP clients) can call the Pulse Rust engine over stdio — send, run collections, bench, OpenAPI.",
     group: "Productivity",
     items: [
       "Project config: `.cursor/mcp.json` launches `.venv/bin/python python/pulse_mcp.py`",
-      "Tools: pulse_send, pulse_run_collection, pulse_interpolate, pulse_run_tests, pulse_openapi, pulse_har, pulse_schema",
+      "Resources: `pulse://examples/pets.json`, `pulse://last-run`, `pulse://openapi/{file}`",
+      "Tools: pulse_send, pulse_run_collection, pulse_bench, pulse_write_collection, pulse_pre_request, pulse_interpolate, pulse_run_tests, pulse_openapi, pulse_har, pulse_schema",
+      "Prompts: run_and_explain, openapi_to_pulse, compare_responses — the prompt text names the tools, so the agent does not have to memorize them",
+      "Long collection runs and bench emit MCP progress (request name, status, ms) after each step",
+      "OpenAPI/HAR write to `python/examples/.out/` and return a path — not a huge JSON blob",
       "Same engine as the CLI — not inside the Tauri window",
       "Install once with `bun run pulse:cli:install`, then reload Cursor MCP",
     ],
@@ -407,6 +411,8 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
       "Run `bun run pulse:cli:install` so `.venv` has `pulse_native`.",
       "Reload Cursor. In Settings → MCP, enable **pulse** if it is listed as disabled.",
       "Ask the agent to send GET https://jsonplaceholder.typicode.com/posts/1 via Pulse, or to run `python/examples/pets.json`.",
+      "Built-in prompts cover “run this collection and explain failures”, “OpenAPI → Pulse and test 2xx”, and “compare two JSON responses”.",
+      "OpenAPI conversion writes `python/examples/.out/…json`; read `pulse://last-run` after a collection run.",
     ],
   },
 ];

@@ -1,15 +1,37 @@
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
+use pyo3::types::PyAny;
 use pyo3::types::PyModule;
 use pulse_core::{
-    run_collection, run_http_tests, run_pre_request_script_with_env, substitute_variables, CollectionRunInput,
-    HttpRequestPayload, HttpResponsePayload,
+    run_collection_with_progress, run_http_tests, run_pre_request_script_with_env, substitute_variables,
+    CollectionRunInput, CollectionRunStep, HttpRequestPayload, HttpResponsePayload,
 };
 use pulse_core::simple_http::send_once;
 use pulse_core::types::EnvVariable;
 
 fn py_err(message: impl ToString) -> PyErr {
     PyRuntimeError::new_err(message.to_string())
+}
+
+fn progress_event(step: &CollectionRunStep, index: u32, total: u32) -> serde_json::Value {
+    let failed = step.test_results.as_ref().map(|item| item.failed).unwrap_or(0);
+    let status = if step.error.is_some() {
+        "error"
+    } else if failed > 0 {
+        "fail"
+    } else {
+        "ok"
+    };
+    let ms = step.response.as_ref().map(|item| item.total_ms.unwrap_or(item.elapsed_ms));
+    serde_json::json!({
+        "index": index,
+        "total": total,
+        "name": step.saved.name,
+        "status": status,
+        "ms": ms,
+        "error": step.error,
+        "failed": failed,
+    })
 }
 
 #[pyfunction]
@@ -46,25 +68,35 @@ fn run_pre_request(script: String, env_json: String) -> PyResult<String> {
 }
 
 #[pyfunction]
-fn run_collection_json(input_json: String) -> PyResult<String> {
+#[pyo3(signature = (input_json, on_progress=None))]
+fn run_collection_json(py: Python<'_>, input_json: String, on_progress: Option<Py<PyAny>>) -> PyResult<String> {
     let input: CollectionRunInput = serde_json::from_str(&input_json).map_err(py_err)?;
     let runtime = tokio::runtime::Runtime::new().map_err(py_err)?;
-    let result = runtime.block_on(async {
-        run_collection(
-            input,
-            |payload| async move { send_once(payload).await },
-            Some(|payloads: Vec<pulse_core::HttpRequestPayload>| async move {
-                let mut results = Vec::with_capacity(payloads.len());
-                for payload in payloads {
-                    results.push(match send_once(payload).await {
-                        Ok(response) => (Some(response), None),
-                        Err(error) => (None, Some(error)),
-                    });
-                }
-                results
-            }),
-        )
-        .await
+    let result = py.allow_threads(|| {
+        runtime.block_on(async {
+            run_collection_with_progress(
+                input,
+                |payload| async move { send_once(payload).await },
+                Some(|payloads: Vec<pulse_core::HttpRequestPayload>| async move {
+                    let mut results = Vec::with_capacity(payloads.len());
+                    for payload in payloads {
+                        results.push(match send_once(payload).await {
+                            Ok(response) => (Some(response), None),
+                            Err(error) => (None, Some(error)),
+                        });
+                    }
+                    results
+                }),
+                |step, index, total| {
+                    let Some(callback) = on_progress.as_ref() else {
+                        return;
+                    };
+                    let payload = progress_event(step, index, total).to_string();
+                    let _ = Python::with_gil(|py| callback.call1(py, (payload,)));
+                },
+            )
+            .await
+        })
     });
     serde_json::to_string(&result).map_err(py_err)
 }

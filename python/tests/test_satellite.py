@@ -190,6 +190,19 @@ class BenchTests(unittest.TestCase):
         self.assertTrue(compare_bench(report, {}, p95_budget=10))
         self.assertFalse(compare_bench(report, {"timing": {"p95Ms": 50}}, factor=1.2))
 
+    def test_on_repeat(self) -> None:
+        seen: list[tuple[int, int]] = []
+
+        def once() -> dict:
+            return {
+                "passed": 1,
+                "failed": 0,
+                "steps": [{"saved": {"name": "ping"}, "response": {"elapsedMs": 10, "totalMs": 10}}],
+            }
+
+        run_bench(once, 2, on_repeat=lambda index, total, _summary: seen.append((index, total)))
+        self.assertEqual(seen, [(1, 2), (2, 2)])
+
 
 if __name__ == "__main__":
     unittest.main()
