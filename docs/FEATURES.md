@@ -331,3 +331,18 @@ Satellite around the Rust engine — collection runs, benches, OpenAPI/HAR impor
 1. First `bun run tauri dev` (or `bun run pulse:cli:install`) builds the PyO3 module into `.venv`.
 2. Export a collection from Pulse, then `bun run pulse:cli run pets.json --env-file staging.env --summary --junit junit.xml`.
 3. Keep a `bench.json` from a good run and compare with `--baseline bench.json --factor 1.2`.
+
+### MCP
+
+Cursor (and other MCP clients) can call the Pulse Rust engine over stdio — send, run collections, OpenAPI.
+
+- Project config: `.cursor/mcp.json` launches `.venv/bin/python python/pulse_mcp.py`
+- Tools: pulse_send, pulse_run_collection, pulse_interpolate, pulse_run_tests, pulse_openapi, pulse_har, pulse_schema
+- Same engine as the CLI — not inside the Tauri window
+- Install once with `bun run pulse:cli:install`, then reload Cursor MCP
+
+**How to**
+
+1. Run `bun run pulse:cli:install` so `.venv` has `pulse_native`.
+2. Reload Cursor. In Settings → MCP, enable **pulse** if it is listed as disabled.
+3. Ask the agent to send GET https://jsonplaceholder.typicode.com/posts/1 via Pulse, or to run `python/examples/pets.json`.

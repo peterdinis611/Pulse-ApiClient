@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "pulse": {
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": ["${workspaceFolder}/python/pulse_mcp.py"]
+    }
+  }
+}

@@ -17,7 +17,8 @@
     "pulse:cli": ".venv/bin/python python/pulse_cli.py",
     "pulse:cli:install": "bun scripts/ensure-pulse-cli.ts --require",
     "pulse:cli:test": "python3 -m unittest discover -s python/tests -p 'test_*.py'",
-    "pulse:cli:demo": ".venv/bin/python python/pulse_cli.py openapi python/examples/openapi.json --out python/examples/.out/from-openapi.json && .venv/bin/python python/pulse_cli.py har python/examples/capture.har --out python/examples/.out/from-har.json && .venv/bin/python python/pulse_cli.py schema python/examples/body.json python/examples/schema.json && .venv/bin/python python/pulse_cli.py interpolate '{{baseUrl}}/{{id}}' --env-file python/examples/staging.env --var id=1 && .venv/bin/python python/pulse_cli.py test python/examples/script.js python/examples/response.json"
+    "pulse:cli:demo": ".venv/bin/python python/pulse_cli.py openapi python/examples/openapi.json --out python/examples/.out/from-openapi.json && .venv/bin/python python/pulse_cli.py har python/examples/capture.har --out python/examples/.out/from-har.json && .venv/bin/python python/pulse_cli.py schema python/examples/body.json python/examples/schema.json && .venv/bin/python python/pulse_cli.py interpolate '{{baseUrl}}/{{id}}' --env-file python/examples/staging.env --var id=1 && .venv/bin/python python/pulse_cli.py test python/examples/script.js python/examples/response.json",
+    "pulse:mcp": ".venv/bin/python python/pulse_mcp.py"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.23",

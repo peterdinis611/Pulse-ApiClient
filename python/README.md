@@ -24,6 +24,24 @@ bun run pulse:cli send --method GET --url https://jsonplaceholder.typicode.com/p
 
 `pets.json`, `staging.env`, `users.csv` and the rest live in `python/examples/`. Those names in the repo root do not exist.
 
+## MCP (Cursor)
+
+Pulse exposes the same engine as an MCP stdio server. Project config is `.cursor/mcp.json`.
+
+1. `bun run pulse:cli:install` (venv + `pulse_native`)
+2. Reload Cursor (**Settings → MCP** or restart)
+3. Enable the **pulse** server if Cursor asks
+
+Tools: `pulse_send`, `pulse_run_collection`, `pulse_interpolate`, `pulse_run_tests`, `pulse_openapi`, `pulse_har`, `pulse_schema`.
+
+Smoke the protocol without Cursor:
+
+```bash
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"cli"}}}' '{"jsonrpc":"2.0","method":"notifications/initialized"}' '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | bun run pulse:mcp
+```
+
+Windows: point `command` at `.venv/Scripts/python.exe` instead of `.venv/bin/python`.
+
 `run` accepts a Pulse export (workspace or single collection) or a native `CollectionRunInput`. `--data users.csv` turns each row into one iteration.
 
 Manual setup (same as the automatic hook):

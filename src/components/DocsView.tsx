@@ -18,6 +18,7 @@ import {
   Link2,
   Lock,
   Palette,
+  Plug,
   Radio,
   Search,
   Send,
@@ -60,6 +61,7 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
   search: Keyboard,
   data: Database,
   "python-cli": Zap,
+  mcp: Plug,
 };
 
 function DocInlineText({ text }: { text: string }) {
