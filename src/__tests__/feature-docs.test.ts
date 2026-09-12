@@ -6,6 +6,11 @@ import {
   featureDocsFumadocsFiles,
 } from "@/lib/feature-docs";
 
+/** Git on Windows may check out text files as CRLF; generated docs always use LF. */
+function lf(text: string) {
+  return text.replace(/\r\n/g, "\n");
+}
+
 describe("feature-docs", () => {
   it("covers the main product areas", () => {
     const ids = FEATURE_DOC_SECTIONS.map((section) => section.id);
@@ -142,7 +147,7 @@ describe("feature-docs", () => {
     const { fileURLToPath } = await import("node:url");
     const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
     const onDisk = readFileSync(resolve(root, "docs/FEATURES.md"), "utf8");
-    expect(onDisk).toBe(featureDocsMarkdown());
+    expect(lf(onDisk)).toBe(featureDocsMarkdown());
   });
 
   it("keeps docs/site MDX in sync with featureDocsFumadocsFiles()", async () => {
@@ -152,7 +157,7 @@ describe("feature-docs", () => {
     const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
     for (const file of featureDocsFumadocsFiles()) {
       const onDisk = readFileSync(resolve(root, "docs/site/content/docs", file.path), "utf8");
-      expect(onDisk, file.path).toBe(file.contents);
+      expect(lf(onDisk), file.path).toBe(file.contents);
     }
   });
 });
