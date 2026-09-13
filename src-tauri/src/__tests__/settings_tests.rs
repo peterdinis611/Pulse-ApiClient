@@ -27,6 +27,14 @@ fn normalize_theme_falls_back_to_system() {
 }
 
 #[test]
+fn normalize_locale_falls_back_to_system() {
+    assert_eq!(normalize_locale("en"), "en");
+    assert_eq!(normalize_locale("sk"), "sk");
+    assert_eq!(normalize_locale("system"), "system");
+    assert_eq!(normalize_locale("de"), "system");
+}
+
+#[test]
 fn deserializes_partial_settings_with_defaults() {
     let settings: AppSettings = serde_json::from_str(r#"{"theme":"dark"}"#).unwrap();
     assert_eq!(settings.theme, "dark");
@@ -46,6 +54,8 @@ fn deserializes_partial_settings_with_defaults() {
     assert_eq!(settings.http_default_origin, None);
     assert_eq!(settings.http_default_referer, None);
     assert_eq!(settings.custom_theme_css_path, None);
+    assert_eq!(settings.locale, "system");
+    assert_eq!(settings.custom_language_json_path, None);
 }
 
 #[test]

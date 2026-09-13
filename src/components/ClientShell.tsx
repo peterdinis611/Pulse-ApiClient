@@ -9,6 +9,7 @@ import { StatusBar } from "./StatusBar";
 import { ViewHeader } from "./ViewHeader";
 import { APP_NAME } from "@/lib/app-config";
 import { useWorkspaceHotkeys } from "@/hooks/useWorkspaceHotkeys";
+import { useI18n } from "@/hooks/useLocale";
 import { getCurrentWindowLabel, setWindowTitle } from "@/lib/window-manager";
 
 const ConsolePanel = lazy(() =>
@@ -32,6 +33,7 @@ const SettingsView = lazy(() =>
 
 export function ClientShell() {
   const { mainView, consoleOpen, tabs, activeTabId } = useApp();
+  const { t, version } = useI18n();
 
   useWorkspaceHotkeys();
 
@@ -43,13 +45,13 @@ export function ClientShell() {
         mainView === "request" && activeTab
           ? `${activeTab.request.name.trim() || activeTab.request.method} · ${APP_NAME}`
           : mainView === "overview"
-            ? `Overview · ${APP_NAME}`
+            ? `${t("window.overview")} · ${APP_NAME}`
             : mainView === "settings"
-              ? `Settings · ${APP_NAME}`
+              ? `${t("window.settings")} · ${APP_NAME}`
               : mainView === "environments"
-                ? `Environments · ${APP_NAME}`
+                ? `${t("window.environments")} · ${APP_NAME}`
                 : mainView === "docs"
-                  ? `Docs · ${APP_NAME}`
+                  ? `${t("window.docs")} · ${APP_NAME}`
                   : APP_NAME;
 
       try {
@@ -58,7 +60,7 @@ export function ClientShell() {
         // ignore when not running inside Tauri
       }
     })();
-  }, [tabs, activeTabId, mainView]);
+  }, [tabs, activeTabId, mainView, t, version]);
 
   const showExplorer = mainView === "request";
 
@@ -73,7 +75,7 @@ export function ClientShell() {
       <div className="flex min-w-0 flex-1 flex-col bg-surface-0">
         <ViewHeader />
         <main className="workspace-content flex min-h-0 flex-1 flex-col overflow-hidden">
-          <Suspense fallback={<LoadingScreen variant="inline" label="Loading view" />}>
+          <Suspense fallback={<LoadingScreen variant="inline" label={t("loading.view")} />}>
             {mainView === "overview" && <OverviewView />}
             {mainView === "environments" && <EnvironmentsView />}
             {mainView === "settings" && <SettingsView />}

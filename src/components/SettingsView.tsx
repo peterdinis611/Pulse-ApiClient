@@ -29,6 +29,7 @@ import { toast } from "@/lib/toast";
 import { requestsForCollection } from "@/lib/collections";
 import { downloadJson } from "@/lib/download";
 import { ThemePicker } from "@/components/ThemePicker";
+import { LanguageSettings } from "@/components/LanguageSettings";
 import { CustomThemeSettings } from "@/components/CustomThemeSettings";
 import { CollectionExportMenu } from "@/components/CollectionExportMenu";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -48,6 +49,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { useT } from "@/hooks/useLocale";
+import type { MessageKey } from "@/lib/i18n";
 
 function SettingsSection({
   id,
@@ -112,15 +115,15 @@ function StatPill({ label, value }: { label: string; value: string | number }) {
   );
 }
 
-const SETTINGS_NAV = [
-  { id: "appearance", label: "Appearance" },
-  { id: "data", label: "Data & storage" },
-  { id: "http", label: "HTTP engine" },
-  { id: "layout", label: "Layout" },
-  { id: "cookies", label: "Cookie jar" },
-  { id: "collections", label: "Collections" },
-  { id: "folders", label: "Folders" },
-] as const;
+const SETTINGS_NAV: Array<{ id: string; labelKey: MessageKey }> = [
+  { id: "appearance", labelKey: "settings.nav.appearance" },
+  { id: "data", labelKey: "settings.nav.data" },
+  { id: "http", labelKey: "settings.nav.http" },
+  { id: "layout", labelKey: "settings.nav.layout" },
+  { id: "cookies", labelKey: "settings.nav.cookies" },
+  { id: "collections", labelKey: "settings.nav.collections" },
+  { id: "folders", labelKey: "settings.nav.folders" },
+];
 
 const HTTP_SETTINGS_DEFAULTS = {
   httpSslVerify: true,
@@ -142,8 +145,9 @@ function SettingsNav({
   activeId: string;
   onSelect: (id: string) => void;
 }) {
+  const t = useT();
   return (
-    <nav className="space-y-0.5" aria-label="Settings sections">
+    <nav className="space-y-0.5" aria-label={t("settings.nav.aria")}>
       {SETTINGS_NAV.map((item) => (
         <button
           key={item.id}
@@ -156,7 +160,7 @@ function SettingsNav({
           )}
           onClick={() => onSelect(item.id)}
         >
-          {item.label}
+          {t(item.labelKey)}
         </button>
       ))}
     </nav>
@@ -192,6 +196,7 @@ export function SettingsView() {
   } = useApp();
 
   const { totalCount: historyCount } = useHistory();
+  const t = useT();
 
   const nativeImportRef = useRef<HTMLInputElement>(null);
   const postmanImportRef = useRef<HTMLInputElement>(null);
@@ -554,7 +559,7 @@ export function SettingsView() {
     <div className="flex h-full min-h-0">
       <aside className="hidden w-52 shrink-0 border-r border-border bg-surface-1/60 md:flex md:flex-col">
         <div className="border-b border-border/60 px-4 py-4">
-          <p className="text-caption">Sections</p>
+          <p className="text-caption">{t("settings.sections")}</p>
         </div>
         <div className="p-3">
           <SettingsNav activeId={activeSection} onSelect={scrollToSection} />
@@ -564,10 +569,11 @@ export function SettingsView() {
         <div className="mx-auto w-full max-w-2xl space-y-8 px-4 py-6 sm:px-6">
         <SettingsSection
           id="appearance"
-          title="Appearance"
-          description={`Choose how ${APP_NAME} looks on this device.`}
+          title={t("settings.appearance.title")}
+          description={t("settings.appearance.description")}
         >
           <ThemePicker value={theme} onChange={setTheme} />
+          <LanguageSettings />
           <CustomThemeSettings />
         </SettingsSection>
 

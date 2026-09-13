@@ -7,25 +7,30 @@ import { useApp } from "@/machines";
 import { methodShortLabel, methodTextClass } from "@/lib/method-colors";
 import { formatModShortcut, PULSE_HOTKEYS } from "@/lib/hotkeys";
 import { cn } from "@/lib/utils";
+import { useT } from "@/hooks/useLocale";
+import type { MessageKey } from "@/lib/i18n";
 
-const VIEW_META = {
+const VIEW_META: Record<
+  "overview" | "environments" | "docs" | "settings",
+  { titleKey: MessageKey; descriptionKey: MessageKey }
+> = {
   overview: {
-    title: "Overview",
-    description: "Recent requests and saved endpoints across your workspace.",
+    titleKey: "view.overview.title",
+    descriptionKey: "view.overview.description",
   },
   environments: {
-    title: "Environments",
-    description: "Variables for URLs, headers, auth, and bodies.",
+    titleKey: "view.environments.title",
+    descriptionKey: "view.environments.description",
   },
   docs: {
-    title: "Docs",
-    description: "Guides for every Pulse feature — requests, auth, tests, themes, and more.",
+    titleKey: "view.docs.title",
+    descriptionKey: "view.docs.description",
   },
   settings: {
-    title: "Settings",
-    description: "Appearance, data, collections, and HTTP engine.",
+    titleKey: "view.settings.title",
+    descriptionKey: "view.settings.description",
   },
-} as const;
+};
 
 export function ViewHeader() {
   const {
@@ -40,6 +45,7 @@ export function ViewHeader() {
     activeEnvironmentId,
     environments,
   } = useApp();
+  const t = useT();
 
   const [tabsOverflowing, setTabsOverflowing] = useState(false);
 
@@ -58,7 +64,7 @@ export function ViewHeader() {
             onClick={toggleExplorerCollapsed}
           >
             <PanelLeftOpen className="size-4 text-primary transition-transform group-hover:scale-105" />
-            <span>Explorer</span>
+            <span>{t("view.explorer")}</span>
             <kbd className="explorer-kbd hidden xl:inline">
               {formatModShortcut(PULSE_HOTKEYS.toggleExplorer)}
             </kbd>
@@ -68,7 +74,7 @@ export function ViewHeader() {
             variant="ghost"
             size="icon"
             className="explorer-hide-btn mx-1 size-8 shrink-0 self-center text-topbar-muted hover:text-topbar-foreground"
-            label={`Hide explorer (${formatModShortcut(PULSE_HOTKEYS.toggleExplorer)})`}
+            label={`${t("view.hideExplorer")} (${formatModShortcut(PULSE_HOTKEYS.toggleExplorer)})`}
             onClick={toggleExplorerCollapsed}
           >
             <PanelLeftClose className="size-4" />
@@ -138,7 +144,7 @@ export function ViewHeader() {
                 {/* close */}
                 <button
                   type="button"
-                  aria-label="Close tab"
+                  aria-label={t("view.closeTab")}
                   className={cn(
                     "request-tab__close",
                     active
@@ -172,7 +178,7 @@ export function ViewHeader() {
             variant="ghost"
             size="icon"
             className="size-7 text-topbar-muted hover:text-topbar-foreground"
-            label={`New request tab (${formatModShortcut(PULSE_HOTKEYS.newTab)})`}
+            label={`${t("view.newTab")} (${formatModShortcut(PULSE_HOTKEYS.newTab)})`}
             onClick={newRequestTab}
           >
             <Plus className="size-3.5" />
@@ -187,8 +193,8 @@ export function ViewHeader() {
 
   return (
     <header className="view-header flex h-11 shrink-0 items-center gap-3 px-4 sm:px-5">
-      <h1 className="text-title">{meta.title}</h1>
-      <p className="hidden truncate text-body text-topbar-muted sm:block">{meta.description}</p>
+      <h1 className="text-title">{t(meta.titleKey)}</h1>
+      <p className="hidden truncate text-body text-topbar-muted sm:block">{t(meta.descriptionKey)}</p>
     </header>
   );
 }

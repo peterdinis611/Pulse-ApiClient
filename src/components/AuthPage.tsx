@@ -21,18 +21,21 @@ import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { useT } from "@/hooks/useLocale";
+import type { MessageKey } from "@/lib/i18n";
 
 type AuthMode = "login" | "register";
 
 type FieldErrors = Partial<Record<AuthErrorField, string>>;
 
-const FEATURES = [
-  { icon: Send, text: "Send HTTP, GraphQL, and WebSocket requests" },
-  { icon: Shield, text: "Local-first workspaces stored on your device" },
+const FEATURES: Array<{ icon: typeof Send; textKey: MessageKey }> = [
+  { icon: Send, textKey: "auth.feature.http" },
+  { icon: Shield, textKey: "auth.feature.local" },
 ];
 
 export function AuthPage() {
   const { signIn } = useApp();
+  const t = useT();
   const [mode, setMode] = useState<AuthMode>("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -71,7 +74,7 @@ export function AuthPage() {
       if (authError.field) {
         setFieldErrors({ [authError.field]: authError.message });
       }
-      toast.error(mode === "login" ? "Sign in failed" : "Registration failed", authError.message);
+      toast.error(mode === "login" ? t("auth.signInFailed") : t("auth.registerFailed"), authError.message);
     } finally {
       setLoading(false);
     }
@@ -93,26 +96,26 @@ export function AuthPage() {
         <div className="space-y-6">
           <div className="space-y-2">
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-              Your API workspace, locally.
+              {t("auth.headline")}
             </h1>
             <p className="max-w-sm text-body text-muted-foreground">
-              Collections, environments, history, and tests — all in one fast desktop client.
+              {t("auth.subhead")}
             </p>
           </div>
           <ul className="space-y-3">
-            {FEATURES.map(({ icon: Icon, text }) => (
-              <li key={text} className="flex items-center gap-3 text-body text-muted-foreground">
+            {FEATURES.map(({ icon: Icon, textKey }) => (
+              <li key={textKey} className="flex items-center gap-3 text-body text-muted-foreground">
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border/60 bg-card/60">
                   <Icon className="size-3.5 text-primary" />
                 </span>
-                {text}
+                {t(textKey)}
               </li>
             ))}
           </ul>
         </div>
 
         <p className="text-caption normal-case tracking-normal text-rail-foreground">
-          Data stays on this device
+          {t("auth.stays")}
         </p>
       </aside>
 
@@ -138,12 +141,10 @@ export function AuthPage() {
               </Avatar>
               <div>
                 <h2 className="text-title">
-                  {mode === "login" ? "Welcome back" : "Create account"}
+                  {mode === "login" ? t("auth.welcome") : t("auth.create")}
                 </h2>
                 <p className="text-body text-muted-foreground">
-                  {mode === "login"
-                    ? "Sign in to open your workspace."
-                    : "Register to get started."}
+                  {mode === "login" ? t("auth.signInLead") : t("auth.registerLead")}
                 </p>
               </div>
             </div>
@@ -157,10 +158,10 @@ export function AuthPage() {
             >
               <TabsList className="mb-4 grid h-9 w-full grid-cols-2 bg-surface-1/80 p-1">
                 <TabsTrigger value="login" className="h-7 rounded-md data-[state=active]:shadow-sm">
-                  Login
+                  {t("auth.login")}
                 </TabsTrigger>
                 <TabsTrigger value="register" className="h-7 rounded-md data-[state=active]:shadow-sm">
-                  Register
+                  {t("auth.register")}
                 </TabsTrigger>
               </TabsList>
             </Tabs>
@@ -168,7 +169,7 @@ export function AuthPage() {
             <form className="space-y-3.5" onSubmit={(event) => void handleSubmit(event)}>
               {mode === "register" && (
                 <div className="space-y-1.5">
-                  <Label htmlFor="register-name">Full name</Label>
+                  <Label htmlFor="register-name">{t("auth.fullName")}</Label>
                   <Input
                     id="register-name"
                     value={name}
@@ -188,7 +189,7 @@ export function AuthPage() {
               )}
 
               <div className="space-y-1.5">
-                <Label htmlFor="auth-email">Email</Label>
+                <Label htmlFor="auth-email">{t("auth.email")}</Label>
                 <Input
                   id="auth-email"
                   type="email"
@@ -209,7 +210,7 @@ export function AuthPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="auth-password">Password</Label>
+                <Label htmlFor="auth-password">{t("auth.password")}</Label>
                 <PasswordInput
                   id="auth-password"
                   value={password}
@@ -217,7 +218,7 @@ export function AuthPage() {
                     setPassword(event.target.value);
                     if (fieldErrors.password) resetErrors();
                   }}
-                  placeholder={mode === "register" ? "At least 6 characters" : "Your password"}
+                  placeholder={mode === "register" ? t("auth.passwordNewPlaceholder") : t("auth.passwordPlaceholder")}
                   autoComplete={mode === "register" ? "new-password" : "current-password"}
                   required
                   aria-invalid={Boolean(fieldErrors.password)}
@@ -230,7 +231,7 @@ export function AuthPage() {
 
               {mode === "register" && (
                 <div className="space-y-1.5">
-                  <Label htmlFor="auth-confirm-password">Confirm password</Label>
+                  <Label htmlFor="auth-confirm-password">{t("auth.confirmPassword")}</Label>
                   <PasswordInput
                     id="auth-confirm-password"
                     value={confirmPassword}
@@ -238,7 +239,7 @@ export function AuthPage() {
                       setConfirmPassword(event.target.value);
                       if (fieldErrors.confirmPassword) resetErrors();
                     }}
-                    placeholder="Repeat password"
+                    placeholder={t("auth.confirmPlaceholder")}
                     autoComplete="new-password"
                     required
                     aria-invalid={Boolean(fieldErrors.confirmPassword)}
@@ -262,12 +263,12 @@ export function AuthPage() {
 
               <Button type="submit" className="h-9 w-full" disabled={loading}>
                 {loading ? <LoaderCircle className="animate-spin" /> : null}
-                {mode === "login" ? "Sign in" : "Create account"}
+                {mode === "login" ? t("auth.signIn") : t("auth.createAccount")}
               </Button>
             </form>
 
             <p className="mt-4 text-center text-body text-muted-foreground">
-              {mode === "login" ? "Don't have an account?" : "Already have an account?"}{" "}
+              {mode === "login" ? t("auth.noAccount") : t("auth.hasAccount")}{" "}
               <button
                 type="button"
                 className="font-medium text-foreground underline-offset-4 hover:underline"
@@ -276,7 +277,7 @@ export function AuthPage() {
                   resetErrors();
                 }}
               >
-                {mode === "login" ? "Register" : "Sign in"}
+                {mode === "login" ? t("auth.register") : t("auth.signIn")}
               </button>
             </p>
           </div>

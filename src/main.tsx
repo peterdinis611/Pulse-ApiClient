@@ -4,6 +4,8 @@ import App from "./App";
 import { AppErrorScreen } from "./components/AppErrorScreen";
 import { bootstrapTheme } from "./lib/theme-bootstrap";
 import { loadAndApplyCustomThemeCss } from "./lib/custom-theme";
+import { bootstrapLocale } from "./lib/i18n";
+import { loadAndApplyCustomLanguage } from "./lib/custom-language";
 import "./index.css";
 
 async function main() {
@@ -14,7 +16,14 @@ async function main() {
   }
 
   try {
-    await Promise.all([bootstrapTheme(), loadAndApplyCustomThemeCss()]);
+    bootstrapLocale();
+    await Promise.all([
+      bootstrapTheme(),
+      loadAndApplyCustomThemeCss(),
+      loadAndApplyCustomLanguage().catch((error) => {
+        console.warn("Failed to load custom language pack:", error);
+      }),
+    ]);
     ReactDOM.createRoot(root).render(
       <React.StrictMode>
         <App />

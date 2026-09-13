@@ -326,15 +326,23 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
   },
   {
     id: "themes",
-    title: "Themes & custom CSS",
+    title: "Themes, language & custom CSS",
     summary: "Appearance lives under Settings → Appearance.",
     group: "Appearance",
     items: [
       "Built-in themes via the theme picker",
+      "UI language: Match system, English, or Slovenčina",
+      "Custom language pack: upload or paste a JSON object of key → string overrides",
+      "Missing language keys fall back to the built-in locale, then English",
+      "Example file: examples/pulse-language.en.json",
       "Custom CSS editor with snippets, CSS variables, and component hooks",
       "Live preview while editing",
       "Starter template, full example file, Apply, Export, Browse, Reload, Clear",
       "Example file: examples/pulse-theme-override.example.css",
+    ],
+    howTo: [
+      "Open Settings → Appearance. Pick Match system, English, or Slovenčina.",
+      "Optional: Browse or paste a JSON language pack (see examples/pulse-language.en.json). Missing keys fall back to the language you picked.",
     ],
   },
   {
@@ -429,7 +437,7 @@ export const FEATURE_DOC_GROUP_BLURBS: Record<FeatureDocGroup, string> = {
   Workspace: "The request desk — URL, path params, auth, response, and extra windows.",
   Scripting: "Pre-request scripts, tests, and the bottom console against the last response.",
   Data: "Collections, environments, history, cookies, and the HTTP engine.",
-  Appearance: "Built-in themes and a custom CSS overlay that can restyle the chrome.",
+  Appearance: "Built-in themes, UI language, and CSS / JSON overlays for chrome.",
   Productivity: "Search, shortcuts, the Python CI satellite, and what stays on this machine.",
 };
 

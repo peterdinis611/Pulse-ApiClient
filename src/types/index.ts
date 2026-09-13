@@ -187,6 +187,8 @@ export type HttpSettings = {
 export type AppSettings = HttpSettings & {
   theme: string;
   customThemeCssPath?: string | null;
+  locale?: string | null;
+  customLanguageJsonPath?: string | null;
 };
 
 export type FolderConfig = {

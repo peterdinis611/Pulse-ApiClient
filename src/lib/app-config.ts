@@ -19,3 +19,8 @@ export function readStorageItem(suffix: string): string | null {
 export function writeStorageItem(suffix: string, value: string): void {
   localStorage.setItem(storageKey(suffix), value);
 }
+
+export function removeStorageItem(suffix: string): void {
+  localStorage.removeItem(storageKey(suffix));
+  localStorage.removeItem(`${LEGACY_STORAGE_PREFIX}/${suffix}`);
+}

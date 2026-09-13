@@ -42,6 +42,10 @@ pub struct AppSettings {
     pub http_default_referer: Option<String>,
     #[serde(default)]
     pub custom_theme_css_path: Option<String>,
+    #[serde(default = "default_locale")]
+    pub locale: String,
+    #[serde(default)]
+    pub custom_language_json_path: Option<String>,
 }
 
 /// Payload accepted by `set_http_settings` (camelCase from the UI).
@@ -123,6 +127,10 @@ fn default_theme() -> String {
     "system".to_string()
 }
 
+fn default_locale() -> String {
+    "system".to_string()
+}
+
 fn normalize_optional_string(value: Option<String>) -> Option<String> {
     value
         .map(|raw| raw.trim().to_string())
@@ -184,6 +192,8 @@ impl Default for AppSettings {
             http_default_origin: None,
             http_default_referer: None,
             custom_theme_css_path: None,
+            locale: default_locale(),
+            custom_language_json_path: None,
         }
     }
 }
@@ -208,6 +218,13 @@ pub fn save_settings(app: &AppHandle, settings: &AppSettings) -> Result<(), Stri
     let path = settings_path(app)?;
     let raw = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
     fs::write(path, raw).map_err(|e| e.to_string())
+}
+
+pub fn normalize_locale(locale: &str) -> String {
+    match locale {
+        "en" | "sk" | "system" => locale.to_string(),
+        _ => "system".to_string(),
+    }
 }
 
 pub fn normalize_theme(theme: &str) -> String {

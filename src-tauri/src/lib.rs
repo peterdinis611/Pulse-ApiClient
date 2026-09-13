@@ -5,6 +5,7 @@ mod http_integration;
 pub mod cache;
 pub mod collection_run;
 pub mod cookies;
+pub mod custom_language;
 pub mod custom_theme;
 pub mod db;
 pub mod dns_timing;
@@ -138,6 +139,35 @@ fn set_custom_theme_css(app: AppHandle, path: Option<String>) -> Result<AppSetti
     }
 
     settings.custom_theme_css_path = normalized;
+    settings::save_settings(&app, &settings)?;
+    Ok(settings)
+}
+
+#[tauri::command]
+fn set_locale(app: AppHandle, locale: String) -> Result<AppSettings, String> {
+    let mut settings = settings::load_settings(&app)?;
+    settings.locale = settings::normalize_locale(&locale);
+    settings::save_settings(&app, &settings)?;
+    Ok(settings)
+}
+
+#[tauri::command]
+fn read_custom_language_json(path: String) -> Result<String, String> {
+    custom_language::read_json_file(&path)
+}
+
+#[tauri::command]
+fn set_custom_language_json(app: AppHandle, path: Option<String>) -> Result<AppSettings, String> {
+    let mut settings = settings::load_settings(&app)?;
+    let normalized = path
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+
+    if let Some(ref json_path) = normalized {
+        custom_language::read_json_file(json_path)?;
+    }
+
+    settings.custom_language_json_path = normalized;
     settings::save_settings(&app, &settings)?;
     Ok(settings)
 }
@@ -447,6 +477,9 @@ pub fn run() {
             set_http_settings,
             read_custom_theme_css,
             set_custom_theme_css,
+            set_locale,
+            read_custom_language_json,
+            set_custom_language_json,
             run_http_tests,
             run_pre_request_script,
             run_collection,

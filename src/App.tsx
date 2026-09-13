@@ -2,10 +2,12 @@ import { Suspense, lazy, useState } from "react";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { PacerProvider } from "@tanstack/react-pacer";
 import { AppProvider, useApp } from "@/machines";
+import { useT } from "@/hooks/useLocale";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { LoadingScreen } from "./components/LoadingScreen";
 import { ThemeSync } from "./components/ThemeSync";
 import { CustomThemeSync } from "./components/CustomThemeSync";
+import { LocaleSync } from "./components/LocaleSync";
 import { HistoryProvider } from "./hooks/useHistory";
 import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
@@ -19,9 +21,10 @@ const ClientShell = lazy(() =>
 
 function AppContent() {
   const { user } = useApp();
+  const t = useT();
 
   return (
-    <Suspense fallback={<LoadingScreen label="Loading app" />}>
+    <Suspense fallback={<LoadingScreen label={t("loading.app")} />}>
       {user ? <ClientShell /> : <AuthPage />}
     </Suspense>
   );
@@ -35,6 +38,7 @@ function AppShell() {
           <TooltipProvider delayDuration={300}>
             <ThemeSync />
             <CustomThemeSync />
+            <LocaleSync />
             <AppContent />
           </TooltipProvider>
         </HistoryProvider>
