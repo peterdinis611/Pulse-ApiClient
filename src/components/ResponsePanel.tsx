@@ -6,6 +6,7 @@ import { formatModShortcut, PULSE_HOTKEYS } from "@/lib/hotkeys";
 import { formatBytes } from "@/lib/helpers";
 import { toast } from "@/lib/toast";
 import { parseGraphqlResponse } from "@/lib/graphql";
+import { prettyMaybeJson, unifiedLineDiff } from "@/lib/line-diff";
 import { statusBadgeClass } from "@/lib/method-colors";
 import {
   defaultResponseBodyFormat,
@@ -34,6 +35,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export function ResponsePanel() {
   const {
+    request,
     response,
     error,
     loading,
@@ -42,8 +44,9 @@ export function ResponsePanel() {
     upsertEnvironmentVariable,
     activeEnvironment,
   } = useApp();
-  const [view, setView] = useState<"body" | "headers" | "tests" | "timing">("body");
+  const [view, setView] = useState<"body" | "headers" | "tests" | "timing" | "diff">("body");
   const [bodyFormat, setBodyFormat] = useState<ResponseBodyFormat>("pretty");
+  const [diffExampleId, setDiffExampleId] = useState<string>("");
 
   const previewKind = useMemo(
     () => (response ? previewKindForResponse(response) : "text"),
@@ -66,6 +69,18 @@ export function ResponsePanel() {
         : (parseGraphqlResponse(response?.body ?? "")?.errors ?? []),
     [response],
   );
+
+  const examples = request.examples ?? [];
+  const diffRows = useMemo(() => {
+    if (!response) return [];
+    const example =
+      examples.find((item) => item.id === diffExampleId) ?? examples[0] ?? null;
+    if (!example) return [];
+    return unifiedLineDiff(
+      prettyMaybeJson(example.response.body),
+      prettyMaybeJson(response.body),
+    );
+  }, [diffExampleId, examples, response]);
 
   const jsonTree = useMemo(() => {
     if (!response || response.bodyEncoding === "base64") return null;
@@ -216,6 +231,11 @@ export function ResponsePanel() {
                     <span className="ml-1 text-destructive">!</span>
                   )}
                 </TabsTrigger>
+                {examples.length > 0 && (
+                  <TabsTrigger value="diff" className="h-7 px-2.5 text-xs">
+                    Diff
+                  </TabsTrigger>
+                )}
               </TabsList>
             </Tabs>
           </div>
@@ -332,10 +352,49 @@ export function ResponsePanel() {
               ) : (
                 <EmptyState
                   title="No test results"
-                  description="Add tests in the Tests tab, send the request, then click Run tests."
+                  description="Add tests or a JSON Schema in the Tests tab, send the request, then click Run tests."
                 />
               )}
             </>
+          )}
+
+          {!loading && response && view === "diff" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Compare current body to</span>
+                <select
+                  className="h-7 rounded-md border border-border bg-background px-2 text-xs"
+                  value={diffExampleId || examples[0]?.id || ""}
+                  onChange={(event) => setDiffExampleId(event.target.value)}
+                >
+                  {examples.map((example) => (
+                    <option key={example.id} value={example.id}>
+                      {example.name} ({example.response.status})
+                    </option>
+                  ))}
+                </select>
+                <span className="text-[11px] text-muted-foreground">red = example, green = current</span>
+              </div>
+              <pre className="ui-code-block">
+                {diffRows.length === 0
+                  ? "Save an example first, then diff the current response against it."
+                  : diffRows.map((row, index) => (
+                      <span
+                        key={`${row.kind}-${index}`}
+                        className={
+                          row.kind === "add"
+                            ? "block bg-success/15 text-success"
+                            : row.kind === "del"
+                              ? "block bg-destructive/15 text-destructive"
+                              : "block text-muted-foreground"
+                        }
+                      >
+                        {row.kind === "add" ? "+" : row.kind === "del" ? "-" : " "}
+                        {row.text}
+                      </span>
+                    ))}
+              </pre>
+            </div>
           )}
         </div>
       </ScrollAreaWithTop>

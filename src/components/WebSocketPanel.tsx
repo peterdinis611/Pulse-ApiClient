@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ArrowDownLeft, ArrowUpRight, Plug, Radio, Unplug } from "lucide-react";
 import { useApp } from "@/machines";
+import { isSseProtocol } from "@/lib/protocol";
 import { prettyJson } from "@/lib/helpers";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -38,8 +39,9 @@ function statusBadgeClass(status: string): string {
 }
 
 export function WebSocketPanel() {
-  const { ws, connectWebSocket, disconnectWebSocket, sendWebSocketMessage, sendWebSocketPing } =
+  const { ws, request, connectWebSocket, disconnectWebSocket, sendWebSocketMessage, sendWebSocketPing } =
     useApp();
+  const isSse = isSseProtocol(request.protocol);
   const [draft, setDraft] = useState('{"type":"ping"}');
   const [sendBinary, setSendBinary] = useState(false);
   const [view, setView] = useState<"messages" | "handshake">("messages");
@@ -58,7 +60,7 @@ export function WebSocketPanel() {
     <section className="flex h-full min-h-0 flex-col bg-surface-1/30">
       <div className="ui-panel-header flex-wrap gap-2">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <span className="text-caption">WebSocket</span>
+          <span className="text-caption">{isSse ? "SSE" : "WebSocket"}</span>
           <Badge className={cn("font-mono capitalize text-[11px]", statusBadgeClass(ws.status))}>
             {ws.status}
           </Badge>
@@ -122,7 +124,11 @@ export function WebSocketPanel() {
               {ws.status === "connecting" && (
                 <EmptyState
                   title="Connecting…"
-                  description="Performing WebSocket handshake with the configured URL and headers."
+                  description={
+                    isSse
+                      ? "Opening a text/event-stream connection with the configured URL and headers."
+                      : "Performing WebSocket handshake with the configured URL and headers."
+                  }
                 />
               )}
               {ws.error && ws.status === "error" && (
@@ -133,7 +139,11 @@ export function WebSocketPanel() {
               {ws.messages.length === 0 && ws.status !== "connecting" && (
                 <EmptyState
                   title="No messages yet"
-                  description="Connect to the server, then send a message below."
+                  description={
+                    isSse
+                      ? "Connect to receive server-sent events. There is no outbound frame to send."
+                      : "Connect to the server, then send a message below."
+                  }
                 />
               )}
               {ws.messages.map((message) => (
@@ -166,6 +176,7 @@ export function WebSocketPanel() {
             </div>
           </ScrollAreaWithTop>
 
+          {!isSse && (
           <div className="border-t border-border p-4">
             <div className="mb-3 flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-2">
@@ -221,6 +232,7 @@ export function WebSocketPanel() {
               </Button>
             </div>
           </div>
+          )}
         </>
       )}
     </section>

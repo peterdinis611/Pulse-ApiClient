@@ -19,6 +19,7 @@ import type { TestRunResult } from "@/types";
 import { exportCollectionJson, exportEnvironmentsJson, type PersistedState } from "@/lib/storage";
 import { exportPostmanCollection } from "@/lib/postman-export";
 import { exportPulseCollection } from "@/lib/pulse-collection";
+import { exportOpenApiCollection } from "@/lib/openapi-export";
 import { mergeVariableLayers } from "@/lib/env";
 import { collectFolderVariables, resolveInheritedAuth } from "@/lib/inherit";
 import type { ThemeMode } from "@/lib/theme";
@@ -149,7 +150,7 @@ export function useApp() {
         collectionGroups: context.persisted.collectionGroups,
         collections: context.persisted.collections,
       }),
-    exportCollection: (collectionId: string, format: "pulse" | "postman") => {
+    exportCollection: (collectionId: string, format: "pulse" | "postman" | "openapi") => {
       const group = context.persisted.collectionGroups.find((item) => item.id === collectionId);
       if (!group) return null;
 
@@ -157,10 +158,15 @@ export function useApp() {
       if (format === "postman") {
         return exportPostmanCollection(group, items);
       }
+      if (format === "openapi") {
+        return exportOpenApiCollection(group, items);
+      }
 
       return exportPulseCollection(group, items);
     },
     importCollections: (raw: string) => send({ type: "IMPORT_COLLECTIONS", raw }),
+    importCollectionsFolder: (files: Array<{ name: string; contents: string }>) =>
+      send({ type: "IMPORT_COLLECTIONS_FOLDER", files }),
     importPostmanCollection: (raw: string) => send({ type: "IMPORT_POSTMAN", raw }),
     importBrunoCollection: (raw: string) => send({ type: "IMPORT_BRUNO", raw }),
     importInsomniaCollection: (raw: string) => send({ type: "IMPORT_INSOMNIA", raw }),

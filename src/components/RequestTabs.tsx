@@ -5,6 +5,7 @@ import { TestsTabPanel } from "@/components/TestsTabPanel";
 import { PreRequestTabPanel } from "@/components/PreRequestTabPanel";
 import { CodeSnippetPanel } from "@/components/CodeSnippetPanel";
 import { ExamplesTabPanel } from "@/components/ExamplesTabPanel";
+import { GraphqlExplorer } from "@/components/GraphqlExplorer";
 import { BODY_KINDS } from "@/types";
 import type { BodyKind, KeyValue, MultipartField } from "@/types";
 import { Trash2 } from "lucide-react";
@@ -288,6 +289,7 @@ export function RequestTabs() {
 
               {request.bodyKind === "graphql" && (
                 <div className="space-y-4">
+                  <GraphqlExplorer />
                   <div className="space-y-2">
                     <Label htmlFor="graphql-operation">Operation name</Label>
                     <VariableField

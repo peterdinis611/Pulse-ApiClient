@@ -37,7 +37,10 @@ describe("workspace hotkeys", () => {
       matchesKeyboardEvent(keyEvent("b", { metaKey: true }), PULSE_HOTKEYS.toggleExplorer, "mac"),
     ).toBe(true);
     expect(
-      matchesKeyboardEvent(keyEvent("j", { ctrlKey: true }), PULSE_HOTKEYS.toggleConsole, "windows"),
+      matchesKeyboardEvent(keyEvent("k", { metaKey: true }), PULSE_HOTKEYS.commandPalette, "mac"),
+    ).toBe(true);
+    expect(
+      matchesKeyboardEvent(keyEvent("k", { ctrlKey: true }), PULSE_HOTKEYS.commandPalette, "windows"),
     ).toBe(true);
   });
 

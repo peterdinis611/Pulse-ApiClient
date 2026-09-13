@@ -2,6 +2,7 @@ import { useState } from "react";
 import { BookOpen, FlaskConical, Play, Plus } from "lucide-react";
 import { useApp } from "@/machines";
 import { runHttpTests } from "@/lib/http-client";
+import { mergeTestResults, validateResponseAgainstSchema } from "@/lib/json-schema";
 import {
   pulseTestApiReference,
   pulseTestsTemplate,
@@ -22,7 +23,7 @@ export function TestsTabPanel() {
   const [showReference, setShowReference] = useState(false);
 
   const activeResults = previewResults ?? testResults;
-  const canRun = Boolean(response && !loading && request.tests.trim());
+  const canRun = Boolean(response && !loading && (request.tests.trim() || request.responseSchema?.trim()));
   const snippetGroups = snippetsByGroup();
 
   const insertSnippet = (code: string) => {
@@ -33,19 +34,23 @@ export function TestsTabPanel() {
   };
 
   const handleRunTests = async () => {
-    if (!response || !request.tests.trim()) return;
+    if (!response) return;
     setRunning(true);
     setRunError(null);
     try {
-      const results = await runHttpTests(request.tests, response);
-      setPreviewResults(results);
-      setTestResults(results);
-      if (results.total === 0) {
+      const schemaResults = validateResponseAgainstSchema(response, request.responseSchema ?? "");
+      const scriptResults = request.tests.trim()
+        ? await runHttpTests(request.tests, response)
+        : null;
+      const merged = mergeTestResults(schemaResults, scriptResults);
+      setPreviewResults(merged);
+      setTestResults(merged);
+      if (!merged || merged.total === 0) {
         toast.info("No tests to run");
-      } else if (results.failed > 0) {
-        toast.error("Tests failed", `${results.failed} of ${results.total} failed`);
+      } else if (merged.failed > 0) {
+        toast.error("Tests failed", `${merged.failed} of ${merged.total} failed`);
       } else {
-        toast.success("All tests passed", `${results.passed}/${results.total}`);
+        toast.success("All tests passed", `${merged.passed}/${merged.total}`);
       }
     } catch {
       setRunError("Failed to run tests.");
@@ -126,6 +131,21 @@ export function TestsTabPanel() {
           className="min-h-[360px] flex-1 font-mono text-sm"
           placeholder={pulseTestsTemplate}
         />
+
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Response JSON Schema</p>
+          <p className="text-xs text-muted-foreground">
+            Optional. After Send, Pulse asserts a 2xx status and validates the JSON body against this
+            schema. OpenAPI import fills it from the 200 response when present.
+          </p>
+          <Textarea
+            value={request.responseSchema ?? ""}
+            onChange={(event) => updateRequest({ responseSchema: event.target.value })}
+            spellCheck={false}
+            className="min-h-[140px] font-mono text-sm"
+            placeholder={'{\n  "type": "object",\n  "required": ["id"]\n}'}
+          />
+        </div>
       </div>
 
       <div className="flex min-h-0 flex-col gap-4">

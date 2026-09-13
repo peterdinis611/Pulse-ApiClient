@@ -13,7 +13,7 @@ import { TooltipWrap } from "@/components/TooltipIconButton";
 type CollectionExportMenuProps = {
   collectionId: string;
   collectionName: string;
-  exportCollection: (collectionId: string, format: "pulse" | "postman") => string | null;
+  exportCollection: (collectionId: string, format: "pulse" | "postman" | "openapi") => string | null;
   variant?: "icon" | "menu";
   className?: string;
 };
@@ -25,18 +25,27 @@ export function CollectionExportMenu({
   variant = "icon",
   className,
 }: CollectionExportMenuProps) {
-  const handleExport = (format: "pulse" | "postman") => {
+  const handleExport = (format: "pulse" | "postman" | "openapi") => {
     const content = exportCollection(collectionId, format);
     if (!content) {
       toast.error("Export failed", "Collection not found");
       return;
     }
 
-    const suffix = format === "postman" ? "postman_collection.json" : "pulse_collection.json";
+    const suffix =
+      format === "postman"
+        ? "postman_collection.json"
+        : format === "openapi"
+          ? "openapi.json"
+          : "pulse_collection.json";
     downloadJson(content, collectionExportFilename(collectionName, suffix));
     toast.success(
       "Collection exported",
-      format === "postman" ? `${collectionName} (Postman)` : `${collectionName} (Pulse)`,
+      format === "postman"
+        ? `${collectionName} (Postman)`
+        : format === "openapi"
+          ? `${collectionName} (OpenAPI)`
+          : `${collectionName} (Pulse)`,
     );
   };
 
@@ -60,6 +69,7 @@ export function CollectionExportMenu({
       <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuItem onClick={() => handleExport("pulse")}>Pulse collection</DropdownMenuItem>
         <DropdownMenuItem onClick={() => handleExport("postman")}>Postman collection</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => handleExport("openapi")}>OpenAPI 3.0</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

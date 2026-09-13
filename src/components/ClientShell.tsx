@@ -1,6 +1,7 @@
-import { Suspense, lazy, useEffect } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { useApp } from "@/machines";
 import { AppRail } from "./AppRail";
+import { CommandPalette } from "./CommandPalette";
 import { ExplorerPanel } from "./ExplorerPanel";
 import { LoadingScreen } from "./LoadingScreen";
 import { ResizableConsole } from "./ResizableConsole";
@@ -34,8 +35,9 @@ const SettingsView = lazy(() =>
 export function ClientShell() {
   const { mainView, consoleOpen, tabs, activeTabId } = useApp();
   const { t, version } = useI18n();
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
-  useWorkspaceHotkeys();
+  useWorkspaceHotkeys({ onCommandPalette: () => setPaletteOpen((open) => !open) });
 
   useEffect(() => {
     void (async () => {
@@ -92,6 +94,7 @@ export function ClientShell() {
         )}
         <StatusBar />
       </div>
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
     </div>
   );
 }

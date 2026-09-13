@@ -16,7 +16,7 @@ export type MultipartFieldType = "text" | "file";
 export type SidebarTab = "collections" | "history" | "environments";
 export type MainView = "overview" | "request" | "environments" | "settings" | "docs";
 
-export type RequestProtocol = "http" | "websocket";
+export type RequestProtocol = "http" | "websocket" | "sse";
 
 export type WebSocketStatus = "idle" | "connecting" | "open" | "closing" | "closed" | "error";
 
@@ -120,6 +120,8 @@ export type ApiRequest = {
   preRequestScript: string;
   /** Saved response snapshots for this request (“how it should look”). */
   examples: RequestExample[];
+  /** Optional JSON Schema used to validate the last response body. */
+  responseSchema?: string;
 };
 
 export type RequestExample = {
@@ -182,6 +184,9 @@ export type HttpSettings = {
   httpConnectTimeoutMs: number;
   httpDefaultOrigin: string | null;
   httpDefaultReferer: string | null;
+  httpClientCertPath?: string | null;
+  httpClientKeyPath?: string | null;
+  httpCaCertPath?: string | null;
 };
 
 export type AppSettings = HttpSettings & {
@@ -189,6 +194,7 @@ export type AppSettings = HttpSettings & {
   customThemeCssPath?: string | null;
   locale?: string | null;
   customLanguageJsonPath?: string | null;
+  collectionsFolderPath?: string | null;
 };
 
 export type FolderConfig = {

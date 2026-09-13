@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useApp } from "@/machines";
 import { validateGraphqlRequest } from "@/lib/graphql";
-import { isWebSocketProtocol } from "@/lib/protocol";
+import { isStreamProtocol, isWebSocketProtocol } from "@/lib/protocol";
 import { containsVariables } from "@/lib/env";
 import { prepareRequest } from "@/lib/http-client";
 import { CODE_SNIPPETS, requestToSnippet, type CodeSnippetId } from "@/lib/code-snippets";
@@ -21,7 +21,6 @@ import { resolveRequestForSend } from "@/lib/resolve-request";
 import { methodToneStyle } from "@/lib/method-colors";
 import { VariableField } from "@/components/VariableField";
 import { HTTP_METHODS } from "@/types";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -72,15 +71,16 @@ export function RequestBar() {
   const curlImportRef = useRef<HTMLInputElement>(null);
 
   const isWebSocket = isWebSocketProtocol(request.protocol);
+  const isStream = isStreamProtocol(request.protocol);
 
   const canSend = useMemo(() => {
     if (!request.url.trim()) return false;
-    if (isWebSocket) return false;
+    if (isStream) return false;
     if (request.bodyKind === "graphql") {
       return validateGraphqlRequest(request) === null;
     }
     return true;
-  }, [isWebSocket, request]);
+  }, [isStream, request]);
 
   const canConnect = useMemo(() => {
     if (!request.url.trim()) return false;
@@ -110,7 +110,7 @@ export function RequestBar() {
   useHotkey(
     PULSE_HOTKEYS.send,
     () => {
-      if (isWebSocket) {
+      if (isStream) {
         if (canConnect) connectWebSocket();
         return;
       }
@@ -123,13 +123,22 @@ export function RequestBar() {
     <div className="request-bar shrink-0">
       <div className="flex items-stretch gap-2.5 px-3 py-2.5">
         <div className="request-url-composite">
-          {isWebSocket ? (
-            <div className="flex h-9 w-20 shrink-0 items-center justify-center border-r border-border bg-muted/30">
-              <Badge variant="secondary" className="font-mono text-[10px] uppercase">
-                WS
-              </Badge>
-            </div>
-          ) : (
+          <Select
+            value={request.protocol}
+            onValueChange={(value) =>
+              updateRequest({ protocol: value as typeof request.protocol })
+            }
+          >
+            <SelectTrigger className="h-9 w-[88px] shrink-0 rounded-none border-0 border-r font-mono text-[10px] font-bold uppercase shadow-none focus:ring-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="start">
+              <SelectItem value="http">HTTP</SelectItem>
+              <SelectItem value="websocket">WS</SelectItem>
+              <SelectItem value="sse">SSE</SelectItem>
+            </SelectContent>
+          </Select>
+          {isStream ? null : (
             <Select
               value={request.method}
               onValueChange={(value) =>
@@ -171,14 +180,16 @@ export function RequestBar() {
             placeholder={
               isWebSocket
                 ? "wss://{{baseUrl}}/ws"
-                : request.bodyKind === "graphql"
-                  ? "{{baseUrl}}/graphql"
-                  : "{{baseUrl}}/users"
+                : request.protocol === "sse"
+                  ? "{{baseUrl}}/events"
+                  : request.bodyKind === "graphql"
+                    ? "{{baseUrl}}/graphql"
+                    : "{{baseUrl}}/users"
             }
           />
         </div>
 
-        {isWebSocket ? (
+        {isStream ? (
           ws.status === "open" || ws.status === "connecting" ? (
             <Button
               type="button"
@@ -335,7 +346,7 @@ export function RequestBar() {
         />
       </div>
 
-      {request.method === "QUERY" && !isWebSocket && (
+      {request.method === "QUERY" && !isStream && (
         <div className="flex items-start gap-2 border-t border-warning/25 bg-warning/8 px-3 py-2 text-[12px] leading-snug text-foreground/90">
           <Info className="mt-0.5 size-3.5 shrink-0 text-warning" />
           <p>

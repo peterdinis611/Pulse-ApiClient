@@ -136,6 +136,7 @@ export function createRequest(partial?: Partial<ApiRequest>): ApiRequest {
     tests: partial?.tests ?? defaultRequestTests,
     preRequestScript: partial?.preRequestScript ?? "",
     examples: structuredClone(partial?.examples ?? []),
+    responseSchema: partial?.responseSchema ?? "",
   };
 }
 

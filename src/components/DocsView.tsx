@@ -25,6 +25,7 @@ import {
   Sparkles,
   Terminal,
   Zap,
+  Library,
   type LucideIcon,
 } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
@@ -38,6 +39,7 @@ import {
   type FeatureDocGroup,
   type FeatureDocSection,
 } from "@/lib/feature-docs";
+import { onPulseNavigate } from "@/lib/app-navigate";
 import { cn } from "@/lib/utils";
 
 const SECTION_ICONS: Record<string, LucideIcon> = {
@@ -62,6 +64,7 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
   data: Database,
   "python-cli": Zap,
   mcp: Plug,
+  libraries: Library,
 };
 
 function DocInlineText({ text }: { text: string }) {
@@ -125,6 +128,15 @@ export function DocsView() {
       return haystack.includes(q);
     });
   }, [query, groupFilter]);
+
+  useEffect(() => {
+    return onPulseNavigate((detail) => {
+      if (!detail.docsSection) return;
+      setGroupFilter(null);
+      setQuery("");
+      setActiveId(detail.docsSection);
+    });
+  }, []);
 
   useEffect(() => {
     if (filtered.length === 0) return;

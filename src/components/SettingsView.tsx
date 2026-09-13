@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   Download,
+  FolderOpen,
   FolderPlus,
   History,
   Pencil,
@@ -48,6 +49,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { onPulseNavigate } from "@/lib/app-navigate";
+import { pickPemFile } from "@/lib/tls-certs";
+import {
+  pickCollectionsFolder,
+  readCollectionsFolder,
+  setCollectionsFolderPath,
+  writeCollectionsFolder,
+} from "@/lib/collections-folder";
+import { exportPulseCollection } from "@/lib/pulse-collection";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/useLocale";
 import type { MessageKey } from "@/lib/i18n";
@@ -191,6 +201,7 @@ export function SettingsView() {
     importBrunoCollection,
     importInsomniaCollection,
     importOpenApiCollection,
+    importCollectionsFolder,
     clearHistory,
     resetWorkspace,
   } = useApp();
@@ -228,6 +239,11 @@ export function SettingsView() {
   const [httpDefaultReferer, setHttpDefaultReferer] = useState(
     HTTP_SETTINGS_DEFAULTS.httpDefaultReferer,
   );
+  const [httpClientCertPath, setHttpClientCertPath] = useState("");
+  const [httpClientKeyPath, setHttpClientKeyPath] = useState("");
+  const [httpCaCertPath, setHttpCaCertPath] = useState("");
+  const [collectionsFolderPath, setCollectionsFolderPathState] = useState("");
+  const [syncingFolder, setSyncingFolder] = useState(false);
   const [engineStats, setEngineStats] = useState<Awaited<ReturnType<typeof getHttpEngineStats>> | null>(
     null,
   );
@@ -262,6 +278,13 @@ export function SettingsView() {
   };
 
   useEffect(() => {
+    return onPulseNavigate((detail) => {
+      if (!detail.settingsSection) return;
+      window.setTimeout(() => scrollToSection(detail.settingsSection!), 50);
+    });
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
 
     const load = async () => {
@@ -290,6 +313,10 @@ export function SettingsView() {
         );
         setHttpDefaultOrigin(settings.httpDefaultOrigin ?? "");
         setHttpDefaultReferer(settings.httpDefaultReferer ?? "");
+        setHttpClientCertPath(settings.httpClientCertPath ?? "");
+        setHttpClientKeyPath(settings.httpClientKeyPath ?? "");
+        setHttpCaCertPath(settings.httpCaCertPath ?? "");
+        setCollectionsFolderPathState(settings.collectionsFolderPath ?? "");
         setEngineStats(stats);
         setCookies(cookies);
         setDatabasePath(databasePath);
@@ -373,6 +400,9 @@ export function SettingsView() {
         httpConnectTimeoutMs: connectTimeoutSec * 1000,
         httpDefaultOrigin: httpDefaultOrigin.trim() || null,
         httpDefaultReferer: httpDefaultReferer.trim() || null,
+        httpClientCertPath: httpClientCertPath.trim() || null,
+        httpClientKeyPath: httpClientKeyPath.trim() || null,
+        httpCaCertPath: httpCaCertPath.trim() || null,
       });
       setHttpMaxConcurrent(String(saved.httpMaxConcurrent));
       setHttpTimeoutSec(String(Math.round(saved.httpTimeoutMs / 1000)));
@@ -389,6 +419,9 @@ export function SettingsView() {
       setHttpConnectTimeoutSec(String(Math.round(saved.httpConnectTimeoutMs / 1000)));
       setHttpDefaultOrigin(saved.httpDefaultOrigin ?? "");
       setHttpDefaultReferer(saved.httpDefaultReferer ?? "");
+      setHttpClientCertPath(saved.httpClientCertPath ?? "");
+      setHttpClientKeyPath(saved.httpClientKeyPath ?? "");
+      setHttpCaCertPath(saved.httpCaCertPath ?? "");
       setEngineStats(await getHttpEngineStats());
       toast.success("HTTP settings saved");
     } catch {
@@ -592,6 +625,105 @@ export function SettingsView() {
           )}
 
           <SettingRow
+            title="Collections folder (Git)"
+            description="Bruno-style directory of *.pulse.json files. Diff collections in Git — no sync server. Desktop only."
+          >
+            <div className="flex min-w-0 flex-col items-end gap-2">
+              <p className="max-w-[280px] truncate font-mono text-[11px] text-muted-foreground">
+                {collectionsFolderPath || "No folder selected"}
+              </p>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!canUseTauriIpc()}
+                  onClick={() => {
+                    void pickCollectionsFolder().then(async (path) => {
+                      if (!path) return;
+                      try {
+                        const saved = await setCollectionsFolderPath(path);
+                        setCollectionsFolderPathState(saved.collectionsFolderPath ?? path);
+                        toast.success("Collections folder set");
+                      } catch (error) {
+                        toast.error(error instanceof Error ? error.message : "Could not set folder");
+                      }
+                    });
+                  }}
+                >
+                  <FolderOpen className="size-4" />
+                  Browse
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!canUseTauriIpc() || !collectionsFolderPath || syncingFolder}
+                  onClick={() => {
+                    void (async () => {
+                      setSyncingFolder(true);
+                      try {
+                        const files = collectionGroups.map((group) => ({
+                          name: group.name,
+                          contents: exportPulseCollection(
+                            group,
+                            collections.filter((item) => item.collectionId === group.id),
+                          ),
+                        }));
+                        const written = await writeCollectionsFolder(collectionsFolderPath, files);
+                        toast.success("Wrote collections", `${written.length} file(s)`);
+                      } catch (error) {
+                        toast.error(error instanceof Error ? error.message : "Write failed");
+                      } finally {
+                        setSyncingFolder(false);
+                      }
+                    })();
+                  }}
+                >
+                  Write to folder
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!canUseTauriIpc() || !collectionsFolderPath || syncingFolder}
+                  onClick={() => {
+                    void (async () => {
+                      setSyncingFolder(true);
+                      try {
+                        const files = await readCollectionsFolder(collectionsFolderPath);
+                        importCollectionsFolder(files);
+                        toast.success("Reloaded from folder", `${files.length} file(s)`);
+                      } catch (error) {
+                        toast.error(error instanceof Error ? error.message : "Reload failed");
+                      } finally {
+                        setSyncingFolder(false);
+                      }
+                    })();
+                  }}
+                >
+                  Reload from folder
+                </Button>
+                {collectionsFolderPath && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      void setCollectionsFolderPath(null).then(() => {
+                        setCollectionsFolderPathState("");
+                        toast.success("Folder cleared");
+                      });
+                    }}
+                  >
+                    Clear
+                  </Button>
+                )}
+              </div>
+            </div>
+          </SettingRow>
+
+          <SettingRow
             title="Clear HTTP cache"
             description="Remove cached GET/HEAD responses from memory and disk."
           >
@@ -774,6 +906,52 @@ export function SettingsView() {
               <p className="text-[11px] text-muted-foreground">
                 Leave empty for direct connections. Applies to all requests from the engine.
               </p>
+            </div>
+
+            <div className="space-y-3 border-t border-border/60 pt-4">
+              <div>
+                <h4 className="text-sm font-medium">mTLS / client certificate</h4>
+                <p className="text-xs text-muted-foreground">
+                  PEM files for enterprise APIs that require a client cert. Desktop only.
+                </p>
+              </div>
+              {(
+                [
+                  ["Client certificate", httpClientCertPath, setHttpClientCertPath, "Certificate"],
+                  ["Client key", httpClientKeyPath, setHttpClientKeyPath, "Private key"],
+                  ["CA certificate", httpCaCertPath, setHttpCaCertPath, "CA"],
+                ] as const
+              ).map(([label, value, setter, filter]) => (
+                <div key={label} className="space-y-1.5">
+                  <Label>{label}</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      readOnly
+                      value={value}
+                      placeholder="No file selected"
+                      className="font-mono text-xs"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={!canUseTauriIpc()}
+                      onClick={() => {
+                        void pickPemFile(filter).then((path) => {
+                          if (path) setter(path);
+                        });
+                      }}
+                    >
+                      Browse
+                    </Button>
+                    {value && (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setter("")}>
+                        Clear
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 

@@ -53,9 +53,13 @@ fn deserializes_partial_settings_with_defaults() {
     assert_eq!(settings.http_connect_timeout_ms, 10_000);
     assert_eq!(settings.http_default_origin, None);
     assert_eq!(settings.http_default_referer, None);
+    assert_eq!(settings.http_client_cert_path, None);
+    assert_eq!(settings.http_client_key_path, None);
+    assert_eq!(settings.http_ca_cert_path, None);
     assert_eq!(settings.custom_theme_css_path, None);
     assert_eq!(settings.locale, "system");
     assert_eq!(settings.custom_language_json_path, None);
+    assert_eq!(settings.collections_folder_path, None);
 }
 
 #[test]
@@ -77,6 +81,9 @@ fn apply_http_input_normalizes_values() {
         http_connect_timeout_ms: 50,
         http_default_origin: Some(" https://app.local ".into()),
         http_default_referer: Some("".into()),
+        http_client_cert_path: Some("  /tmp/client.pem  ".into()),
+        http_client_key_path: Some("".into()),
+        http_ca_cert_path: None,
     });
 
     assert_eq!(settings.http_max_concurrent, 256);
@@ -93,4 +100,6 @@ fn apply_http_input_normalizes_values() {
     assert_eq!(settings.http_connect_timeout_ms, 500);
     assert_eq!(settings.http_default_origin.as_deref(), Some("https://app.local"));
     assert_eq!(settings.http_default_referer, None);
+    assert_eq!(settings.http_client_cert_path.as_deref(), Some("/tmp/client.pem"));
+    assert_eq!(settings.http_client_key_path, None);
 }

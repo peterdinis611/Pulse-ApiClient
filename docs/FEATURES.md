@@ -35,6 +35,8 @@ Build and send requests from the Requests workspace.
 - Name the request, pick a collection and folder, then Save
 - Save example stores the last response on the request (Examples tab) — a snapshot of how a 200 should look
 - Import from cURL via the ⋯ menu on the request bar
+- Protocol picker: HTTP, WebSocket, or SSE (server-sent events)
+- GraphQL body includes a schema explorer (Introspect the current URL)
 - Tabs for parallel requests; duplicate from the explorer
 - QUERY is experimental — some proxies and frameworks still reject it
 
@@ -129,17 +131,26 @@ Inspect status, timing, size, headers, and body after Send.
 - JSON pretty-print for application/json bodies
 - Preview for images, PDF, Excel (.xlsx), and CSV
 - Download response body to disk
+- Diff the current body against a saved example (red = example, green = current)
+- JSON Schema on the Tests tab — Send asserts 2xx and validates the body
 - Headers and timing metadata beside the body
 - Empty, loading, and error states are distinct — you always know if a send is in flight
 
-### WebSocket
+### WebSocket & SSE
 
-Connect to ws:// or wss:// endpoints from the request bar.
+Stream protocols on the request bar: WebSocket frames or text/event-stream.
 
-- Switch protocol to WebSocket (or paste a `ws://` / `wss://` URL)
-- Connect / Disconnect replace Send while the socket is active
+- Protocol picker: HTTP, WS, or SSE — or paste a `ws://` / `wss://` URL for WebSocket
+- SSE uses `http://` / `https://` with `Accept: text/event-stream` (AI streams, logs, ticks)
+- Connect / Disconnect replace Send while the stream is active
 - Headers, query, path params, and inherited auth apply on connect
-- Send text or binary frames; ping; inspect incoming messages
+- WebSocket: send text or binary frames; ping; inspect incoming messages
+- SSE is incoming-only — events land in the same message list, no send/ping
+
+**How to**
+
+1. Switch protocol to SSE, set the events URL, Connect. Data lines show as incoming messages.
+2. For WebSocket, use `wss://…` or pick WS, then Connect and send frames.
 
 ## Scripting
 
@@ -195,11 +206,14 @@ Organize saved requests and run them as a set.
 - Save, duplicate, delete, drag-and-drop requests and folders
 - Nested folders; empty folders can be deleted
 - Run collection — sequential when pre-request scripts or a data file exist, otherwise can batch
+- Live progress in the explorer: request name, status, elapsed ms, and a bar (same events MCP already emits)
 - Run folder — Play on a folder sends that folder and its nested requests only
 - Data file — CSV or JSON, one row = one full iteration of the collection or folder
 - Runner uses the same inheritance and variable layers as a single Send
 - Import Pulse JSON, Postman v2.1, Bruno, Insomnia, OpenAPI
-- Export one collection as Pulse or Postman (⋯ menu), or the whole workspace
+- Export one collection as Pulse, Postman, or OpenAPI 3.0 (⋯ menu), or the whole workspace
+- OpenAPI import attaches JSON Schema from 200/201 when present; Send asserts 2xx vs that schema
+- Collections folder — Settings → Data: pick a Git directory, Write *.pulse.json, Reload from folder
 - Postman import/export keeps collection and folder auth, variables, and scripts
 - OpenAPI `{id}` paths become path params; operations land as requests
 
@@ -208,7 +222,8 @@ Organize saved requests and run them as a set.
 1. Save from the request bar (collection + optional folder).
 2. Play on a collection runs every request; Play on a folder runs that folder. View results for status and tests.
 3. Spreadsheet icon (or Run with CSV / JSON) picks a data file: each row becomes `{{column}}` for one iteration.
-4. Explorer transfer menu imports a file; collection ⋯ exports Pulse or Postman JSON.
+4. Explorer transfer menu imports a file; collection ⋯ exports Pulse, Postman, or OpenAPI JSON.
+5. Settings → Data → Collections folder writes the workspace as Git-friendly `*.pulse.json` files.
 
 ### Variables & environments
 
@@ -259,6 +274,7 @@ Native reqwest client — CORS does not apply; configure TLS, proxy, redirects, 
 
 - Settings → HTTP engine — concurrency, timeouts, cache (memory + disk)
 - TLS verify on/off (self-signed / local HTTPS)
+- mTLS — client certificate, key, and CA PEM via file picker (like custom CSS)
 - HTTP(S) or SOCKS proxy URL
 - Follow redirects + max redirects
 - Default User-Agent, Origin, Referer
@@ -300,6 +316,7 @@ Appearance lives under Settings → Appearance.
 Find requests quickly and stay on the keyboard.
 
 - Fuzzy search in the explorer and Overview
+- `Cmd/Ctrl + K` — command palette (jump to request, collection, setting, docs)
 - `Cmd/Ctrl + Enter` — Send
 - `Cmd/Ctrl + T` — new request tab
 - `Cmd/Ctrl + W` — close tab
@@ -319,8 +336,9 @@ Workspace data is local to your account on this device.
 - SQLite per user: workspace, history, HTTP cache
 - Settings — export collections, reset database, clear cache
 - Sign in keeps a separate auth database from workspace data
-- No Pulse cloud — collections stay on disk unless you export them
-- File pickers (custom CSS, runner data) are OS-agnostic — no hardcoded `~/Library` paths
+- No Pulse cloud — collections stay on disk unless you export them or sync a Git folder
+- Settings → Data → Collections folder writes/reloads `*.pulse.json` for Bruno-style Git diffs
+- File pickers (custom CSS, language pack, mTLS PEMs, runner data, collections folder) are OS-agnostic — no hardcoded `~/Library` paths
 
 > Linux AppImage and .deb need webkit2gtk 4.1 at runtime, not only when compiling. Install `libwebkit2gtk-4.1-0` (Debian/Ubuntu) if the window fails to open.
 
@@ -343,12 +361,12 @@ Satellite around the Rust engine — collection runs, benches, OpenAPI/HAR impor
 
 ### MCP
 
-Cursor (and other MCP clients) can call the Pulse Rust engine over stdio — send, run collections, bench, OpenAPI.
+Cursor (and other MCP clients) can call the Pulse Rust engine over stdio — send, GraphQL, cURL, collections, bench, OpenAPI, diff.
 
 - Project config: `.cursor/mcp.json` launches `.venv/bin/python python/pulse_mcp.py`
-- Resources: `pulse://examples/pets.json`, `pulse://last-run`, `pulse://openapi/{file}`
-- Tools: pulse_send, pulse_run_collection, pulse_bench, pulse_write_collection, pulse_pre_request, pulse_interpolate, pulse_run_tests, pulse_openapi, pulse_har, pulse_schema
-- Prompts: run_and_explain, openapi_to_pulse, compare_responses — the prompt text names the tools, so the agent does not have to memorize them
+- Resources: `pulse://examples/pets.json`, `pulse://last-run`, `pulse://openapi/{file}`, `pulse://out/{file}`
+- Tools: pulse_send, pulse_run_collection, pulse_bench, pulse_write_collection, pulse_pre_request, pulse_interpolate, pulse_run_tests, pulse_openapi, pulse_har, pulse_schema, pulse_diff, pulse_export_openapi, pulse_graphql, pulse_curl, pulse_snippet, pulse_last_run, pulse_validate_run, pulse_help
+- Prompts: run_and_explain, openapi_to_pulse, compare_responses, graphql_introspect, curl_import, export_openapi, explain_last_run, validate_schema — the prompt text names the tools
 - Long collection runs and bench emit MCP progress (request name, status, ms) after each step
 - OpenAPI/HAR write to `python/examples/.out/` and return a path — not a huge JSON blob
 - Same engine as the CLI — not inside the Tauri window
@@ -359,5 +377,31 @@ Cursor (and other MCP clients) can call the Pulse Rust engine over stdio — sen
 1. Run `bun run pulse:cli:install` so `.venv` has `pulse_native`.
 2. Reload Cursor. In Settings → MCP, enable **pulse** if it is listed as disabled.
 3. Ask the agent to send GET https://jsonplaceholder.typicode.com/posts/1 via Pulse, or to run `python/examples/pets.json`.
-4. Built-in prompts cover “run this collection and explain failures”, “OpenAPI → Pulse and test 2xx”, and “compare two JSON responses”.
-5. OpenAPI conversion writes `python/examples/.out/…json`; read `pulse://last-run` after a collection run.
+4. Built-in prompts cover collection runs, OpenAPI import/export, GraphQL introspection, cURL import, last-run summary, schema validation, and comparing two JSON responses (`pulse_diff`).
+5. OpenAPI conversion writes `python/examples/.out/…json`; read `pulse://last-run` or call `pulse_last_run` after a collection run. Generated files are also `pulse://out/{file}`.
+
+### Libraries & stack
+
+Direct dependencies — desktop UI, Rust engine, Python satellite, and the docs site. Versions live in package.json / Cargo.toml.
+
+- UI — React 19, React DOM, TypeScript, Vite, Tailwind CSS v4 (`@tailwindcss/vite`)
+- Components — shadcn/ui on Radix (alert-dialog, avatar, checkbox, collapsible, dropdown-menu, label, scroll-area, select, separator, slot, tabs, tooltip)
+- UI helpers — lucide-react, class-variance-authority, clsx, tailwind-merge, sonner toasts
+- State & effects — XState 5, @xstate/react, Effect
+- Desktop bridge — @tauri-apps/api, @tauri-apps/plugin-dialog, @tauri-apps/plugin-opener
+- Workspace UX — @tanstack/react-hotkeys, @tanstack/react-pacer, fuse.js (fuzzy search), xlsx (Excel preview / runner data)
+- Desktop crate (`src-tauri`) — Tauri 2, tauri-plugin-dialog, tauri-plugin-opener, reqwest (rustls, JSON, multipart, cookies, SOCKS, stream), tokio, tokio-tungstenite, tokio-util, futures-util, rusqlite (bundled), moka, serde / serde_json, url, base64, sha2, regex, fuzzy-matcher, pulse-core
+- Engine crate (`crates/pulse-core`) — boa_engine (JS tests / pre-request), reqwest, tokio, serde, regex, url, base64
+- Python binding (`crates/pulse-native`) — PyO3 (abi3-py310) around pulse-core
+- Python package (`python/pulse`) — stdlib only: openapi, har, schema, runner, bench, junit, export, envfile, report, curl, diff, graphql, snippet, MCP protocol / tools / prompts / resources
+- Optional Python — PyYAML (OpenAPI YAML), schemathesis (`python/tools/schemathesis_pulse.py`), maturin to build pulse_native
+- Docs site (`docs/site`) — Next.js, Fumadocs (core, MDX, UI), lucide-react, cnfast
+- Tests — Vitest (UI), wiremock (Rust HTTP), Python unittest
+
+**How to**
+
+1. Frontend versions: `package.json`. Desktop/engine versions: `src-tauri/Cargo.toml` and `crates/*/Cargo.toml`.
+2. Python modules: `python/pulse/` (no extra pip packages for the CLI itself).
+3. Field-manual site packages: `docs/site/package.json`.
+
+> The Tauri window does not embed CPython. CLI and MCP talk to the same Rust engine through `pulse_native`.

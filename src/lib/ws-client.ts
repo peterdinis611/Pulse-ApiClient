@@ -82,6 +82,17 @@ export async function wsConnect(
   });
 }
 
+export async function sseConnect(
+  tabId: string,
+  request: ApiRequest,
+  environment: Environment | null,
+): Promise<WsConnectResult> {
+  return invoke<WsConnectResult>("sse_connect", {
+    tabId,
+    payload: buildWsPayload(request, environment),
+  });
+}
+
 export async function wsSend(
   connectionId: string,
   data: string,

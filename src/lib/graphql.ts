@@ -99,3 +99,68 @@ export function formatGraphqlResponse(body: string): string {
 
   return sections.join("\n\n") || body;
 }
+
+export const GRAPHQL_INTROSPECTION_QUERY = `query PulseIntrospection {
+  __schema {
+    queryType { name }
+    mutationType { name }
+    types {
+      kind
+      name
+      description
+      fields {
+        name
+        description
+        args { name }
+        type { kind name ofType { kind name ofType { kind name ofType { kind name } } } }
+      }
+    }
+  }
+}`;
+
+export type GraphqlTypeRef = {
+  kind?: string;
+  name?: string | null;
+  ofType?: GraphqlTypeRef | null;
+};
+
+export type GraphqlField = {
+  name: string;
+  description?: string | null;
+  args?: Array<{ name: string }>;
+  type?: GraphqlTypeRef;
+};
+
+export type GraphqlType = {
+  kind?: string;
+  name?: string | null;
+  description?: string | null;
+  fields?: GraphqlField[] | null;
+};
+
+export type GraphqlSchema = {
+  queryType?: { name?: string } | null;
+  mutationType?: { name?: string } | null;
+  types: GraphqlType[];
+};
+
+export function parseGraphqlSchema(body: string): GraphqlSchema | null {
+  const parsed = parseGraphqlResponse(body);
+  const schema = (parsed?.data as { __schema?: GraphqlSchema } | undefined)?.__schema;
+  if (!schema?.types) return null;
+  return schema;
+}
+
+export function formatGraphqlTypeRef(type: GraphqlTypeRef | undefined): string {
+  if (!type) return "";
+  if (type.kind === "NON_NULL") return `${formatGraphqlTypeRef(type.ofType ?? undefined)}!`;
+  if (type.kind === "LIST") return `[${formatGraphqlTypeRef(type.ofType ?? undefined)}]`;
+  return type.name ?? "";
+}
+
+export function visibleGraphqlTypes(schema: GraphqlSchema): GraphqlType[] {
+  return schema.types
+    .filter((type) => type.name && !type.name.startsWith("__") && (type.fields?.length ?? 0) > 0)
+    .sort((left, right) => (left.name ?? "").localeCompare(right.name ?? ""));
+}
+

@@ -41,11 +41,19 @@ pub struct AppSettings {
     #[serde(default)]
     pub http_default_referer: Option<String>,
     #[serde(default)]
+    pub http_client_cert_path: Option<String>,
+    #[serde(default)]
+    pub http_client_key_path: Option<String>,
+    #[serde(default)]
+    pub http_ca_cert_path: Option<String>,
+    #[serde(default)]
     pub custom_theme_css_path: Option<String>,
     #[serde(default = "default_locale")]
     pub locale: String,
     #[serde(default)]
     pub custom_language_json_path: Option<String>,
+    #[serde(default)]
+    pub collections_folder_path: Option<String>,
 }
 
 /// Payload accepted by `set_http_settings` (camelCase from the UI).
@@ -67,6 +75,12 @@ pub struct HttpSettingsInput {
     pub http_connect_timeout_ms: u64,
     pub http_default_origin: Option<String>,
     pub http_default_referer: Option<String>,
+    #[serde(default)]
+    pub http_client_cert_path: Option<String>,
+    #[serde(default)]
+    pub http_client_key_path: Option<String>,
+    #[serde(default)]
+    pub http_ca_cert_path: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -81,6 +95,9 @@ pub struct HttpClientConfig {
     pub connect_timeout_ms: u64,
     pub default_origin: Option<String>,
     pub default_referer: Option<String>,
+    pub client_cert_path: Option<String>,
+    pub client_key_path: Option<String>,
+    pub ca_cert_path: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -154,6 +171,9 @@ impl AppSettings {
         self.http_connect_timeout_ms = input.http_connect_timeout_ms.clamp(500, 120_000);
         self.http_default_origin = normalize_optional_string(input.http_default_origin);
         self.http_default_referer = normalize_optional_string(input.http_default_referer);
+        self.http_client_cert_path = normalize_optional_string(input.http_client_cert_path);
+        self.http_client_key_path = normalize_optional_string(input.http_client_key_path);
+        self.http_ca_cert_path = normalize_optional_string(input.http_ca_cert_path);
     }
 
     pub fn client_config(&self) -> HttpClientConfig {
@@ -168,6 +188,9 @@ impl AppSettings {
             connect_timeout_ms: self.http_connect_timeout_ms,
             default_origin: self.http_default_origin.clone(),
             default_referer: self.http_default_referer.clone(),
+            client_cert_path: self.http_client_cert_path.clone(),
+            client_key_path: self.http_client_key_path.clone(),
+            ca_cert_path: self.http_ca_cert_path.clone(),
         }
     }
 }
@@ -191,9 +214,13 @@ impl Default for AppSettings {
             http_connect_timeout_ms: default_http_connect_timeout_ms(),
             http_default_origin: None,
             http_default_referer: None,
+            http_client_cert_path: None,
+            http_client_key_path: None,
+            http_ca_cert_path: None,
             custom_theme_css_path: None,
             locale: default_locale(),
             custom_language_json_path: None,
+            collections_folder_path: None,
         }
     }
 }

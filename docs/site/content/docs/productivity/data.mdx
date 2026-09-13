@@ -10,8 +10,9 @@ Workspace data is local to your account on this device.
 - SQLite per user: workspace, history, HTTP cache
 - Settings — export collections, reset database, clear cache
 - Sign in keeps a separate auth database from workspace data
-- No Pulse cloud — collections stay on disk unless you export them
-- File pickers (custom CSS, runner data) are OS-agnostic — no hardcoded `~/Library` paths
+- No Pulse cloud — collections stay on disk unless you export them or sync a Git folder
+- Settings → Data → Collections folder writes/reloads `*.pulse.json` for Bruno-style Git diffs
+- File pickers (custom CSS, language pack, mTLS PEMs, runner data, collections folder) are OS-agnostic — no hardcoded `~/Library` paths
 
 <Callout title="Tip">
 

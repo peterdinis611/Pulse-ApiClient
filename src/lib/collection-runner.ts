@@ -7,6 +7,7 @@ import { runEffectsParallel } from "@/lib/effect/tauri";
 import { runEffect } from "@/lib/effect/run";
 import { runHttpTestsEffect, runPreRequestScriptEffect } from "@/lib/http-ipc";
 import { sendRequest, sendRequestsBatch } from "@/lib/http-client";
+import { mergeTestResults, validateResponseAgainstSchema } from "@/lib/json-schema";
 import type { RunnerDataRow } from "@/lib/runner-data";
 import { canUseTauriIpc } from "@/lib/tauri-runtime";
 import { invoke } from "@tauri-apps/api/core";
@@ -18,6 +19,8 @@ export type CollectionRunStep = {
   error?: string;
   testResults?: TestRunResult | null;
   iteration?: number;
+  liveStatus?: number | null;
+  liveElapsedMs?: number | null;
 };
 
 export type CollectionRunResult = {
@@ -69,12 +72,19 @@ function evaluateStepEffect(
   }
 
   const prepared = saved.request;
+  const schemaResults = validateResponseAgainstSchema(response, prepared.responseSchema ?? "");
+
   if (!prepared.tests.trim()) {
-    return Effect.succeed({ saved, response, error });
+    return Effect.succeed({ saved, response, error, testResults: schemaResults });
   }
 
   return runHttpTestsEffect(prepared.tests, response).pipe(
-    Effect.map((testResults) => ({ saved, response, error, testResults })),
+    Effect.map((testResults) => ({
+      saved,
+      response,
+      error,
+      testResults: mergeTestResults(schemaResults, testResults),
+    })),
     Effect.catchAll((cause) =>
       Effect.succeed({
         saved,
@@ -232,6 +242,15 @@ export async function runCollectionAuto(
   return runCollectionParallel(collectionId, collectionName, requests, environment, onStep, extras);
 }
 
+export type CollectionRunProgressEvent = {
+  index: number;
+  total: number;
+  name?: string;
+  status?: number | null;
+  elapsedMs?: number | null;
+  error?: string | null;
+};
+
 async function runCollectionNative(
   collectionId: string,
   collectionName: string,
@@ -240,10 +259,19 @@ async function runCollectionNative(
   onStep?: (step: CollectionRunStep, index: number, total: number) => void,
   extras?: CollectionRunExtras,
 ): Promise<CollectionRunResult> {
-  const unlisten = await listen<{ index: number; total: number }>("collection-run-progress", (event) => {
+  const unlisten = await listen<CollectionRunProgressEvent>("collection-run-progress", (event) => {
     const index = Math.max(0, event.payload.index - 1);
+    const saved =
+      requests.find((item) => item.name === event.payload.name) ??
+      requests[Math.min(index, requests.length - 1)] ??
+      requests[0]!;
     onStep?.(
-      { saved: requests[Math.min(index, requests.length - 1)] ?? requests[0]! },
+      {
+        saved: { ...saved, name: event.payload.name ?? saved.name },
+        error: event.payload.error ?? undefined,
+        liveStatus: event.payload.status,
+        liveElapsedMs: event.payload.elapsedMs,
+      },
       index,
       event.payload.total,
     );
@@ -262,11 +290,40 @@ async function runCollectionNative(
         folderPath: extras?.folderPath ?? null,
       },
     });
-    result.steps.forEach((step, index) => onStep?.(step, index, result.steps.length));
-    return result;
+    const withSchema = attachSchemaAssertions(result, requests);
+    withSchema.steps.forEach((step, index) => onStep?.(step, index, withSchema.steps.length));
+    return withSchema;
   } finally {
     unlisten();
   }
+}
+
+function attachSchemaAssertions(
+  result: CollectionRunResult,
+  requests: SavedRequest[],
+): CollectionRunResult {
+  const byId = new Map(requests.map((item) => [item.id, item]));
+  const steps = result.steps.map((step) => {
+    const original = byId.get(step.saved.id) ?? step.saved;
+    if (!step.response) return step;
+    const schemaResults = validateResponseAgainstSchema(
+      step.response,
+      original.request.responseSchema ?? "",
+    );
+    const testResults = mergeTestResults(step.testResults, schemaResults);
+    return { ...step, testResults };
+  });
+  let passed = 0;
+  let failed = 0;
+  let totalTests = 0;
+  for (const step of steps) {
+    if (step.testResults) {
+      passed += step.testResults.passed;
+      failed += step.testResults.failed;
+      totalTests += step.testResults.total;
+    }
+  }
+  return { ...result, steps, passed, failed, totalTests };
 }
 
 export async function runCollectionParallel(

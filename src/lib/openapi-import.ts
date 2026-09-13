@@ -24,6 +24,10 @@ type OpenApiOperation = {
   requestBody?: {
     content?: Record<string, { example?: unknown; schema?: { example?: unknown } }>;
   };
+  responses?: Record<
+    string,
+    { content?: Record<string, { schema?: unknown }> }
+  >;
 };
 
 export function isOpenApiSpec(raw: string): boolean {
@@ -49,6 +53,19 @@ function buildUrl(base: string, path: string, operation: OpenApiOperation): stri
 
   const joined = `${base}${path}`.replace(/([^:]\/)\/+/g, "$1");
   return query ? `${joined}?${query}` : joined;
+}
+
+function responseSchema(operation: OpenApiOperation): string {
+  const responses = operation.responses ?? {};
+  const preferred =
+    responses["200"] ?? responses["201"] ?? Object.values(responses).find((item) => item?.content);
+  const schema = preferred?.content?.["application/json"]?.schema;
+  if (!schema) return "";
+  try {
+    return JSON.stringify(schema, null, 2);
+  } catch {
+    return "";
+  }
 }
 
 function exampleBody(operation: OpenApiOperation): { bodyKind: ApiRequest["bodyKind"]; body: string } {
@@ -91,6 +108,7 @@ export function importOpenApiCollection(raw: string): {
         url: buildUrl(base, path, op),
         bodyKind,
         body: body || '{\n  \n}',
+        responseSchema: responseSchema(op),
       });
 
       requests.push(

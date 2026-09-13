@@ -1,6 +1,6 @@
 import { Suspense, lazy, useCallback } from "react";
 import { useApp } from "@/machines";
-import { isWebSocketProtocol } from "@/lib/protocol";
+import { isStreamProtocol } from "@/lib/protocol";
 import {
   loadLayoutPreferences,
   saveLayoutPreferences,
@@ -22,7 +22,7 @@ const WebSocketPanel = lazy(() =>
 
 export function RequestWorkspace() {
   const { responsePanelOpen, request } = useApp();
-  const isWebSocket = isWebSocketProtocol(request.protocol);
+  const isStream = isStreamProtocol(request.protocol);
   const splitRatio =
     loadLayoutPreferences().workspaceSplitRatio ?? WORKSPACE_SPLIT_RATIO_DEFAULT;
 
@@ -39,7 +39,7 @@ export function RequestWorkspace() {
 
   const responsePanel = (
     <Suspense fallback={<LoadingScreen variant="inline" label="Loading panel" />}>
-      {isWebSocket ? <WebSocketPanel /> : <ResponsePanel />}
+      {isStream ? <WebSocketPanel /> : <ResponsePanel />}
     </Suspense>
   );
 

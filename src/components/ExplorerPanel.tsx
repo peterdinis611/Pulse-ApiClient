@@ -177,6 +177,14 @@ export function ExplorerPanel() {
   const [runningCollectionId, setRunningCollectionId] = useState<string | null>(null);
   const [collectionRun, setCollectionRun] = useState<CollectionRunResult | null>(null);
   const [runProgress, setRunProgress] = useState<string | null>(null);
+  const [runLive, setRunLive] = useState<{
+    name: string;
+    status?: number | null;
+    elapsedMs?: number | null;
+    error?: string | null;
+    index: number;
+    total: number;
+  } | null>(null);
   const [showRunResults, setShowRunResults] = useState(false);
   const [preview, setPreview] = useState<PreviewTarget | null>(null);
   const [clearHistoryOpen, setClearHistoryOpen] = useState(false);
@@ -325,6 +333,7 @@ export function ExplorerPanel() {
     setRunningCollectionId(scope);
     setCollectionRun(null);
     setRunProgress(`Running 0/${totalSends}`);
+    setRunLive(null);
 
     try {
       const result = await runCollectionAuto(
@@ -332,8 +341,16 @@ export function ExplorerPanel() {
         displayName,
         items,
         activeEnvironment,
-        (_step, index, total) => {
+        (step, index, total) => {
           setRunProgress(`Running ${index + 1}/${total}`);
+          setRunLive({
+            name: step.saved.name,
+            status: step.liveStatus ?? step.response?.status ?? null,
+            elapsedMs: step.liveElapsedMs ?? step.response?.elapsedMs ?? null,
+            error: step.error ?? null,
+            index: index + 1,
+            total,
+          });
         },
         {
           collection: collectionGroups.find((group) => group.id === collectionId) ?? null,
@@ -799,7 +816,36 @@ export function ExplorerPanel() {
       {(runProgress || collectionRun) && (
         <div className="shrink-0 border-t border-sidebar-border bg-sidebar/95 px-3 py-2.5">
           {runProgress && (
-            <p className="text-[12px] text-muted-foreground">{runProgress}</p>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[12px] text-muted-foreground">{runProgress}</p>
+                {runLive && (
+                  <p className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                    {Math.round((runLive.index / Math.max(runLive.total, 1)) * 100)}%
+                  </p>
+                )}
+              </div>
+              {runLive && (
+                <p className="truncate font-mono text-[11px] text-foreground/80">
+                  {runLive.name}
+                  {runLive.status != null && ` · ${runLive.status}`}
+                  {runLive.elapsedMs != null && ` · ${runLive.elapsedMs} ms`}
+                  {runLive.error && (
+                    <span className="text-destructive"> · {runLive.error}</span>
+                  )}
+                </p>
+              )}
+              {runLive && (
+                <div className="h-1 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full bg-primary transition-[width]"
+                    style={{
+                      width: `${Math.min(100, (runLive.index / Math.max(runLive.total, 1)) * 100)}%`,
+                    }}
+                  />
+                </div>
+              )}
+            </div>
           )}
           {collectionRun && (
             <div className="mt-1 flex items-center justify-between gap-2">
@@ -1432,7 +1478,7 @@ function CollectionActionsMenu({
 }: {
   collectionId: string;
   collectionName: string;
-  exportCollection: (collectionId: string, format: "pulse" | "postman") => string | null;
+  exportCollection: (collectionId: string, format: "pulse" | "postman" | "openapi") => string | null;
   onEditSettings: () => void;
 }) {
   const exportAs = (format: "pulse" | "postman") => {

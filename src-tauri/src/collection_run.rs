@@ -1,7 +1,7 @@
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::Arc;
-
-use pulse_core::{run_collection, CollectionRunInput, CollectionRunResult, HttpRequestPayload};
+use pulse_core::{
+    run_collection_with_progress, CollectionRunInput, CollectionRunResult, CollectionRunStep,
+    HttpRequestPayload,
+};
 use tauri::{AppHandle, Emitter};
 
 use crate::http;
@@ -12,6 +12,12 @@ use crate::state::HttpState;
 struct CollectionRunProgress {
     index: u32,
     total: u32,
+    name: String,
+    status: Option<u16>,
+    elapsed_ms: Option<u64>,
+    error: Option<String>,
+    passed: Option<u32>,
+    failed: Option<u32>,
 }
 
 pub async fn run_native_collection(
@@ -19,31 +25,18 @@ pub async fn run_native_collection(
     state: &HttpState,
     input: CollectionRunInput,
 ) -> CollectionRunResult {
-    let total = (input.requests.len().max(1) * input.data_rows.len().max(1)) as u32;
-    let progress = Arc::new(AtomicU32::new(0));
     let state_send = state.clone();
-    let app_send = app.clone();
-    let progress_send = progress.clone();
     let state_batch = state.clone();
-    let app_batch = app.clone();
-    let progress_batch = progress.clone();
+    let app_progress = app.clone();
 
-    run_collection(
+    run_collection_with_progress(
         input,
         move |payload: HttpRequestPayload| {
             let state = state_send.clone();
-            let app = app_send.clone();
-            let progress = progress_send.clone();
-            async move {
-                let result = http::execute_request(&state, payload).await;
-                emit_progress(&app, &progress, total);
-                result
-            }
+            async move { http::execute_request(&state, payload).await }
         },
         Some(move |payloads: Vec<HttpRequestPayload>| {
             let state = state_batch.clone();
-            let app = app_batch.clone();
-            let progress = progress_batch.clone();
             async move {
                 let tasks = payloads.into_iter().map(|payload| {
                     let state = state.clone();
@@ -54,18 +47,28 @@ pub async fn run_native_collection(
                         }
                     }
                 });
-                let results = futures_util::future::join_all(tasks).await;
-                for _ in 0..results.len() {
-                    emit_progress(&app, &progress, total);
-                }
-                results
+                futures_util::future::join_all(tasks).await
             }
         }),
+        move |step, index, total| {
+            emit_step(&app_progress, step, index, total);
+        },
     )
     .await
 }
 
-fn emit_progress(app: &AppHandle, progress: &AtomicU32, total: u32) {
-    let index = progress.fetch_add(1, Ordering::Relaxed) + 1;
-    let _ = app.emit("collection-run-progress", CollectionRunProgress { index, total });
+fn emit_step(app: &AppHandle, step: &CollectionRunStep, index: u32, total: u32) {
+    let _ = app.emit(
+        "collection-run-progress",
+        CollectionRunProgress {
+            index,
+            total,
+            name: step.saved.name.clone(),
+            status: step.response.as_ref().map(|response| response.status),
+            elapsed_ms: step.response.as_ref().map(|response| response.elapsed_ms),
+            error: step.error.clone(),
+            passed: step.test_results.as_ref().map(|tests| tests.passed),
+            failed: step.test_results.as_ref().map(|tests| tests.failed),
+        },
+    );
 }

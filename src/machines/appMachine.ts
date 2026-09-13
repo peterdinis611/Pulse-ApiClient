@@ -57,14 +57,16 @@ import {
   saveLayoutPreferences,
 } from "@/lib/layout-preferences";
 import { loadThemeMode, saveThemeMode, type ThemeMode } from "@/lib/theme";
-import { defaultWebSocketSession, inferProtocolFromUrl } from "@/lib/protocol";
+import { defaultWebSocketSession, inferProtocolFromUrl, isSseProtocol } from "@/lib/protocol";
 import { snapshotResponseExample } from "@/lib/request-examples";
 import { toast } from "@/lib/toast";
 import { syncPathParams } from "@/lib/path-params";
 import { resolveRequestForSend } from "@/lib/resolve-request";
 import { upsertFolderConfig } from "@/lib/inherit";
 import { importOpenApiIntoState } from "@/lib/openapi-import";
-import { wsClose, wsConnect, wsPing, wsSend } from "@/lib/ws-client";
+import { importPulseCollectionsFromFolder } from "@/lib/pulse-collection";
+import { validateResponseAgainstSchema } from "@/lib/json-schema";
+import { wsClose, wsConnect, sseConnect, wsPing, wsSend } from "@/lib/ws-client";
 
 export function createTabState(
   request = createRequest(),
@@ -112,7 +114,12 @@ type SendInput = {
 function patchRequest(request: ApiRequest, patch: Partial<ApiRequest>): ApiRequest {
   const next = { ...request, ...patch };
   if (patch.url !== undefined) {
-    next.protocol = inferProtocolFromUrl(patch.url);
+    const inferred = inferProtocolFromUrl(patch.url);
+    if (inferred === "websocket") {
+      next.protocol = "websocket";
+    } else if (patch.protocol === undefined && request.protocol !== "sse") {
+      next.protocol = inferred;
+    }
     next.pathParams = syncPathParams(patch.url, patch.pathParams ?? request.pathParams);
   }
   return next;
@@ -141,7 +148,8 @@ function startTabWebSocketConnect(
   self: { send: (event: AppMachineEvent) => void },
   input: { tabId: string; request: ApiRequest; environment: Environment | null },
 ) {
-  void wsConnect(input.tabId, input.request, input.environment)
+  const connect = isSseProtocol(input.request.protocol) ? sseConnect : wsConnect;
+  void connect(input.tabId, input.request, input.environment)
     .then((result) => {
       self.send({
         type: "WS_CONNECT_COMPLETE",
@@ -200,7 +208,7 @@ function startTabRequest(
         requestId: input.requestId,
         response,
         historyEntry,
-        testResults: null,
+        testResults: validateResponseAgainstSchema(response, input.request.responseSchema ?? ""),
       });
 
       void appendHistoryEntry(historyEntry)
@@ -287,6 +295,7 @@ export type AppMachineEvent =
   | { type: "IMPORT_BRUNO"; raw: string }
   | { type: "IMPORT_INSOMNIA"; raw: string }
   | { type: "IMPORT_OPENAPI"; raw: string }
+  | { type: "IMPORT_COLLECTIONS_FOLDER"; files: Array<{ name: string; contents: string }> }
   | { type: "IMPORT_ENVIRONMENTS"; raw: string }
   | { type: "ADD_COLLECTION_GROUP"; name: string }
   | { type: "DELETE_COLLECTION_GROUP"; id: string }
@@ -510,7 +519,7 @@ export const appMachine = setup({
     startActiveTabRequest: ({ context, self }) => {
       const tab = getActiveTab(context);
       if (!tab || tab.loading || !tab.request.url.trim()) return;
-      if (tab.request.protocol === "websocket") return;
+      if (tab.request.protocol === "websocket" || tab.request.protocol === "sse") return;
 
       const requestId = createId("http");
       self.send({ type: "SEND_STARTED", tabId: tab.id, requestId });
@@ -940,6 +949,14 @@ export const appMachine = setup({
         IMPORT_OPENAPI: {
           actions: assign(({ context, event }) => {
             const imported = importOpenApiIntoState(event.raw, context.persisted);
+            const persisted = { ...context.persisted, ...imported };
+            saveSharedWorkspace(context, persisted);
+            return { persisted };
+          }),
+        },
+        IMPORT_COLLECTIONS_FOLDER: {
+          actions: assign(({ context, event }) => {
+            const imported = importPulseCollectionsFromFolder(event.files, context.persisted);
             const persisted = { ...context.persisted, ...imported };
             saveSharedWorkspace(context, persisted);
             return { persisted };

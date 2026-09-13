@@ -3,7 +3,9 @@ import {
   buildGraphqlBody,
   formatGraphqlResponse,
   parseGraphqlResponse,
+  parseGraphqlSchema,
   validateGraphqlRequest,
+  visibleGraphqlTypes,
 } from "@/lib/graphql";
 
 const sampleRequest = {
@@ -45,5 +47,26 @@ describe("graphql", () => {
     expect(parsed?.data).toEqual({ user: { id: "1" } });
     expect(formatGraphqlResponse(raw)).toContain("Field missing");
     expect(parseGraphqlResponse("not-json")).toBeNull();
+  });
+
+  it("parses an introspection payload", () => {
+    const raw = JSON.stringify({
+      data: {
+        __schema: {
+          queryType: { name: "Query" },
+          types: [
+            {
+              kind: "OBJECT",
+              name: "Query",
+              fields: [{ name: "user", type: { kind: "OBJECT", name: "User" } }],
+            },
+            { kind: "OBJECT", name: "__Schema", fields: [{ name: "types" }] },
+          ],
+        },
+      },
+    });
+    const schema = parseGraphqlSchema(raw);
+    expect(schema?.queryType?.name).toBe("Query");
+    expect(visibleGraphqlTypes(schema!).map((type) => type.name)).toEqual(["Query"]);
   });
 });

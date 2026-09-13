@@ -5,6 +5,7 @@
     "search",
     "data",
     "python-cli",
-    "mcp"
+    "mcp",
+    "libraries"
   ]
 }

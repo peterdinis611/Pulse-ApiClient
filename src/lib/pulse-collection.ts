@@ -151,3 +151,47 @@ export function importPulseCollection(raw: string): PulseCollectionImportResult 
 
   return { collection, requests };
 }
+
+export function importPulseCollectionsFromFolder(
+  files: Array<{ name: string; contents: string }>,
+  state: { collectionGroups: CollectionGroup[]; collections: SavedRequest[]; activeCollectionId?: string | null },
+) {
+  let collectionGroups = [...state.collectionGroups];
+  let collections = [...state.collections];
+  let activeCollectionId = state.activeCollectionId ?? null;
+
+  for (const file of files) {
+    if (!isPulseCollection(file.contents) && !file.contents.includes('"item"')) {
+      continue;
+    }
+    let imported: PulseCollectionImportResult;
+    try {
+      imported = importPulseCollection(file.contents);
+    } catch {
+      continue;
+    }
+
+    const existing = collectionGroups.find((group) => group.name === imported.collection.name);
+    if (existing) {
+      imported.collection.id = existing.id;
+      imported.requests = imported.requests.map((item) => ({
+        ...item,
+        collectionId: existing.id,
+      }));
+      collectionGroups = collectionGroups.map((group) =>
+        group.id === existing.id ? imported.collection : group,
+      );
+      collections = [
+        ...collections.filter((item) => item.collectionId !== existing.id),
+        ...imported.requests,
+      ];
+      activeCollectionId = existing.id;
+    } else {
+      collectionGroups = [...collectionGroups, imported.collection];
+      collections = [...imported.requests, ...collections];
+      activeCollectionId = imported.collection.id;
+    }
+  }
+
+  return { collectionGroups, collections, activeCollectionId };
+}

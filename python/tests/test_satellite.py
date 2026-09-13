@@ -1,3 +1,4 @@
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -79,7 +80,16 @@ class OpenApiTests(unittest.TestCase):
                         "tags": ["pets"],
                         "summary": "Get pet",
                         "parameters": [{"in": "query", "name": "verbose", "schema": {"type": "boolean"}}],
-                        "responses": {"200": {"description": "ok"}},
+                        "responses": {
+                            "200": {
+                                "description": "ok",
+                                "content": {
+                                    "application/json": {
+                                        "schema": {"type": "object", "required": ["id"], "properties": {"id": {"type": "integer"}}}
+                                    }
+                                },
+                            }
+                        },
                     },
                     "post": {
                         "summary": "Create pet",
@@ -101,6 +111,74 @@ class OpenApiTests(unittest.TestCase):
         self.assertIn("Ada", post_req["body"])
         self.assertIn("status(201)", post_req["tests"])
         self.assertEqual(collection["collectionGroups"][0]["folders"], ["pets"])
+        self.assertIn('"type": "object"', get_req["responseSchema"])
+
+    def test_export_spec_roundtrip(self) -> None:
+        from pulse.openapi import export_spec
+
+        spec = export_spec(
+            {
+                "collectionGroups": [{"id": "col", "name": "Pets"}],
+                "collections": [
+                    {
+                        "id": "saved_1",
+                        "name": "List",
+                        "request": {
+                            "method": "GET",
+                            "url": "https://api.test/pets",
+                            "query": [{"key": "limit", "value": "10", "enabled": True}],
+                            "bodyKind": "none",
+                            "body": "",
+                        },
+                    }
+                ],
+            }
+        )
+        self.assertEqual(spec["info"]["title"], "Pets")
+        self.assertIn("/pets", spec["paths"])
+        self.assertEqual(spec["paths"]["/pets"]["get"]["parameters"][0]["name"], "limit")
+
+
+class CurlDiffGraphqlTests(unittest.TestCase):
+    def test_curl_data_implies_post(self) -> None:
+        from pulse.curl import curl_to_payload
+
+        payload = curl_to_payload(
+            "curl 'https://api.test/pets' -H 'Authorization: Bearer tok' -d '{\"n\":1}'"
+        )
+        self.assertEqual(payload["method"], "POST")
+        self.assertEqual(payload["auth"]["authType"], "bearer")
+        self.assertEqual(payload["bodyKind"], "json")
+
+    def test_diff_and_graphql_body(self) -> None:
+        from pulse.diff import compare
+        from pulse.graphql import build_body, summarize_schema
+
+        result = compare({"a": 1}, {"a": 2})
+        self.assertFalse(result["equal"])
+        body = json.loads(build_body("query { ping }", {"id": 1}, "Ping"))
+        self.assertEqual(body["query"], "query { ping }")
+        self.assertEqual(body["variables"], {"id": 1})
+        self.assertEqual(body["operationName"], "Ping")
+        summary = summarize_schema(
+            {
+                "data": {
+                    "__schema": {
+                        "queryType": {"name": "Query"},
+                        "types": [
+                            {
+                                "kind": "OBJECT",
+                                "name": "Query",
+                                "fields": [{"name": "ping"}],
+                            },
+                            {"kind": "OBJECT", "name": "__Schema", "fields": [{"name": "types"}]},
+                        ],
+                    }
+                }
+            }
+        )
+        self.assertEqual(summary["queryType"], "Query")
+        self.assertEqual(summary["types"][0]["name"], "Query")
 
 
 class HarTests(unittest.TestCase):

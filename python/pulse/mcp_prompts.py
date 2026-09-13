@@ -58,6 +58,65 @@ PROMPTS: list[dict[str, Any]] = [
             },
         ],
     },
+    {
+        "name": "graphql_introspect",
+        "description": "Introspektuj GraphQL endpoint a zhrň query/mutation typy.",
+        "arguments": [
+            {
+                "name": "url",
+                "description": "GraphQL HTTP URL",
+                "required": True,
+            },
+            {
+                "name": "bearerToken",
+                "description": "Voliteľný Bearer token",
+                "required": False,
+            },
+        ],
+    },
+    {
+        "name": "curl_import",
+        "description": "Z cURL príkazu urob Pulse request (voliteľne ho aj odošli).",
+        "arguments": [
+            {
+                "name": "command",
+                "description": "Celý cURL príkaz",
+                "required": True,
+            },
+            {
+                "name": "send",
+                "description": "true ak ho má Pulse hneď poslať",
+                "required": False,
+            },
+        ],
+    },
+    {
+        "name": "export_openapi",
+        "description": "Z Pulse kolekcie vyexportuj OpenAPI 3.0 spec.",
+        "arguments": [
+            {
+                "name": "path",
+                "description": "Cesta ku Pulse kolekcii JSON",
+                "required": True,
+            },
+        ],
+    },
+    {
+        "name": "explain_last_run",
+        "description": "Zhrň posledný collection run bez ďalšieho spúšťania.",
+        "arguments": [],
+    },
+    {
+        "name": "validate_schema",
+        "description": "Over JSON telá posledného runu voči responseSchema na requestoch.",
+        "arguments": [
+            {
+                "name": "path",
+                "description": "Cesta ku kolekcii s responseSchema (ak last-run schema nemá)",
+                "required": False,
+            },
+        ],
+    },
 ]
 
 
@@ -116,11 +175,65 @@ def get_prompt(name: str, arguments: dict | None) -> dict[str, Any] | None:
             "Porovnaj dva JSON response. Nevypisuj celé telá — len diff.\n"
             f"A: {left}\n"
             f"B: {right}\n"
-            f"Ak A alebo B vyzerá ako URL, zavolaj pulse_send (method {method}) a porovnaj status + JSON body.\n"
-            "Ak to už je JSON, porovnaj priamo.\n"
-            "Vypíš: status kód, kľúče len v jednom, zmenené hodnoty. Zhody nespomínaj, kým nie sú dôležité."
+            f"Ak A alebo B vyzerá ako URL, zavolaj pulse_send (method {method}) a zober body.\n"
+            "Potom zavolaj pulse_diff s a=prvé telo a b=druhé telo (string alebo JSON objekt).\n"
+            "Ak to už je JSON, daj ho priamo do pulse_diff.\n"
+            "Vypíš: či sú equal, počty added/removed, a skrátený unified diff. Zhody nespomínaj."
         )
         return _user(text, description="Porovnaj dva response JSON")
+    if name == "graphql_introspect":
+        url = args.get("url") or ""
+        token = args.get("bearerToken")
+        token_line = (
+            f'bearerToken="{token}".'
+            if token
+            else "bearerToken pridaj len ak ho používateľ zadal."
+        )
+        text = (
+            f"Introspektuj GraphQL na `{url}`.\n"
+            "Zavolaj pulse_graphql s introspect=true a url.\n"
+            f"{token_line}\n"
+            "Z výsledku vypíš queryType, mutationType a zoznam typov s poľami. Celú introspekciu do chatu nedávaj."
+        )
+        return _user(text, description="Introspektuj GraphQL schema")
+    if name == "curl_import":
+        command = args.get("command") or ""
+        send = str(args.get("send") or "").lower() in {"1", "true", "yes"}
+        text = (
+            "Z cURL urob Pulse request.\n"
+            f"Príkaz:\n```\n{command}\n```\n"
+            f"Zavolaj pulse_curl s command. send={'true' if send else 'false'}.\n"
+            "Ak send=false, vráť method/url/headers/body ako Pulse payload. Celý cURL znova nevypisuj."
+        )
+        return _user(text, description="Importuj cURL do Pulse")
+    if name == "export_openapi":
+        path = args.get("path") or "python/examples/pets.json"
+        text = (
+            f"Z Pulse kolekcie `{path}` urob OpenAPI 3.0.\n"
+            "Zavolaj pulse_export_openapi s path. Nechaj inline=false, nech sa zapíše súbor.\n"
+            "Vráť cestu a počet paths. Celý spec do chatu nedávaj."
+        )
+        return _user(text, description="Exportuj Pulse ako OpenAPI")
+    if name == "explain_last_run":
+        text = (
+            "Zhrň posledný Pulse collection run.\n"
+            "Zavolaj pulse_last_run (full=false). Resource pulse://last-run použi len ak treba konkrétny krok.\n"
+            "Vypíš passed/failed/httpErrors a zlyhania. Celý JSON nevypisuj."
+        )
+        return _user(text, description="Vysvetli posledný run")
+    if name == "validate_schema":
+        path = args.get("path")
+        path_line = (
+            f"Do pulse_validate_run daj path `{path}`."
+            if path
+            else "path daj len ak kolekcia má responseSchema a last-run ju neobsahuje."
+        )
+        text = (
+            "Over JSON telá posledného runu voči responseSchema.\n"
+            f"Zavolaj pulse_validate_run. {path_line}\n"
+            "Vypíš checked/skipped a každé zlyhanie. Zhody nespomínaj."
+        )
+        return _user(text, description="Validuj last-run voči schema")
     return None
 
 

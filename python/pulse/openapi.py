@@ -56,6 +56,23 @@ def _json_example(content: dict | None) -> str:
     return ""
 
 
+def _response_schema(responses: dict) -> str:
+    preferred = responses.get("200") or responses.get("201")
+    if not isinstance(preferred, dict):
+        preferred = next(
+            (item for item in (responses or {}).values() if isinstance(item, dict) and item.get("content")),
+            None,
+        )
+    if not isinstance(preferred, dict):
+        return ""
+    content = preferred.get("content") or {}
+    json_body = content.get("application/json") or {}
+    schema = json_body.get("schema")
+    if not isinstance(schema, dict):
+        return ""
+    return json.dumps(schema, indent=2)
+
+
 def _status_test(responses: dict) -> str:
     codes = []
     for key in responses or {}:
@@ -141,6 +158,7 @@ def convert(spec: dict) -> dict:
                 "auth": {"authType": "inherit"},
                 "tests": _status_test(operation.get("responses") or {}),
                 "preRequestScript": "",
+                "responseSchema": _response_schema(operation.get("responses") or {}),
             }
             requests.append(
                 {
@@ -152,6 +170,95 @@ def convert(spec: dict) -> dict:
                 }
             )
     return {"version": 1, "collectionGroups": [collection], "collections": requests}
+
+
+def _path_from_url(url: str) -> str:
+    without_query = (url or "").split("?", 1)[0]
+    marker = without_query.find("://")
+    if marker < 0:
+        return without_query if without_query.startswith("/") else f"/{without_query or ''}" or "/"
+    rest = without_query[marker + 3 :]
+    slash = rest.find("/")
+    return rest[slash:] if slash >= 0 else "/"
+
+
+def _server_from_urls(urls: list[str]) -> str:
+    for url in urls:
+        marker = (url or "").find("://")
+        if marker < 0:
+            continue
+        rest = url[marker + 3 :]
+        host = rest.split("/", 1)[0]
+        if host:
+            return url[: marker + 3] + host
+    return "http://localhost"
+
+
+def export_spec(payload: dict) -> dict:
+    from .export import _flatten_pulse_items
+
+    groups = payload.get("collectionGroups") or []
+    requests = payload.get("collections") or []
+    if not requests and payload.get("item"):
+        title = ((payload.get("info") or {}).get("name")) or "Pulse"
+        groups = [{"id": "col", "name": title, "folders": payload.get("folders") or []}]
+        requests = [
+            {"id": item.get("request", {}).get("id") or uid("saved"), "name": item["name"], "request": item["request"]}
+            for item in _flatten_pulse_items(payload.get("item") or [])
+        ]
+    title = (groups[0].get("name") if groups else None) or "Pulse"
+    paths: dict[str, dict] = {}
+    urls = [(item.get("request") or {}).get("url") or "" for item in requests]
+    for saved in requests:
+        request = saved.get("request") or {}
+        method = str(request.get("method") or "GET").upper()
+        if method not in {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}:
+            continue
+        path = _path_from_url(str(request.get("url") or "/"))
+        operation: dict = {
+            "operationId": saved.get("id") or request.get("id"),
+            "summary": saved.get("name") or request.get("name") or f"{method} {path}",
+            "responses": {"200": {"description": "OK"}},
+        }
+        schema_raw = (request.get("responseSchema") or "").strip()
+        if schema_raw:
+            try:
+                operation["responses"] = {
+                    "200": {
+                        "description": "OK",
+                        "content": {"application/json": {"schema": json.loads(schema_raw)}},
+                    }
+                }
+            except json.JSONDecodeError:
+                pass
+        body = (request.get("body") or "").strip()
+        if request.get("bodyKind") == "json" and body:
+            try:
+                example = json.loads(body)
+            except json.JSONDecodeError:
+                example = body
+            operation["requestBody"] = {"content": {"application/json": {"example": example}}}
+        query = [
+            item
+            for item in (request.get("query") or [])
+            if isinstance(item, dict) and item.get("enabled", True) and str(item.get("key") or "").strip()
+        ]
+        if query:
+            operation["parameters"] = [
+                {
+                    "name": item["key"],
+                    "in": "query",
+                    "schema": {"type": "string", "default": item.get("value") or ""},
+                }
+                for item in query
+            ]
+        paths.setdefault(path, {})[method.lower()] = operation
+    return {
+        "openapi": "3.0.3",
+        "info": {"title": title, "version": "1.0.0"},
+        "servers": [{"url": _server_from_urls(urls)}],
+        "paths": paths,
+    }
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -4,8 +4,9 @@ use crate::db::DbState;
 use crate::dns_timing::TimingResolver;
 use crate::engine::{RequestEngine, DEFAULT_MAX_CONCURRENT, DEFAULT_TIMEOUT_MS};
 use crate::settings::{AppSettings, HttpClientConfig};
+use crate::tls_identity;
 use reqwest::header::{HeaderMap, HeaderValue, ORIGIN, REFERER, USER_AGENT};
-use reqwest::{Client, Proxy};
+use reqwest::{Certificate, Client, Identity, Proxy};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -73,6 +74,20 @@ impl HttpState {
         }
         if !defaults.is_empty() {
             builder = builder.default_headers(defaults);
+        }
+
+        if let Some(cert_path) = config.client_cert_path.as_ref() {
+            let pem = tls_identity::identity_pem(cert_path, config.client_key_path.as_deref())?;
+            let identity = Identity::from_pem(&pem)
+                .map_err(|error| format!("Invalid client certificate / key: {error}"))?;
+            builder = builder.identity(identity);
+        }
+
+        if let Some(ca_path) = config.ca_cert_path.as_ref() {
+            let pem = tls_identity::read_pem_file(ca_path, "CA certificate")?;
+            let certificate = Certificate::from_pem(&pem)
+                .map_err(|error| format!("Invalid CA certificate: {error}"))?;
+            builder = builder.add_root_certificate(certificate);
         }
 
         builder

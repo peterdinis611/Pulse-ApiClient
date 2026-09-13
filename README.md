@@ -6,11 +6,17 @@ Desktop API client built with **Tauri**, **React**, **TypeScript**, **Tailwind C
 
 ## Stack
 
-- UI: React + Tailwind CSS v4 + shadcn/ui (Linear-inspired layout)
-- State: XState 5 + @xstate/react
-- Desktop: Tauri 2
-- HTTP: Rust reqwest
-- Storage: SQLite per user (workspace, history, cache)
+Full library list (in-app **Docs → Libraries & stack**, or [docs/FEATURES.md](./docs/FEATURES.md)).
+
+- UI: React 19, TypeScript, Vite, Tailwind CSS v4, shadcn/ui (Radix), lucide-react, sonner
+- State: XState 5 + Effect
+- Desktop: Tauri 2 (`plugin-dialog`, `plugin-opener`)
+- HTTP / streams: Rust reqwest (rustls, cookies, SOCKS, SSE stream) + tokio-tungstenite
+- Scripts: boa_engine (JS tests and pre-request)
+- Search: fuse.js (UI) + fuzzy-matcher (Rust)
+- Storage: rusqlite (bundled SQLite) per user — workspace, history, cache
+- Python satellite: PyO3 `pulse_native` + stdlib `python/pulse` (OpenAPI, HAR, schema, MCP)
+- Docs site: Next.js + Fumadocs
 
 ## Features
 

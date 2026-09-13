@@ -4,6 +4,7 @@ mod http_integration;
 
 pub mod cache;
 pub mod collection_run;
+pub mod collections_folder;
 pub mod cookies;
 pub mod custom_language;
 pub mod custom_theme;
@@ -16,8 +17,10 @@ pub mod oauth;
 pub mod search;
 pub mod settings;
 pub mod sql_safety;
+pub mod sse;
 pub mod state;
 pub mod test_runner;
+pub mod tls_identity;
 pub mod websocket;
 pub mod windows;
 pub mod workspace_store;
@@ -35,6 +38,7 @@ use std::sync::Arc;
 use test_runner::{PreRequestResult, TestRunResult};
 use pulse_core::CollectionRunInput;
 use tauri::{AppHandle, Manager, State};
+use sse::SseConnectResult;
 use websocket::WsConnectResult;
 use windows::{AppWindowInfo, PendingWindowInit};
 use ws_state::WsState;
@@ -170,6 +174,35 @@ fn set_custom_language_json(app: AppHandle, path: Option<String>) -> Result<AppS
     settings.custom_language_json_path = normalized;
     settings::save_settings(&app, &settings)?;
     Ok(settings)
+}
+
+#[tauri::command]
+fn set_collections_folder(app: AppHandle, path: Option<String>) -> Result<AppSettings, String> {
+    let mut settings = settings::load_settings(&app)?;
+    let normalized = path
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+
+    if let Some(ref folder) = normalized {
+        collections_folder::read_collection_files(folder)?;
+    }
+
+    settings.collections_folder_path = normalized;
+    settings::save_settings(&app, &settings)?;
+    Ok(settings)
+}
+
+#[tauri::command]
+fn write_collections_folder(
+    dir: String,
+    files: Vec<collections_folder::CollectionFolderFile>,
+) -> Result<Vec<String>, String> {
+    collections_folder::write_collection_files(&dir, files)
+}
+
+#[tauri::command]
+fn read_collections_folder(dir: String) -> Result<Vec<collections_folder::CollectionFolderFile>, String> {
+    collections_folder::read_collection_files(&dir)
 }
 
 #[tauri::command]
@@ -392,6 +425,17 @@ async fn ws_connect(
 }
 
 #[tauri::command]
+async fn sse_connect(
+    app: AppHandle,
+    http: State<'_, HttpState>,
+    ws: State<'_, WsState>,
+    tab_id: String,
+    payload: HttpRequestPayload,
+) -> Result<SseConnectResult, String> {
+    sse::connect(app, http.inner(), &ws, tab_id, payload).await
+}
+
+#[tauri::command]
 async fn ws_send(
     ws: State<'_, WsState>,
     connection_id: String,
@@ -480,6 +524,9 @@ pub fn run() {
             set_locale,
             read_custom_language_json,
             set_custom_language_json,
+            set_collections_folder,
+            write_collections_folder,
+            read_collections_folder,
             run_http_tests,
             run_pre_request_script,
             run_collection,
@@ -510,6 +557,7 @@ pub fn run() {
             set_window_title,
             fuzzy_search_documents,
             ws_connect,
+            sse_connect,
             ws_send,
             ws_ping,
             ws_close,

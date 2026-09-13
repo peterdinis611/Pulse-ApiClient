@@ -34,6 +34,7 @@ describe("feature-docs", () => {
         "data",
         "python-cli",
         "mcp",
+        "libraries",
       ]),
     );
     expect(FEATURE_DOC_SECTIONS.every((section) => section.items.length > 0)).toBe(true);
@@ -97,8 +98,28 @@ describe("feature-docs", () => {
       ),
     ).toBe(true);
     expect(
-      FEATURE_DOC_SECTIONS.find((section) => section.id === "collections")?.items.some((item) =>
-        item.toLowerCase().includes("run folder"),
+      FEATURE_DOC_SECTIONS.find((section) => section.id === "search")?.items.some((item) =>
+        item.includes("Cmd/Ctrl + K"),
+      ),
+    ).toBe(true);
+    expect(
+      FEATURE_DOC_SECTIONS.find((section) => section.id === "websocket")?.items.some((item) =>
+        item.toLowerCase().includes("sse"),
+      ),
+    ).toBe(true);
+    expect(
+      FEATURE_DOC_SECTIONS.find((section) => section.id === "libraries")?.items.some((item) =>
+        item.toLowerCase().includes("reqwest"),
+      ),
+    ).toBe(true);
+    expect(
+      FEATURE_DOC_SECTIONS.find((section) => section.id === "libraries")?.items.some((item) =>
+        item.toLowerCase().includes("boa_engine"),
+      ),
+    ).toBe(true);
+    expect(
+      FEATURE_DOC_SECTIONS.find((section) => section.id === "libraries")?.items.some((item) =>
+        item.toLowerCase().includes("python/pulse"),
       ),
     ).toBe(true);
   });

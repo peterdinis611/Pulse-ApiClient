@@ -8,21 +8,27 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .bench import compare_bench, run_bench
+from .curl import curl_to_payload
+from .diff import compare as diff_compare
 from .envfile import load_data_rows
 from .export import to_run_input
+from .graphql import INTROSPECTION_QUERY, build_body as build_graphql_body, summarize_schema
 from .har import har_to_pulse
 from .mcp_prompts import get_prompt, list_prompts
 from .mcp_resources import (
     list_resource_templates,
     list_resources,
+    load_last_run,
     read_resource,
     save_last_run,
     write_collection_file,
+    write_out_json,
 )
 from .openapi import convert as convert_openapi
-from .openapi import load_spec
+from .openapi import export_spec, load_spec
 from .report import summarize_run
 from .schema import validate_json
+from .snippet import to_curl, to_fetch
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "pulse"
@@ -165,25 +171,50 @@ def tool_interpolate(arguments: dict) -> dict:
     return _text(_native().interpolate(str(template), json.dumps(env)))
 
 
+def _auth_from_args(arguments: dict) -> dict:
+    if isinstance(arguments.get("auth"), dict):
+        return arguments["auth"]
+    if arguments.get("bearerToken"):
+        return {"authType": "bearer", "bearerToken": arguments["bearerToken"]}
+    if arguments.get("basicUsername") is not None or arguments.get("basicPassword"):
+        return {
+            "authType": "basic",
+            "basicUsername": arguments.get("basicUsername") or "",
+            "basicPassword": arguments.get("basicPassword") or "",
+        }
+    return {"authType": arguments.get("authType") or "none"}
+
+
+def _http_payload(arguments: dict) -> dict:
+    graphql_query = arguments.get("graphqlQuery")
+    introspect = bool(arguments.get("introspect"))
+    body = arguments.get("body") or ""
+    body_kind = arguments.get("bodyKind")
+    method = str(arguments.get("method") or "").upper()
+    if introspect or graphql_query:
+        query = INTROSPECTION_QUERY if introspect else str(graphql_query)
+        body = build_graphql_body(query, arguments.get("graphqlVariables"), arguments.get("graphqlOperationName"))
+        body_kind = "graphql"
+        method = method or "POST"
+    payload = {
+        "method": method or "GET",
+        "url": str(arguments.get("url") or ""),
+        "headers": _headers(arguments.get("headers")),
+        "query": _headers(arguments.get("query")),
+        "bodyKind": body_kind or ("json" if body else "none"),
+        "body": body,
+        "form": arguments.get("form") or [],
+        "multipart": arguments.get("multipart") or [],
+        "auth": _auth_from_args(arguments),
+    }
+    return payload
+
+
 def tool_send(arguments: dict) -> dict:
-    method = str(arguments.get("method") or "GET").upper()
     url = str(arguments.get("url") or "")
     if not url:
         return _text("url is required", error=True)
-    payload = {
-        "method": method,
-        "url": url,
-        "headers": _headers(arguments.get("headers")),
-        "query": _headers(arguments.get("query")),
-        "bodyKind": arguments.get("bodyKind") or ("json" if arguments.get("body") else "none"),
-        "body": arguments.get("body") or "",
-        "form": [],
-        "multipart": [],
-        "auth": {"authType": arguments.get("authType") or "none"},
-    }
-    if arguments.get("bearerToken"):
-        payload["auth"] = {"authType": "bearer", "bearerToken": arguments["bearerToken"]}
-    return _text(_native().send_once_json(json.dumps(payload)))
+    return _text(_native().send_once_json(json.dumps(_http_payload(arguments))))
 
 
 def tool_run_collection(arguments: dict) -> dict:
@@ -318,6 +349,168 @@ def tool_schema(arguments: dict) -> dict:
     return _text("ok")
 
 
+def tool_diff(arguments: dict) -> dict:
+    left = arguments.get("a")
+    right = arguments.get("b")
+    if left is None:
+        left = arguments.get("left")
+    if right is None:
+        right = arguments.get("right")
+    if left is None or right is None:
+        return _text("a and b are required", error=True)
+    return _json(diff_compare(left, right))
+
+
+def tool_export_openapi(arguments: dict) -> dict:
+    payload = arguments.get("collection")
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+    if not isinstance(payload, dict):
+        path = Path(arguments.get("path") or "")
+        if not path.is_file():
+            path = REPO_ROOT / path
+        if not path.is_file():
+            return _text(f"No such collection file: {arguments.get('path')}", error=True)
+        payload = json.loads(path.read_text())
+    spec = export_spec(payload)
+    if arguments.get("inline"):
+        return _json(spec)
+    title = (spec.get("info") or {}).get("title") or "openapi"
+    written = write_out_json(spec, arguments.get("name") or title)
+    return _json({"path": str(written), "title": title, "paths": len(spec.get("paths") or {})})
+
+
+def tool_graphql(arguments: dict) -> dict:
+    url = str(arguments.get("url") or "")
+    if not url:
+        return _text("url is required", error=True)
+    if not arguments.get("introspect") and not arguments.get("graphqlQuery") and not arguments.get("query"):
+        return _text("graphqlQuery (or introspect=true) is required", error=True)
+    payload_args = dict(arguments)
+    if arguments.get("query") and not arguments.get("graphqlQuery"):
+        payload_args["graphqlQuery"] = arguments["query"]
+    if arguments.get("variables") is not None and arguments.get("graphqlVariables") is None:
+        payload_args["graphqlVariables"] = arguments["variables"]
+    raw = _native().send_once_json(json.dumps(_http_payload(payload_args)))
+    try:
+        response = json.loads(raw)
+    except json.JSONDecodeError:
+        return _text(raw)
+    body = response.get("body") if isinstance(response, dict) else raw
+    result: dict[str, Any] = {"http": response}
+    if isinstance(body, str) and body.strip()[:1] in "{[":
+        try:
+            parsed = json.loads(body)
+            result["graphql"] = parsed
+            if arguments.get("introspect"):
+                summary = summarize_schema(parsed)
+                if summary:
+                    result["schema"] = summary
+        except json.JSONDecodeError:
+            pass
+    return _json(result)
+
+
+def tool_curl(arguments: dict) -> dict:
+    command = arguments.get("command") or arguments.get("curl") or ""
+    if not str(command).strip():
+        return _text("command is required", error=True)
+    payload = curl_to_payload(str(command))
+    if arguments.get("send"):
+        return _text(_native().send_once_json(json.dumps(payload)))
+    return _json(payload)
+
+
+def tool_snippet(arguments: dict) -> dict:
+    payload = arguments.get("request")
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+    if not isinstance(payload, dict):
+        if not arguments.get("url"):
+            return _text("url or request is required", error=True)
+        payload = _http_payload(arguments)
+    fmt = str(arguments.get("format") or "curl").lower()
+    snippets = {"curl": to_curl(payload), "fetch": to_fetch(payload)}
+    if fmt in snippets:
+        return _text(snippets[fmt])
+    return _json(snippets)
+
+
+def tool_last_run(arguments: dict) -> dict:
+    result = load_last_run()
+    if result is None:
+        return _text("No last run yet. Call pulse_run_collection first.", error=True)
+    if arguments.get("full"):
+        return _json(result)
+    return _json(summarize_run(result))
+
+
+def tool_validate_run(arguments: dict) -> dict:
+    body = arguments.get("body")
+    schema = arguments.get("schema")
+    if body is not None and schema is not None:
+        return tool_schema(arguments)
+
+    result = arguments.get("result")
+    if isinstance(result, str):
+        result = json.loads(result)
+    if not isinstance(result, dict):
+        result = load_last_run()
+    if not isinstance(result, dict):
+        return _text("No last run and no result provided", error=True)
+
+    schemas_by_name: dict[str, dict] = {}
+    if arguments.get("path"):
+        run_input, error = _run_input_from_args({"path": arguments["path"]})
+        if error:
+            return error
+        for saved in (run_input or {}).get("requests") or []:
+            request = saved.get("request") or {}
+            name = saved.get("name") or request.get("name")
+            raw = (request.get("responseSchema") or "").strip()
+            if name and raw:
+                schemas_by_name[str(name)] = json.loads(raw)
+
+    reports = []
+    skipped = 0
+    for step in result.get("steps") or []:
+        saved = step.get("saved") or {}
+        name = saved.get("name")
+        schema_obj = schemas_by_name.get(name) if name else None
+        if schema_obj is None:
+            raw = ((saved.get("request") or {}).get("responseSchema") or "").strip()
+            if raw:
+                schema_obj = json.loads(raw)
+        if not schema_obj:
+            skipped += 1
+            continue
+        response = step.get("response") or {}
+        body_text = response.get("body")
+        try:
+            instance = json.loads(body_text) if isinstance(body_text, str) else body_text
+        except json.JSONDecodeError:
+            reports.append({"name": name, "ok": False, "errors": ["body is not JSON"]})
+            continue
+        errors = validate_json(instance, schema_obj)
+        reports.append({"name": name, "ok": not errors, "errors": errors})
+    failed = [item for item in reports if not item["ok"]]
+    return _json(
+        {"ok": not failed, "checked": len(reports), "skipped": skipped, "results": reports},
+        error=bool(failed),
+    )
+
+
+def tool_help(_arguments: dict) -> dict:
+    return _json(
+        {
+            "tools": [{"name": item["name"], "description": item["description"]} for item in TOOL_DEFS],
+            "prompts": [{"name": item["name"], "description": item["description"]} for item in list_prompts()],
+            "resources": [item["uri"] for item in list_resources()],
+            "resourceTemplates": [item["uriTemplate"] for item in list_resource_templates()],
+        }
+    )
+
+
 TOOLS: dict[str, Callable[[dict], dict]] = {
     "pulse_interpolate": tool_interpolate,
     "pulse_send": tool_send,
@@ -329,6 +522,14 @@ TOOLS: dict[str, Callable[[dict], dict]] = {
     "pulse_write_collection": tool_write_collection,
     "pulse_pre_request": tool_pre_request,
     "pulse_schema": tool_schema,
+    "pulse_diff": tool_diff,
+    "pulse_export_openapi": tool_export_openapi,
+    "pulse_graphql": tool_graphql,
+    "pulse_curl": tool_curl,
+    "pulse_snippet": tool_snippet,
+    "pulse_last_run": tool_last_run,
+    "pulse_validate_run": tool_validate_run,
+    "pulse_help": tool_help,
 }
 
 TOOL_DEFS = [
@@ -358,6 +559,11 @@ TOOL_DEFS = [
                 "body": {"type": "string"},
                 "bodyKind": {"type": "string", "enum": ["none", "json", "raw", "form", "graphql"]},
                 "bearerToken": {"type": "string"},
+                "basicUsername": {"type": "string"},
+                "basicPassword": {"type": "string"},
+                "graphqlQuery": {"type": "string"},
+                "graphqlVariables": {"description": "JSON object or string"},
+                "graphqlOperationName": {"type": "string"},
             },
         },
     },
@@ -469,6 +675,107 @@ TOOL_DEFS = [
                 "schema": {"type": "object"},
             },
         },
+    },
+    {
+        "name": "pulse_diff",
+        "description": "Compare two JSON strings or objects. Returns equal/added/removed and a unified line diff.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["a", "b"],
+            "properties": {
+                "a": {"description": "Left JSON (string or object)"},
+                "b": {"description": "Right JSON (string or object)"},
+            },
+        },
+    },
+    {
+        "name": "pulse_export_openapi",
+        "description": "Export a Pulse collection (workspace or v1 file) to OpenAPI 3.0. Writes python/examples/.out/ unless inline.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Path to a Pulse collection JSON"},
+                "collection": {"type": "object", "description": "Inline Pulse collection instead of path"},
+                "name": {"type": "string"},
+                "inline": {"type": "boolean"},
+            },
+        },
+    },
+    {
+        "name": "pulse_graphql",
+        "description": "Send a GraphQL query (or introspect=true) through the Pulse Rust engine.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["url"],
+            "properties": {
+                "url": {"type": "string"},
+                "graphqlQuery": {"type": "string"},
+                "query": {"type": "string", "description": "Alias for graphqlQuery"},
+                "graphqlVariables": {"description": "JSON object or string"},
+                "variables": {"description": "Alias for graphqlVariables"},
+                "graphqlOperationName": {"type": "string"},
+                "introspect": {"type": "boolean"},
+                "headers": {"type": "object", "additionalProperties": {"type": "string"}},
+                "bearerToken": {"type": "string"},
+            },
+        },
+    },
+    {
+        "name": "pulse_curl",
+        "description": "Parse a cURL command into a Pulse request. Pass send=true to execute it.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["command"],
+            "properties": {
+                "command": {"type": "string"},
+                "send": {"type": "boolean", "default": False},
+            },
+        },
+    },
+    {
+        "name": "pulse_snippet",
+        "description": "Generate a curl or fetch snippet from method/url/headers/body (or a Pulse request object).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "format": {"type": "string", "enum": ["curl", "fetch", "all"], "default": "curl"},
+                "method": {"type": "string"},
+                "url": {"type": "string"},
+                "headers": {"type": "object", "additionalProperties": {"type": "string"}},
+                "body": {"type": "string"},
+                "bodyKind": {"type": "string"},
+                "bearerToken": {"type": "string"},
+                "request": {"type": "object"},
+            },
+        },
+    },
+    {
+        "name": "pulse_last_run",
+        "description": "Return a summary of the most recent collection run (same data as pulse://last-run).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "full": {"type": "boolean", "description": "Return the raw run JSON instead of the summary"},
+            },
+        },
+    },
+    {
+        "name": "pulse_validate_run",
+        "description": "Validate last-run (or given) response bodies against responseSchema on collection requests. Or pass body+schema like pulse_schema.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Collection JSON with responseSchema on requests"},
+                "result": {"type": "object", "description": "Run result instead of last-run"},
+                "body": {},
+                "schema": {"type": "object"},
+            },
+        },
+    },
+    {
+        "name": "pulse_help",
+        "description": "List Pulse MCP tools, prompts, and resources so the agent does not have to guess names.",
+        "inputSchema": {"type": "object", "properties": {}},
     },
 ]
 

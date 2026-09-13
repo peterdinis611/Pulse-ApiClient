@@ -22,6 +22,7 @@ export const PULSE_HOTKEYS = {
   toggleConsole: "Mod+J",
   newWindow: "Mod+Shift+N",
   overviewWindow: "Mod+Shift+O",
+  commandPalette: "Mod+K",
   closeConsole: "Escape",
 } as const satisfies Record<string, Hotkey>;
 
@@ -37,6 +38,7 @@ export const PULSE_HOTKEY_CHEATSHEET: Array<{ id: PulseHotkeyId; label: string }
   { id: "toggleConsole", label: "Toggle console" },
   { id: "newWindow", label: "New window" },
   { id: "overviewWindow", label: "Overview window" },
+  { id: "commandPalette", label: "Command palette" },
 ];
 
 export function pulseFocusSelector(target: PulseFocusTarget): string {

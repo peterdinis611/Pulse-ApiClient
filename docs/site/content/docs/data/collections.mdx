@@ -10,11 +10,14 @@ Organize saved requests and run them as a set.
 - Save, duplicate, delete, drag-and-drop requests and folders
 - Nested folders; empty folders can be deleted
 - Run collection — sequential when pre-request scripts or a data file exist, otherwise can batch
+- Live progress in the explorer: request name, status, elapsed ms, and a bar (same events MCP already emits)
 - Run folder — Play on a folder sends that folder and its nested requests only
 - Data file — CSV or JSON, one row = one full iteration of the collection or folder
 - Runner uses the same inheritance and variable layers as a single Send
 - Import Pulse JSON, Postman v2.1, Bruno, Insomnia, OpenAPI
-- Export one collection as Pulse or Postman (⋯ menu), or the whole workspace
+- Export one collection as Pulse, Postman, or OpenAPI 3.0 (⋯ menu), or the whole workspace
+- OpenAPI import attaches JSON Schema from 200/201 when present; Send asserts 2xx vs that schema
+- Collections folder — Settings → Data: pick a Git directory, Write *.pulse.json, Reload from folder
 - Postman import/export keeps collection and folder auth, variables, and scripts
 - OpenAPI `{id}` paths become path params; operations land as requests
 
@@ -23,4 +26,5 @@ Organize saved requests and run them as a set.
 1. Save from the request bar (collection + optional folder).
 2. Play on a collection runs every request; Play on a folder runs that folder. View results for status and tests.
 3. Spreadsheet icon (or Run with CSV / JSON) picks a data file: each row becomes `{{column}}` for one iteration.
-4. Explorer transfer menu imports a file; collection ⋯ exports Pulse or Postman JSON.
+4. Explorer transfer menu imports a file; collection ⋯ exports Pulse, Postman, or OpenAPI JSON.
+5. Settings → Data → Collections folder writes the workspace as Git-friendly `*.pulse.json` files.

@@ -1,13 +1,20 @@
 ---
-title: "WebSocket"
-description: "Connect to ws:// or wss:// endpoints from the request bar."
+title: "WebSocket & SSE"
+description: "Stream protocols on the request bar: WebSocket frames or text/event-stream."
 ---
 
-Connect to ws:// or wss:// endpoints from the request bar.
+Stream protocols on the request bar: WebSocket frames or text/event-stream.
 
 ## In the product
 
-- Switch protocol to WebSocket (or paste a `ws://` / `wss://` URL)
-- Connect / Disconnect replace Send while the socket is active
+- Protocol picker: HTTP, WS, or SSE — or paste a `ws://` / `wss://` URL for WebSocket
+- SSE uses `http://` / `https://` with `Accept: text/event-stream` (AI streams, logs, ticks)
+- Connect / Disconnect replace Send while the stream is active
 - Headers, query, path params, and inherited auth apply on connect
-- Send text or binary frames; ping; inspect incoming messages
+- WebSocket: send text or binary frames; ping; inspect incoming messages
+- SSE is incoming-only — events land in the same message list, no send/ping
+
+## Walkthrough
+
+1. Switch protocol to SSE, set the events URL, Connect. Data lines show as incoming messages.
+2. For WebSocket, use `wss://…` or pick WS, then Connect and send frames.

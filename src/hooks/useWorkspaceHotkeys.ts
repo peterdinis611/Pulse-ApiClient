@@ -5,7 +5,7 @@ import { createAppWindow, openOverviewWindow } from "@/lib/window-manager";
 
 const SHARED = { conflictBehavior: "replace" as const };
 
-export function useWorkspaceHotkeys() {
+export function useWorkspaceHotkeys(options?: { onCommandPalette?: () => void }) {
   const {
     mainView,
     consoleOpen,
@@ -79,6 +79,11 @@ export function useWorkspaceHotkeys() {
           focusPulseFieldWhenReady("explorer-search");
         },
         options: { meta: { name: "Search" } },
+      },
+      {
+        hotkey: PULSE_HOTKEYS.commandPalette,
+        callback: () => options?.onCommandPalette?.(),
+        options: { meta: { name: "Command palette" } },
       },
     ],
     SHARED,

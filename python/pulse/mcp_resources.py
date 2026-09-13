@@ -1,4 +1,4 @@
-"""MCP resources: pulse://examples/…, pulse://last-run, pulse://openapi/{file}."""
+"""MCP resources: pulse://examples/…, pulse://last-run, pulse://openapi/{file}, pulse://out/{file}."""
 
 from __future__ import annotations
 
@@ -85,6 +85,21 @@ def list_resources() -> list[dict]:
                     "mimeType": EXAMPLE_MIME[suffix],
                 }
             )
+    if OUT_DIR.is_dir():
+        for path in sorted(OUT_DIR.iterdir()):
+            if not path.is_file() or path.name.startswith(".") or path.name == "last-run.json":
+                continue
+            suffix = path.suffix.lower()
+            if suffix not in EXAMPLE_MIME:
+                continue
+            resources.append(
+                {
+                    "uri": f"pulse://out/{path.name}",
+                    "name": path.name,
+                    "description": f"Generated file in python/examples/.out/ ({path.name})",
+                    "mimeType": EXAMPLE_MIME[suffix],
+                }
+            )
     return resources
 
 
@@ -95,7 +110,13 @@ def list_resource_templates() -> list[dict]:
             "name": "OpenAPI spec",
             "description": "Read an OpenAPI JSON/YAML file from the repo (examples/ or a relative path).",
             "mimeType": "application/json",
-        }
+        },
+        {
+            "uriTemplate": "pulse://out/{file}",
+            "name": "Generated output",
+            "description": "Read a file written under python/examples/.out/ (OpenAPI export, converted collections).",
+            "mimeType": "application/json",
+        },
     ]
 
 
@@ -149,6 +170,13 @@ def read_resource(uri: str) -> dict | None:
             return None
         return _read_file(path, uri)
 
+    out_prefix = "pulse://out/"
+    if uri.startswith(out_prefix):
+        path = _file_under(OUT_DIR, uri[len(out_prefix) :])
+        if path is None:
+            return None
+        return _read_file(path, uri)
+
     return None
 
 
@@ -156,6 +184,17 @@ def _safe_filename(name: str) -> str:
     stem = Path(name).stem or "collection"
     cleaned = re.sub(r"[^A-Za-z0-9._-]", "-", stem).strip(".-") or "collection"
     return f"{cleaned}.json"
+
+
+def write_out_json(payload: dict, name: str | None = None) -> Path:
+    info = payload.get("info") if isinstance(payload.get("info"), dict) else {}
+    title = name or (info or {}).get("title") or "output"
+    path = OUT_DIR / _safe_filename(str(title))
+    write_json(path, payload)
+    try:
+        return path.relative_to(REPO_ROOT)
+    except ValueError:
+        return path
 
 
 def write_collection_file(payload: dict, name: str | None = None) -> Path:
