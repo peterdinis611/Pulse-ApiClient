@@ -5,6 +5,7 @@ import { getThemeIcon } from "@/lib/theme";
 import { ThemePicker } from "@/components/ThemePicker";
 import { TooltipWrap } from "@/components/TooltipIconButton";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/hooks/useLocale";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,6 +14,7 @@ import {
 
 export function ThemeToggle() {
   const { theme, setTheme, setMainView } = useApp();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const Icon = getThemeIcon(theme);
 
@@ -23,14 +25,14 @@ export function ThemeToggle() {
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
-      <TooltipWrap label="Theme">
+      <TooltipWrap label={t("chrome.theme")}>
         <DropdownMenuTrigger asChild>
           <Button
             type="button"
             variant="ghost"
             size="icon"
             className="size-8 text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label="Theme"
+            aria-label={t("chrome.theme")}
           >
             <Icon className="size-4" />
           </Button>
@@ -50,7 +52,7 @@ export function ThemeToggle() {
             }}
           >
             <Settings2 className="size-3.5" />
-            Custom CSS & appearance
+            {t("chrome.appearanceMore")}
           </Button>
         </div>
       </DropdownMenuContent>

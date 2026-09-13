@@ -89,6 +89,9 @@
     "settings.language.paste": "Or paste JSON",
     "settings.language.pastePlaceholder": "{\n  \"meta\": { \"name\": \"Deutsch\", \"code\": \"de\" },\n  \"strings\": {\n    \"rail.overview\": \"Übersicht\"\n  }\n}",
     "loading.app": "Loading app",
-    "loading.view": "Loading view"
+    "loading.view": "Loading view",
+    "chrome.theme": "Theme",
+    "chrome.language": "Language",
+    "chrome.appearanceMore": "Language, CSS & appearance"
   }
 }

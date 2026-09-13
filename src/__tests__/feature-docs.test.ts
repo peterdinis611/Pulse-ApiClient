@@ -73,6 +73,8 @@ describe("feature-docs", () => {
     expect(preRequest?.items.some((item) => item.includes("pulse.environment.set"))).toBe(true);
     expect(preRequest?.tips?.length).toBeGreaterThan(0);
     expect(themes?.items.some((item) => item.toLowerCase().includes("css"))).toBe(true);
+    expect(themes?.items.some((item) => item.toLowerCase().includes("language"))).toBe(true);
+    expect(themes?.howTo?.length).toBeGreaterThan(0);
     expect(tests?.items.some((item) => item.includes("pulse.test"))).toBe(true);
     expect(inherit?.howTo?.length).toBeGreaterThan(0);
     expect(pathParams?.items.some((item) => item.includes(":id"))).toBe(true);
@@ -109,7 +111,7 @@ describe("feature-docs", () => {
     expect(md).toContain("## Appearance");
     expect(md).toContain("### Authentication");
     expect(md).toContain("OAuth 2.0");
-    expect(md).toContain("### Themes & custom CSS");
+    expect(md).toContain("### Themes, language & custom CSS");
     expect(md).toContain("In-app: open **Docs**");
   });
 

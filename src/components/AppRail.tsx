@@ -7,6 +7,7 @@ import {
   Zap,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { LanguageToggle } from "@/components/LanguageToggle";
 import { UserAuthAvatar } from "@/components/UserAuthAvatar";
 import { TooltipWrap } from "@/components/TooltipIconButton";
 import { APP_NAME } from "@/lib/app-config";
@@ -82,6 +83,7 @@ export function AppRail() {
       </nav>
 
       <div className="mt-auto flex flex-col items-center gap-2 pb-1">
+        <LanguageToggle />
         <ThemeToggle />
         <UserAuthAvatar />
       </div>

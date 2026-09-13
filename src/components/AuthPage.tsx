@@ -14,6 +14,7 @@ import { loadPersistedState } from "@/lib/storage";
 import { toast } from "@/lib/toast";
 import { APP_NAME } from "@/lib/app-config";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { LanguageToggle } from "@/components/LanguageToggle";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -128,7 +129,10 @@ export function AuthPage() {
             <span className="text-body font-semibold">{APP_NAME}</span>
           </div>
           <div className="hidden lg:block" />
-          <ThemeToggle />
+          <div className="flex items-center gap-1">
+            <LanguageToggle />
+            <ThemeToggle />
+          </div>
         </header>
 
         <div className="flex flex-1 items-center justify-center px-4 py-8 lg:px-8">

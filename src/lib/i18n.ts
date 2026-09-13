@@ -107,6 +107,9 @@ export const EN_MESSAGES = {
 
   "loading.app": "Loading app",
   "loading.view": "Loading view",
+  "chrome.theme": "Theme",
+  "chrome.language": "Language",
+  "chrome.appearanceMore": "Language, CSS & appearance",
 } as const;
 
 export type MessageKey = keyof typeof EN_MESSAGES;
@@ -212,6 +215,9 @@ export const SK_MESSAGES: Record<MessageKey, string> = {
 
   "loading.app": "Načítavam aplikáciu",
   "loading.view": "Načítavam pohľad",
+  "chrome.theme": "Téma",
+  "chrome.language": "Jazyk",
+  "chrome.appearanceMore": "Jazyk, CSS a vzhľad",
 };
 
 const CATALOGS: Record<BuiltInLocale, Record<MessageKey, string>> = {
@@ -347,7 +353,7 @@ export function applyCustomLanguagePack(next: LanguagePack | null, path?: string
   pack = next;
   writeStorageItem(PACK_CONTENT_SUFFIX, serializeLanguagePack(next));
   if (path !== undefined) {
-    if (path.trim()) writeStorageItem(PACK_PATH_SUFFIX, path.trim());
+    if (path?.trim()) writeStorageItem(PACK_PATH_SUFFIX, path.trim());
     else removeStorageItem(PACK_PATH_SUFFIX);
   }
   applyDocumentLang();

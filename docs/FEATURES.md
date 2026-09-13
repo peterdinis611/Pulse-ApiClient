@@ -274,15 +274,24 @@ Native reqwest client — CORS does not apply; configure TLS, proxy, redirects, 
 
 ## Appearance
 
-### Themes & custom CSS
+### Themes, language & custom CSS
 
 Appearance lives under Settings → Appearance.
 
 - Built-in themes via the theme picker
+- UI language: Match system, English, or Slovenčina
+- Custom language pack: upload or paste a JSON object of key → string overrides
+- Missing language keys fall back to the built-in locale, then English
+- Example file: examples/pulse-language.en.json
 - Custom CSS editor with snippets, CSS variables, and component hooks
 - Live preview while editing
 - Starter template, full example file, Apply, Export, Browse, Reload, Clear
 - Example file: examples/pulse-theme-override.example.css
+
+**How to**
+
+1. Open Settings → Appearance. Pick Match system, English, or Slovenčina.
+2. Optional: Browse or paste a JSON language pack (see examples/pulse-language.en.json). Missing keys fall back to the language you picked.
 
 ## Productivity
 
