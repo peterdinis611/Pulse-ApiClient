@@ -282,5 +282,21 @@ class BenchTests(unittest.TestCase):
         self.assertEqual(seen, [(1, 2), (2, 2)])
 
 
+class WorkspaceTests(unittest.TestCase):
+    def test_interpolate_and_search(self) -> None:
+        from pulse.workspace import interpolate_text, list_environments, search_requests, workspace_status
+
+        self.assertEqual(
+            interpolate_text("{{baseUrl}}/pets", {"baseUrl": "https://api.test"}),
+            "https://api.test/pets",
+        )
+        root = Path(__file__).resolve().parents[1] / "examples" / "git-workspace"
+        hits = search_requests(root, "list")
+        self.assertTrue(any(item["id"] == "req_list_pets" for item in hits))
+        self.assertEqual(list_environments(root)[0]["name"], "staging")
+        status = workspace_status(root)
+        self.assertGreaterEqual(status["requests"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()

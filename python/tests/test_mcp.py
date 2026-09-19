@@ -40,6 +40,11 @@ class McpProtocolTests(unittest.TestCase):
         self.assertIn("pulse_workspace_list", names)
         self.assertIn("pulse_workspace_read", names)
         self.assertIn("pulse_workspace_write", names)
+        self.assertIn("pulse_workspace_send", names)
+        self.assertIn("pulse_workspace_search", names)
+        self.assertIn("pulse_workspace_status", names)
+        self.assertIn("pulse_contract", names)
+        self.assertIn("pulse_junit", names)
 
     def test_schema_tool(self) -> None:
         result = handle_message(
@@ -92,6 +97,7 @@ class McpProtocolTests(unittest.TestCase):
         uris = {item["uriTemplate"] for item in templates["result"]["resourceTemplates"]}
         self.assertIn("pulse://openapi/{file}", uris)
         self.assertIn("pulse://out/{file}", uris)
+        self.assertIn("pulse://workspace/request/{id}", uris)
         pets = handle_message(
             {
                 "jsonrpc": "2.0",
@@ -186,6 +192,10 @@ class McpProtocolTests(unittest.TestCase):
                 "export_openapi",
                 "explain_last_run",
                 "validate_schema",
+                "send_saved_request",
+                "workspace_status",
+                "contract_check",
+                "import_openapi_workspace",
             },
         )
         got = handle_message(
@@ -489,6 +499,230 @@ class McpProtocolTests(unittest.TestCase):
         )
         self.assertTrue(result["result"]["isError"])
         self.assertIn("PULSE_WORKSPACE", result["result"]["content"][0]["text"])
+
+    def test_snippet_httpie_and_python(self) -> None:
+        httpie = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 44,
+                "method": "tools/call",
+                "params": {
+                    "name": "pulse_snippet",
+                    "arguments": {"method": "GET", "url": "https://api.test/pets", "format": "httpie"},
+                },
+            }
+        )
+        self.assertIn("http", httpie["result"]["content"][0]["text"])
+        python = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 45,
+                "method": "tools/call",
+                "params": {
+                    "name": "pulse_snippet",
+                    "arguments": {"method": "GET", "url": "https://api.test/pets", "format": "python"},
+                },
+            }
+        )
+        self.assertIn("requests.get", python["result"]["content"][0]["text"])
+
+    def test_junit_from_last_run(self) -> None:
+        from pulse.mcp_resources import OUT_DIR, save_last_run
+
+        save_last_run(
+            {
+                "collectionName": "junit-col",
+                "steps": [
+                    {"saved": {"name": "ok"}, "response": {"elapsedMs": 12}, "testResults": {"failed": 0}},
+                    {
+                        "saved": {"name": "bad"},
+                        "error": "boom",
+                        "response": {"elapsedMs": 3},
+                        "testResults": {"failed": 1},
+                    },
+                ],
+            }
+        )
+        inline = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 46,
+                "method": "tools/call",
+                "params": {"name": "pulse_junit", "arguments": {"inline": True, "suiteName": "junit-col"}},
+            }
+        )
+        xml = inline["result"]["content"][0]["text"]
+        self.assertIn("<testsuite", xml)
+        self.assertIn("boom", xml)
+        written = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 47,
+                "method": "tools/call",
+                "params": {"name": "pulse_junit", "arguments": {"name": "mcp-junit"}},
+            }
+        )
+        info = json.loads(written["result"]["content"][0]["text"])
+        self.assertEqual(info["path"], "python/examples/.out/mcp-junit.xml")
+        self.assertTrue((OUT_DIR / "mcp-junit.xml").is_file())
+
+    def test_workspace_status_search_envs_and_contract(self) -> None:
+        import os
+
+        root = Path(__file__).resolve().parents[1] / "examples" / "git-workspace"
+        previous = os.environ.get("PULSE_WORKSPACE")
+        os.environ["PULSE_WORKSPACE"] = str(root)
+        self.addCleanup(lambda: _restore_workspace(previous))
+        listed = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 48,
+                "method": "tools/call",
+                "params": {"name": "pulse_workspace_list", "arguments": {}},
+            }
+        )
+        items = json.loads(listed["result"]["content"][0]["text"])
+        self.assertTrue(any(item.get("id") == "req_list_pets" for item in items))
+        status = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 49,
+                "method": "tools/call",
+                "params": {"name": "pulse_workspace_status", "arguments": {}},
+            }
+        )
+        summary = json.loads(status["result"]["content"][0]["text"])
+        self.assertGreaterEqual(summary["requests"], 1)
+        self.assertIn("staging", summary["environments"])
+        search = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 50,
+                "method": "tools/call",
+                "params": {"name": "pulse_workspace_search", "arguments": {"query": "pets"}},
+            }
+        )
+        hits = json.loads(search["result"]["content"][0]["text"])
+        self.assertTrue(hits)
+        envs = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 51,
+                "method": "tools/call",
+                "params": {"name": "pulse_workspace_envs", "arguments": {}},
+            }
+        )
+        env_list = json.loads(envs["result"]["content"][0]["text"])
+        self.assertEqual(env_list[0]["name"], "staging")
+        contract = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 52,
+                "method": "tools/call",
+                "params": {"name": "pulse_contract", "arguments": {}},
+            }
+        )
+        report = json.loads(contract["result"]["content"][0]["text"])
+        self.assertIn("ok", report)
+        resources = handle_message({"jsonrpc": "2.0", "id": 53, "method": "resources/list"})
+        uris = {item["uri"] for item in resources["result"]["resources"]}
+        self.assertIn("pulse://workspace/requests", uris)
+        self.assertIn("pulse://workspace/request/req_list_pets", uris)
+        body = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 54,
+                "method": "resources/read",
+                "params": {"uri": "pulse://workspace/request/req_list_pets"},
+            }
+        )
+        payload = json.loads(body["result"]["contents"][0]["text"])
+        self.assertEqual(payload["id"], "req_list_pets")
+        exported = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 55,
+                "method": "tools/call",
+                "params": {"name": "pulse_workspace_export_openapi", "arguments": {"inline": True}},
+            }
+        )
+        spec = json.loads(exported["result"]["content"][0]["text"])
+        self.assertEqual(spec["openapi"], "3.0.3")
+        prompt = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 56,
+                "method": "prompts/get",
+                "params": {"name": "send_saved_request", "arguments": {"id": "req_list_pets"}},
+            }
+        )
+        self.assertIn("pulse_workspace_send", prompt["result"]["messages"][0]["content"]["text"])
+
+    def test_workspace_delete_requires_confirm_and_import(self) -> None:
+        import os
+        import tempfile
+
+        previous = os.environ.get("PULSE_WORKSPACE")
+        temp = Path(tempfile.mkdtemp(prefix="pulse-mcp-ws-"))
+        self.addCleanup(lambda: _restore_workspace(previous))
+        self.addCleanup(lambda: __import__("shutil").rmtree(temp, ignore_errors=True))
+        os.environ["PULSE_WORKSPACE"] = str(temp)
+        (temp / "pulse.yaml").write_text("version: 1\nname: Temp\n")
+        spec = Path(__file__).resolve().parents[1] / "examples" / "openapi.json"
+        imported = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 57,
+                "method": "tools/call",
+                "params": {
+                    "name": "pulse_workspace_import_openapi",
+                    "arguments": {"path": str(spec), "collection": "imported"},
+                },
+            }
+        )
+        info = json.loads(imported["result"]["content"][0]["text"])
+        self.assertGreater(info["count"], 0)
+        listed = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 58,
+                "method": "tools/call",
+                "params": {"name": "pulse_workspace_list", "arguments": {}},
+            }
+        )
+        items = json.loads(listed["result"]["content"][0]["text"])
+        ident = items[0]["id"]
+        blocked = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 59,
+                "method": "tools/call",
+                "params": {"name": "pulse_workspace_delete", "arguments": {"id": ident}},
+            }
+        )
+        self.assertTrue(blocked["result"]["isError"])
+        deleted = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 60,
+                "method": "tools/call",
+                "params": {
+                    "name": "pulse_workspace_delete",
+                    "arguments": {"id": ident, "confirm": True},
+                },
+            }
+        )
+        body = json.loads(deleted["result"]["content"][0]["text"])
+        self.assertIn("deleted", body)
+
+
+def _restore_workspace(previous: str | None) -> None:
+    import os
+
+    if previous is None:
+        os.environ.pop("PULSE_WORKSPACE", None)
+    else:
+        os.environ["PULSE_WORKSPACE"] = previous
 
 
 if __name__ == "__main__":

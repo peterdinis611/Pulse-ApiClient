@@ -86,8 +86,8 @@ export const CHANGELOG: ChangelogRelease[] = [
         id: "mcp",
         title: { en: "MCP on the Rust engine", sk: "MCP na Rust engine" },
         detail: {
-          en: "pulse-mcp talks YAML workspace tools. Mutating calls need confirm=true.",
-          sk: "pulse-mcp volá YAML workspace tools. Mutácie vyžadujú confirm=true.",
+          en: "pulse-mcp talks YAML workspace tools (send-by-id, envs, history, pending, search, contract). Mutating calls need confirm=true.",
+          sk: "pulse-mcp volá YAML workspace tools (send podľa id, envs, história, pending, search, kontrakt). Mutácie vyžadujú confirm=true.",
         },
       },
       {

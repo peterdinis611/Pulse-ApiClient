@@ -863,4 +863,65 @@ mod tests {
         assert_eq!(loaded.collections[0].name, "Health");
         let _ = fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn deletes_yaml_request_by_id() {
+        let dir = std::env::temp_dir().join(format!(
+            "pulse-del-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let payload = GitWorkspacePayload {
+            name: "Demo".into(),
+            root: dir.to_string_lossy().to_string(),
+            collection_groups: vec![CollectionDto {
+                id: "col_demo".into(),
+                name: "Pets".into(),
+                folders: vec![],
+                auth: None,
+                variables: vec![],
+                pre_request_script: None,
+                tests: None,
+                folder_configs: vec![],
+            }],
+            collections: vec![SavedRequestDto {
+                id: "req_list".into(),
+                name: "List".into(),
+                collection_id: "col_demo".into(),
+                folder: None,
+                file_path: None,
+                request: ApiRequestDto {
+                    id: "req_list".into(),
+                    name: "List".into(),
+                    protocol: "http".into(),
+                    method: "GET".into(),
+                    url: "https://api.test/pets".into(),
+                    headers: vec![],
+                    query: vec![],
+                    body_kind: "none".into(),
+                    body: String::new(),
+                    graphql_query: String::new(),
+                    graphql_variables: String::new(),
+                    graphql_operation_name: String::new(),
+                    form: vec![],
+                    multipart: vec![],
+                    path_params: vec![],
+                    auth: RequestAuthDto::default(),
+                    tests: String::new(),
+                    pre_request_script: String::new(),
+                    response_schema: String::new(),
+                },
+            }],
+            environments: vec![],
+            secrets: vec![],
+        };
+        save_workspace(dir.to_str().unwrap(), &payload).unwrap();
+        let rel = delete_request(dir.to_str().unwrap(), "req_list").unwrap();
+        assert!(rel.ends_with("list.pulse.yaml"));
+        assert!(load_workspace(dir.to_str().unwrap()).unwrap().collections.is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

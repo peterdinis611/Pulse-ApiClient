@@ -29,25 +29,157 @@ def slug(name: str) -> str:
     return collapsed or "collection"
 
 
+def _native_workspace(root: Path) -> dict[str, Any] | None:
+    try:
+        import pulse_native
+    except ImportError:
+        return None
+    if not hasattr(pulse_native, "load_workspace_json"):
+        return None
+    try:
+        loaded = json.loads(pulse_native.load_workspace_json(str(root)))
+    except Exception:
+        return None
+    return loaded if isinstance(loaded, dict) else None
+
+
+def _parse_yaml_scalar(raw: str) -> Any:
+    text = raw.strip()
+    if text in {"", "~", "null", "Null"}:
+        return None if text else ""
+    if text in {"true", "True", "yes", "Yes"}:
+        return True
+    if text in {"false", "False", "no", "No"}:
+        return False
+    if text == "[]":
+        return []
+    if text == "{}":
+        return {}
+    if (text.startswith('"') and text.endswith('"')) or (text.startswith("'") and text.endswith("'") and len(text) >= 2):
+        if text.startswith('"'):
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                return text[1:-1]
+        return text[1:-1]
+    if text[:1] in {"{", "["}:
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+    if text.isdigit() or (text.startswith("-") and text[1:].isdigit()):
+        return int(text)
+    try:
+        if "." in text or "e" in text.lower():
+            return float(text)
+    except ValueError:
+        pass
+    return text
+
+
+def _yaml_indent(line: str) -> int:
+    return len(line) - len(line.lstrip(" "))
+
+
+def _simple_yaml_load(text: str) -> Any:
+    lines = [line.rstrip() for line in text.splitlines() if line.strip() and not line.lstrip().startswith("#")]
+    if not lines:
+        return {}
+    value, _ = _yaml_parse(lines, 0, _yaml_indent(lines[0]))
+    return value if value is not None else {}
+
+
+def _yaml_parse(lines: list[str], index: int, indent: int) -> tuple[Any, int]:
+    if index >= len(lines):
+        return {}, index
+    if lines[index].lstrip().startswith("- "):
+        return _yaml_parse_list(lines, index, indent)
+    return _yaml_parse_map(lines, index, indent)
+
+
+def _yaml_parse_map(lines: list[str], index: int, indent: int) -> tuple[dict[str, Any], int]:
+    result: dict[str, Any] = {}
+    while index < len(lines):
+        line = lines[index]
+        current = _yaml_indent(line)
+        if current < indent:
+            break
+        stripped = line.strip()
+        if stripped.startswith("- "):
+            break
+        if current > indent or ":" not in stripped:
+            index += 1
+            continue
+        key, rest = stripped.split(":", 1)
+        key = key.strip()
+        rest = rest.strip()
+        index += 1
+        if rest == "":
+            if index < len(lines) and _yaml_indent(lines[index]) > indent:
+                child, index = _yaml_parse(lines, index, _yaml_indent(lines[index]))
+                result[key] = child
+            else:
+                result[key] = None
+        else:
+            result[key] = _parse_yaml_scalar(rest)
+    return result, index
+
+
+def _yaml_parse_list(lines: list[str], index: int, indent: int) -> tuple[list[Any], int]:
+    result: list[Any] = []
+    while index < len(lines):
+        line = lines[index]
+        current = _yaml_indent(line)
+        if current < indent:
+            break
+        stripped = line.strip()
+        if not stripped.startswith("- "):
+            break
+        body = stripped[2:]
+        index += 1
+        child_indent = current + 2
+        if body == "":
+            if index < len(lines) and _yaml_indent(lines[index]) > current:
+                child, index = _yaml_parse(lines, index, _yaml_indent(lines[index]))
+                result.append(child)
+            else:
+                result.append(None)
+            continue
+        if ":" in body:
+            key, rest = body.split(":", 1)
+            item: dict[str, Any] = {
+                key.strip(): _parse_yaml_scalar(rest.strip()) if rest.strip() else None
+            }
+            if rest.strip() == "" and index < len(lines) and _yaml_indent(lines[index]) > current:
+                nested, index = _yaml_parse(lines, index, _yaml_indent(lines[index]))
+                item[key.strip()] = nested
+            if index < len(lines) and _yaml_indent(lines[index]) >= child_indent and not lines[index].lstrip().startswith("- "):
+                extra, index = _yaml_parse_map(lines, index, child_indent)
+                item.update(extra)
+            result.append(item)
+            continue
+        result.append(_parse_yaml_scalar(body))
+    return result, index
+
+
 def _load_yaml(path: Path) -> dict[str, Any]:
     text = path.read_text()
     try:
         import yaml  # type: ignore
     except ImportError:
-        if path.suffix.lower() == ".json":
-            loaded = json.loads(text)
-            return loaded if isinstance(loaded, dict) else {}
-        raise RuntimeError("PyYAML is required to read YAML workspaces: python3 -m pip install pyyaml")
+        loaded = _simple_yaml_load(text)
+        return loaded if isinstance(loaded, dict) else {}
     loaded = yaml.safe_load(text)
     return loaded if isinstance(loaded, dict) else {}
 
 
 def _dump_yaml(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     try:
         import yaml  # type: ignore
-    except ImportError as error:
-        raise RuntimeError("PyYAML is required to write YAML workspaces") from error
-    path.parent.mkdir(parents=True, exist_ok=True)
+    except ImportError:
+        path.write_text(json.dumps(payload, indent=2) + "\n")
+        return
     path.write_text(yaml.safe_dump(payload, sort_keys=False))
 
 
@@ -86,6 +218,35 @@ def vars_from_items(items: Any) -> dict[str, str]:
 
 
 def list_requests(root: Path) -> list[dict[str, Any]]:
+    native = _native_workspace(root)
+    if native is not None:
+        groups = {str(group.get("id") or ""): group for group in native.get("collectionGroups") or []}
+        out: list[dict[str, Any]] = []
+        for item in native.get("collections") or []:
+            if not isinstance(item, dict):
+                continue
+            request = item.get("request") if isinstance(item.get("request"), dict) else item
+            file_path = str(item.get("filePath") or "")
+            parts = Path(file_path).parts
+            group = groups.get(str(item.get("collectionId") or ""))
+            if len(parts) >= 2 and parts[0] == "collections":
+                group_name = parts[1]
+            else:
+                group_name = slug(str((group or {}).get("name") or "collection"))
+            folder = item.get("folder")
+            out.append(
+                {
+                    "id": str(item.get("id") or file_path),
+                    "name": item.get("name") or request.get("name") or file_path,
+                    "method": request.get("method") or "GET",
+                    "url": request.get("url") or "",
+                    "filePath": file_path,
+                    "groupName": group_name,
+                    "folder": folder,
+                    "request": request,
+                }
+            )
+        return out
     collections = root / "collections"
     out: list[dict[str, Any]] = []
     if not collections.is_dir():
@@ -148,6 +309,21 @@ def search_requests(root: Path, query: str) -> list[dict[str, Any]]:
 
 
 def list_environments(root: Path) -> list[dict[str, Any]]:
+    native = _native_workspace(root)
+    if native is not None:
+        out: list[dict[str, Any]] = []
+        for item in native.get("environments") or []:
+            if not isinstance(item, dict):
+                continue
+            out.append(
+                {
+                    "id": str(item.get("id") or f"env_{slug(item.get('name') or 'env')}"),
+                    "name": item.get("name") or item.get("id"),
+                    "filePath": item.get("filePath"),
+                    "variables": item.get("variables") or [],
+                }
+            )
+        return out
     env_root = root / "environments"
     out: list[dict[str, Any]] = []
     if not env_root.is_dir():
@@ -296,7 +472,11 @@ def import_openapi_requests(
 
 
 def workspace_as_payload(root: Path) -> dict[str, Any]:
-    pulse = _load_yaml(root / "pulse.yaml") if (root / "pulse.yaml").is_file() else {}
+    native = _native_workspace(root)
+    if native is not None:
+        native.setdefault("version", 1)
+        return native
+    pulse = {}
     groups: dict[str, dict[str, Any]] = {}
     collections: list[dict[str, Any]] = []
     for item in list_requests(root):
@@ -335,7 +515,42 @@ def workspace_as_payload(root: Path) -> dict[str, Any]:
 
 
 def workspace_status(root: Path) -> dict[str, Any]:
-    pulse = _load_yaml(root / "pulse.yaml") if (root / "pulse.yaml").is_file() else {}
+    native = _native_workspace(root)
+    if native is not None:
+        name = native.get("name") or root.name
+        secrets = native.get("secrets") or []
+        secret_keys = sorted(
+            {
+                str(item.get("key") or "")[7:]
+                if str(item.get("key") or "").startswith("secret.")
+                else str(item.get("key") or "")
+                for item in secrets
+                if isinstance(item, dict) and item.get("key")
+            }
+        )
+        if not secret_keys:
+            secret_keys = sorted(
+                {key[7:] if key.startswith("secret.") else key for key in load_dotenv_secrets(root)}
+            )
+        return {
+            "root": native.get("root") or str(root),
+            "name": name,
+            "requests": len(native.get("collections") or []),
+            "environments": [
+                item.get("name")
+                for item in native.get("environments") or []
+                if isinstance(item, dict)
+            ],
+            "pending": len(list_pending(root)),
+            "history": len(read_history(root, limit=0)),
+            "secretKeys": secret_keys,
+        }
+    pulse = {}
+    if (root / "pulse.yaml").is_file():
+        try:
+            pulse = _load_yaml(root / "pulse.yaml")
+        except RuntimeError:
+            pulse = {}
     secrets = load_dotenv_secrets(root)
     secret_keys = sorted(
         {key[7:] if key.startswith("secret.") else key for key in secrets}
@@ -442,7 +657,7 @@ def load_dotenv_secrets(root: Path) -> dict[str, str]:
         if line.startswith("export "):
             line = line[7:].strip()
         key, value = line.split("=", 1)
-        value = value.strip().strip("'").strip('"")
+        value = value.strip().strip("'").strip('"')
         key = key.strip()
         if key:
             namespaced = key if key.startswith("secret.") else f"secret.{key}"

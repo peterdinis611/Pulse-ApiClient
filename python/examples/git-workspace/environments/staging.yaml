@@ -1,0 +1,7 @@
+id: env_staging
+name: staging
+variables:
+  - id: v_base
+    key: baseUrl
+    value: https://jsonplaceholder.typicode.com
+    enabled: true
