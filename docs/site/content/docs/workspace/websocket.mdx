@@ -12,6 +12,7 @@ Stream protocols on the request bar: WebSocket frames or text/event-stream.
 - Connect / Disconnect replace Send while the stream is active
 - Headers, query, path params, and inherited auth apply on connect
 - WebSocket: send text or binary frames; ping; inspect incoming messages
+- GraphQL subscriptions: set body to GraphQL on a `ws://` request — Pulse negotiates `graphql-transport-ws` and can send subscribe frames
 - SSE is incoming-only — events land in the same message list, no send/ping
 
 ## Walkthrough

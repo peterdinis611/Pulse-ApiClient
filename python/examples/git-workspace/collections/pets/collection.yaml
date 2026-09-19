@@ -1,0 +1,8 @@
+id: col_pets
+name: Pets
+folders: []
+variables:
+  - id: v_base
+    key: baseUrl
+    value: https://jsonplaceholder.typicode.com
+    enabled: true

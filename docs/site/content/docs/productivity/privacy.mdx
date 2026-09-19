@@ -1,0 +1,33 @@
+---
+title: "Privacy policy"
+description: "Pulse does not operate a cloud. Your workspace stays on this device unless you send a request, share a Git repo, or export a file yourself."
+---
+
+Pulse does not operate a cloud. Your workspace stays on this device unless you send a request, share a Git repo, or export a file yourself.
+
+## In the product
+
+- Effective 19 September 2026. This policy describes the Pulse desktop app, CLI, and MCP satellite — not the APIs you call.
+- No Pulse account in the cloud. Sign-in is a local SQLite auth database (name, email, password hash) on this machine.
+- Workspace data (collections, environments, history, cookies, HTTP cache, window session) is stored locally. With a Git folder attached, collections live in YAML on disk; SQLite keeps history, cache, and session.
+- Pulse does not phone home: no telemetry, crash reports, analytics, or ads to Pulse servers. There is no Pulse operator that receives your collections.
+- HTTP, GraphQL, WebSocket, and SSE traffic goes only to URLs you enter (or that an MCP/CLI run you started enters). Those destinations have their own policies.
+- Secrets: `{{secret.*}}` values come from a gitignored `.env` and the OS keychain. They are stripped from YAML and redacted from history JSON. Do not commit `.env`.
+- The cookie jar holds cookies for APIs you called — not Pulse tracking cookies.
+- MCP (`pulse_send`, collection runs) writes agent history locally (`source=agent`) and requires `confirm=true` before POST/PUT/PATCH/DELETE.
+- Export, Git push, and file copies are under your control. Anyone with the files can read non-secret request definitions.
+- To delete local data: Settings → Data → clear history, clear cache, or reset the database; detach the Git folder; delete the app data directory and `.env` if you want a full wipe.
+- Pulse is not directed at children. It does not collect personal data over the network for Pulse’s own purposes.
+- We do not sell personal data. Pulse never receives it. Third parties are only the APIs, Git hosts, and MCP clients you choose.
+
+## Walkthrough
+
+1. Read this page in-app (Docs → Privacy policy) or on the field-manual site at `/docs/productivity/privacy`.
+2. Keep tokens out of Git: `.env` + `{{secret.NAME}}` on Auth, or the OS keychain.
+3. Wipe this device copy from Settings → Data when you are done with a workspace.
+
+<Callout title="Tip">
+
+If you self-host docs or redistribute Pulse, keep this policy with the app. Changing network behavior (telemetry, accounts, sync) would require an updated policy.
+
+</Callout>

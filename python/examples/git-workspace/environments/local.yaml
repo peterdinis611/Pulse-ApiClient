@@ -1,0 +1,7 @@
+id: env_local
+name: local
+variables:
+  - id: v_base
+    key: baseUrl
+    value: http://127.0.0.1:4010
+    enabled: true

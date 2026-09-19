@@ -49,15 +49,33 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { onPulseNavigate } from "@/lib/app-navigate";
+import { onPulseNavigate, navigatePulse } from "@/lib/app-navigate";
 import { pickPemFile } from "@/lib/tls-certs";
 import {
   pickCollectionsFolder,
-  readCollectionsFolder,
   setCollectionsFolderPath,
-  writeCollectionsFolder,
 } from "@/lib/collections-folder";
-import { exportPulseCollection } from "@/lib/pulse-collection";
+import {
+  loadGitWorkspace,
+  mapGitWorkspace,
+  migrateGitWorkspace,
+  openGitWorkspace,
+  unwatchGitWorkspace,
+} from "@/lib/git-workspace";
+import {
+  LOCKED_MOCK_PORT,
+  mockRoutesFromCollections,
+  startMockServer,
+  stopMockServer,
+  type MockServerHandle,
+} from "@/lib/mock-server";
+import { requestProductTour, requestWhatsNew } from "@/lib/whats-new";
+import { requestOnboarding } from "@/lib/onboarding";
+import {
+  loadLayoutPreferences,
+  saveLayoutPreferences,
+  type HomeView,
+} from "@/lib/layout-preferences";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/useLocale";
 import type { MessageKey } from "@/lib/i18n";
@@ -94,14 +112,17 @@ function SettingRow({
   description,
   children,
   danger,
+  tourId,
 }: {
   title: string;
   description: string;
   children: ReactNode;
   danger?: boolean;
+  tourId?: string;
 }) {
   return (
     <div
+      data-tour={tourId}
       className={cn(
         "flex flex-col gap-3 border-b border-border/60 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between",
         danger && "rounded-md border border-destructive/30 bg-destructive/5 px-3 py-3",
@@ -201,9 +222,10 @@ export function SettingsView() {
     importBrunoCollection,
     importInsomniaCollection,
     importOpenApiCollection,
-    importCollectionsFolder,
+    loadGitWorkspaceState,
     clearHistory,
     resetWorkspace,
+    setMainView,
   } = useApp();
 
   const { totalCount: historyCount } = useHistory();
@@ -244,6 +266,8 @@ export function SettingsView() {
   const [httpCaCertPath, setHttpCaCertPath] = useState("");
   const [collectionsFolderPath, setCollectionsFolderPathState] = useState("");
   const [syncingFolder, setSyncingFolder] = useState(false);
+  const [mockHandle, setMockHandle] = useState<MockServerHandle | null>(null);
+  const [homeView, setHomeViewState] = useState<HomeView>(() => loadLayoutPreferences().homeView);
   const [engineStats, setEngineStats] = useState<Awaited<ReturnType<typeof getHttpEngineStats>> | null>(
     null,
   );
@@ -605,6 +629,15 @@ export function SettingsView() {
           title={t("settings.appearance.title")}
           description={t("settings.appearance.description")}
         >
+          <SettingRow
+            tourId="onboarding"
+            title={t("onboarding.replay")}
+            description={t("onboarding.replayHint")}
+          >
+            <Button type="button" variant="outline" size="sm" onClick={() => requestOnboarding()}>
+              {t("onboarding.replay")}
+            </Button>
+          </SettingRow>
           <ThemePicker value={theme} onChange={setTheme} />
           <LanguageSettings />
           <CustomThemeSettings />
@@ -625,12 +658,13 @@ export function SettingsView() {
           )}
 
           <SettingRow
-            title="Collections folder (Git)"
-            description="Bruno-style directory of *.pulse.json files. Diff collections in Git — no sync server. Desktop only."
+            tourId="git-workspace"
+            title="Git workspace"
+            description="Folder is the source of truth: YAML tree (one request per file). SQLite keeps history, cache, and session. Desktop only."
           >
             <div className="flex min-w-0 flex-col items-end gap-2">
               <p className="max-w-[280px] truncate font-mono text-[11px] text-muted-foreground">
-                {collectionsFolderPath || "No folder selected"}
+                {collectionsFolderPath || "No folder attached"}
               </p>
               <div className="flex flex-wrap justify-end gap-2">
                 <Button
@@ -641,18 +675,24 @@ export function SettingsView() {
                   onClick={() => {
                     void pickCollectionsFolder().then(async (path) => {
                       if (!path) return;
+                      setSyncingFolder(true);
                       try {
                         const saved = await setCollectionsFolderPath(path);
-                        setCollectionsFolderPathState(saved.collectionsFolderPath ?? path);
-                        toast.success("Collections folder set");
+                        const root = saved.collectionsFolderPath ?? path;
+                        setCollectionsFolderPathState(root);
+                        const payload = await openGitWorkspace(root);
+                        loadGitWorkspaceState(mapGitWorkspace(payload));
+                        toast.success("Git workspace attached");
                       } catch (error) {
-                        toast.error(error instanceof Error ? error.message : "Could not set folder");
+                        toast.error(error instanceof Error ? error.message : "Could not attach folder");
+                      } finally {
+                        setSyncingFolder(false);
                       }
                     });
                   }}
                 >
                   <FolderOpen className="size-4" />
-                  Browse
+                  Attach folder
                 </Button>
                 <Button
                   type="button"
@@ -663,46 +703,22 @@ export function SettingsView() {
                     void (async () => {
                       setSyncingFolder(true);
                       try {
-                        const files = collectionGroups.map((group) => ({
-                          name: group.name,
-                          contents: exportPulseCollection(
-                            group,
-                            collections.filter((item) => item.collectionId === group.id),
-                          ),
-                        }));
-                        const written = await writeCollectionsFolder(collectionsFolderPath, files);
-                        toast.success("Wrote collections", `${written.length} file(s)`);
+                        const migrated = await migrateGitWorkspace(collectionsFolderPath);
+                        const payload = await loadGitWorkspace(collectionsFolderPath);
+                        loadGitWorkspaceState(mapGitWorkspace(payload));
+                        toast.success(
+                          "Migrated JSON dumps",
+                          migrated.length ? `${migrated.length} file(s)` : "Nothing to migrate",
+                        );
                       } catch (error) {
-                        toast.error(error instanceof Error ? error.message : "Write failed");
+                        toast.error(error instanceof Error ? error.message : "Migrate failed");
                       } finally {
                         setSyncingFolder(false);
                       }
                     })();
                   }}
                 >
-                  Write to folder
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={!canUseTauriIpc() || !collectionsFolderPath || syncingFolder}
-                  onClick={() => {
-                    void (async () => {
-                      setSyncingFolder(true);
-                      try {
-                        const files = await readCollectionsFolder(collectionsFolderPath);
-                        importCollectionsFolder(files);
-                        toast.success("Reloaded from folder", `${files.length} file(s)`);
-                      } catch (error) {
-                        toast.error(error instanceof Error ? error.message : "Reload failed");
-                      } finally {
-                        setSyncingFolder(false);
-                      }
-                    })();
-                  }}
-                >
-                  Reload from folder
+                  Migrate *.pulse.json
                 </Button>
                 {collectionsFolderPath && (
                   <Button
@@ -710,16 +726,107 @@ export function SettingsView() {
                     variant="ghost"
                     size="sm"
                     onClick={() => {
-                      void setCollectionsFolderPath(null).then(() => {
+                      void (async () => {
+                        await unwatchGitWorkspace().catch(() => undefined);
+                        await setCollectionsFolderPath(null);
                         setCollectionsFolderPathState("");
-                        toast.success("Folder cleared");
-                      });
+                        toast.success("Detached Git workspace");
+                      })();
                     }}
                   >
-                    Clear
+                    Detach
                   </Button>
                 )}
               </div>
+            </div>
+          </SettingRow>
+
+          <SettingRow
+            title="Privacy policy"
+            description="Pulse does not operate a cloud. Workspace data stays on this device unless you send a request or share files."
+          >
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setMainView("docs");
+                window.setTimeout(() => {
+                  navigatePulse({ view: "docs", docsSection: "privacy" });
+                }, 40);
+              }}
+            >
+              Open policy
+            </Button>
+          </SettingRow>
+
+          <SettingRow
+            tourId="mock-server"
+            title="Local mock server"
+            description={`Locks 127.0.0.1:${LOCKED_MOCK_PORT} and serves every saved example. Pick one with ?example=name or ?status=404. Only headers from the example are sent.`}
+          >
+            <div className="flex min-w-0 flex-col items-end gap-2">
+              {mockHandle && (
+                <p className="max-w-[280px] truncate font-mono text-[11px] text-muted-foreground">
+                  {mockHandle.url}
+                  {mockHandle.locked ? " · locked" : ""}
+                  {` · ${mockHandle.routeCount} routes`}
+                </p>
+              )}
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!canUseTauriIpc()}
+                  onClick={() => {
+                    void (async () => {
+                      try {
+                        const routes = mockRoutesFromCollections(collections);
+                        if (routes.length === 0) {
+                          toast.error("No examples yet", "Save a response example on a request first.");
+                          return;
+                        }
+                        const handle = await startMockServer(routes);
+                        setMockHandle(handle);
+                        toast.success(
+                          handle.locked ? `Mock locked on :${handle.port}` : "Mock listening",
+                          `${handle.url} · ${handle.routeCount} routes · ?example=name`,
+                        );
+                      } catch (error) {
+                        toast.error(error instanceof Error ? error.message : "Mock failed");
+                      }
+                    })();
+                  }}
+                >
+                  Start mock
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={!mockHandle}
+                  onClick={() => {
+                    void stopMockServer().then(() => {
+                      setMockHandle(null);
+                      toast.success("Mock stopped");
+                    });
+                  }}
+                >
+                  Stop
+                </Button>
+              </div>
+            </div>
+          </SettingRow>
+
+          <SettingRow title={t("whatsNew.replay")} description={t("whatsNew.tourHint")}>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => requestWhatsNew()}>
+                {t("whatsNew.replay")}
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => requestProductTour()}>
+                {t("whatsNew.tour")}
+              </Button>
             </div>
           </SettingRow>
 
@@ -857,7 +964,7 @@ export function SettingsView() {
               <Label htmlFor="http-user-agent">Default User-Agent</Label>
               <Input
                 id="http-user-agent"
-                placeholder="Pulse/1.0 (leave empty for reqwest default)"
+                placeholder="Pulse/2.0 (leave empty — no default headers)"
                 value={httpUserAgent}
                 onChange={(event) => setHttpUserAgent(event.target.value)}
               />
@@ -1092,8 +1199,42 @@ export function SettingsView() {
         <SettingsSection
           id="layout"
           title="Layout"
-          description="Explorer panel visibility and keyboard shortcuts."
+          description="Explorer panel visibility, start view, and keyboard shortcuts."
         >
+          <div className="space-y-2">
+            <p className="text-sm font-medium">{t("onboarding.workspace.title")}</p>
+            <p className="text-xs text-muted-foreground">{t("onboarding.workspace.hint")}</p>
+            <div className="grid grid-cols-2 gap-2">
+              {(["overview", "request"] as const).map((view) => {
+                const active = homeView === view;
+                return (
+                  <button
+                    key={view}
+                    type="button"
+                    onClick={() => {
+                      setHomeViewState(view);
+                      saveLayoutPreferences({ homeView: view });
+                    }}
+                    className={cn(
+                      "rounded-lg border px-3 py-2.5 text-left transition-all",
+                      active
+                        ? "border-primary ring-2 ring-primary/35"
+                        : "border-border/80 hover:border-primary/35",
+                    )}
+                  >
+                    <span className="block text-sm font-medium">
+                      {view === "overview" ? t("onboarding.home.overview") : t("onboarding.home.request")}
+                    </span>
+                    <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                      {view === "overview"
+                        ? t("onboarding.home.overviewHint")
+                        : t("onboarding.home.requestHint")}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <label className="flex items-center gap-3 rounded-md border border-border p-3 text-sm">
             <Checkbox
               checked={explorerCollapsed}

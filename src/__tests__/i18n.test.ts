@@ -97,6 +97,14 @@ describe("i18n", () => {
       "Loaded 4 keys from de.json",
     );
     expect(t("settings.language.loaded", { count: 2, name: "pack.json" })).toContain("2");
+    expect(t("onboarding.step", { current: 2, total: 3 })).toBe("Step 2 of 3");
+  });
+
+  it("ships onboarding copy in English and Slovak", () => {
+    expect(EN_MESSAGES["onboarding.title"]).toBe("Set up Pulse");
+    expect(EN_MESSAGES["onboarding.replay"]).toBe("First-run setup");
+    expect(SK_MESSAGES["onboarding.title"]).toBe("Nastav si Pulse");
+    expect(SK_MESSAGES["onboarding.replay"]).toBe("Úvodné nastavenie");
   });
 
   it("resolves system locale from the OS language", () => {

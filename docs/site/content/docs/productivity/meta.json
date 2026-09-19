@@ -3,7 +3,9 @@
   "pages": [
     "index",
     "search",
+    "whats-new",
     "data",
+    "privacy",
     "python-cli",
     "mcp",
     "libraries"

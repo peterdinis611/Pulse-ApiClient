@@ -43,7 +43,7 @@ export function AppRail() {
   };
 
   return (
-    <aside className="relative flex w-[52px] shrink-0 flex-col items-center border-r border-rail-border bg-rail py-3">
+    <aside data-tour="rail" className="relative flex w-[52px] shrink-0 flex-col items-center border-r border-rail-border bg-rail py-3">
       <TooltipWrap label={APP_NAME}>
         <div className="mb-4 flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/25">
           <Zap className="size-4" />
@@ -61,6 +61,7 @@ export function AppRail() {
                 type="button"
                 aria-label={label}
                 aria-current={active ? "page" : undefined}
+                data-tour={view === "settings" ? "rail-settings" : undefined}
                 onClick={() => {
                   if (view === "request") {
                     goToRequest();

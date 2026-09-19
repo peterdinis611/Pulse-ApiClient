@@ -53,6 +53,7 @@ import { InheritSettingsDialog, folderInheritDefaults } from "@/components/Inher
 import { CollectionRunResultsPanel } from "@/components/CollectionRunResultsPanel";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ExplorerTransferMenu } from "@/components/ExplorerTransferMenu";
+import { OpenApiExplorer } from "@/components/OpenApiExplorer";
 import { MethodBadge } from "@/components/MethodBadge";
 import { TooltipIconButton } from "@/components/TooltipIconButton";
 import { Button } from "@/components/ui/button";
@@ -188,6 +189,7 @@ export function ExplorerPanel() {
   const [showRunResults, setShowRunResults] = useState(false);
   const [preview, setPreview] = useState<PreviewTarget | null>(null);
   const [clearHistoryOpen, setClearHistoryOpen] = useState(false);
+  const [openApiOpen, setOpenApiOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<
     | { kind: "request"; id: string; name: string }
     | { kind: "folder"; collectionId: string; path: string }
@@ -413,6 +415,7 @@ export function ExplorerPanel() {
               requestCount={collections.length}
               exportCollections={exportCollections}
               importCollections={importCollections}
+              onOpenApiExplorer={() => setOpenApiOpen(true)}
             />
             <TooltipIconButton
               variant="ghost"
@@ -438,6 +441,8 @@ export function ExplorerPanel() {
           compact
           className="w-full max-w-none"
         />
+
+        {openApiOpen && <OpenApiExplorer onClose={() => setOpenApiOpen(false)} />}
 
         <div className="space-y-1.5">
           <div className="relative">
@@ -1448,6 +1453,7 @@ function HistoryRow({
             <span className="font-mono text-[10px] text-muted-foreground">—</span>
           )}
           <span className="text-[9px] tabular-nums text-muted-foreground/80">
+            {entry.source === "agent" ? "agent · " : entry.source === "cli" ? "cli · " : ""}
             {relativeTime(entry.sentAt)}
           </span>
         </span>

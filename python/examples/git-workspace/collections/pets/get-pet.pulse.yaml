@@ -1,0 +1,19 @@
+id: req_get_pet
+name: Get pet
+protocol: http
+method: GET
+url: "{{baseUrl}}/posts/1"
+responseSchema: '{"type":"object","required":["id"],"properties":{"id":{"type":"integer"}}}'
+example: '{"id":1,"title":"hello"}'
+examples:
+  - name: ok
+    status: 200
+    body: '{"id":1,"title":"hello"}'
+    contentType: application/json
+    headers:
+      - key: Cache-Control
+        value: no-store
+  - name: missing
+    status: 404
+    body: '{"error":"not found"}'
+    contentType: application/json

@@ -38,7 +38,7 @@ import { canUseTauriIpc } from "@/lib/tauri-runtime";
 const CORS_HEADER_PRESETS: Array<{ key: string; value: string; label: string }> = [
   { key: "Origin", value: "http://localhost:5173", label: "Origin" },
   { key: "Referer", value: "http://localhost:5173/", label: "Referer" },
-  { key: "User-Agent", value: "Mozilla/5.0 (compatible; PulseAPI/1.0)", label: "User-Agent" },
+  { key: "User-Agent", value: "Mozilla/5.0 (compatible; PulseAPI/2.0)", label: "User-Agent" },
   {
     key: "Access-Control-Request-Method",
     value: "POST",

@@ -5,6 +5,7 @@ import { runEffect } from "./effect/run";
 import {
   getScreenshotDemoPersisted,
   getScreenshotMainView,
+  isScreenshotAuthShot,
   isScreenshotMode,
   SCREENSHOT_DEMO_USER,
 } from "./screenshot-demo";
@@ -57,6 +58,14 @@ export function loadAppBootstrapDataEffect(
   screenshotMainView: ReturnType<typeof getScreenshotMainView>,
 ): Effect.Effect<AppBootstrapData, never> {
   if (useScreenshotDemo) {
+    if (isScreenshotAuthShot()) {
+      return Effect.succeed({
+        persisted: defaultPersistedState(),
+        user: null,
+        windowId: "main",
+        pendingInit: null,
+      });
+    }
     return Effect.succeed({
       persisted: getScreenshotDemoPersisted(screenshotMainView ?? "request"),
       user: SCREENSHOT_DEMO_USER,

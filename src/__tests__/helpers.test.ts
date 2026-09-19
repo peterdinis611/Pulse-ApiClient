@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   bodyKindForMethod,
+  createHistoryEntry,
   createKeyValue,
   createRequest,
   ensureTrailingBlankKeyValue,
@@ -8,6 +9,7 @@ import {
   isKeyValueBlank,
   prettyJson,
 } from "@/lib/helpers";
+import { mapGitWorkspace } from "@/lib/git-workspace";
 
 describe("helpers", () => {
   it.each([
@@ -75,5 +77,22 @@ describe("helpers", () => {
     expect(next).toHaveLength(2);
     expect(isKeyValueBlank(next[1]!)).toBe(true);
     expect(ensureTrailingBlankKeyValue(next)).toBe(next);
+  });
+
+  it("redacts resolved secrets from history JSON", () => {
+    mapGitWorkspace({
+      name: "Demo",
+      root: "/tmp/pulse-ws",
+      collectionGroups: [],
+      collections: [],
+      environments: [],
+      secrets: [createKeyValue({ key: "secret.apiToken", value: "tok-secret", secret: true })],
+    });
+    const entry = createHistoryEntry(
+      createRequest({ url: "https://api.test/x?token=tok-secret", name: "Secret call" }),
+    );
+    expect(entry.request.url).toContain("{{secret.apiToken}}");
+    expect(entry.request.url).not.toContain("tok-secret");
+    expect(entry.source).toBe("desktop");
   });
 });

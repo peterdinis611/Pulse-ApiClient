@@ -1,14 +1,20 @@
 pub mod collection_run;
+pub mod contract;
+pub mod graphql_ws;
 pub mod inherit;
 pub mod json_assertions;
 pub mod json_path;
+pub mod mock_server;
+pub mod openapi_ops;
 pub mod path_params;
 pub mod prepare;
 pub mod script_engine;
+pub mod secrets;
 pub mod simple_http;
 pub mod test_runner;
 pub mod types;
 pub mod vars;
+pub mod workspace_fs;
 
 pub use collection_run::{
     run_collection, run_collection_with_progress, CollectionRunInput, CollectionRunResult, CollectionRunStep,
@@ -17,8 +23,14 @@ pub use test_runner::{
     read_json_path, run_http_tests, run_pre_request_script, run_pre_request_script_with_env, EnvMutation,
     PreRequestResult, TestCaseResult, TestRunResult,
 };
-pub use types::{HttpRequestPayload, HttpResponsePayload};
+pub use contract::check_workspace;
+pub use prepare::{interpolate_request, to_http_payload};
+pub use types::{AuthConfig, EnvVariable, HttpRequestPayload, HttpResponsePayload, KeyValue};
 pub use vars::substitute_variables;
+pub use workspace_fs::{
+    append_agent_history, delete_request, is_mutating_method, list_pending, load_workspace, read_agent_history,
+    save_workspace, write_pending, GitWorkspacePayload,
+};
 
 #[cfg(test)]
 mod tests {

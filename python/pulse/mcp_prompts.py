@@ -117,6 +117,48 @@ PROMPTS: list[dict[str, Any]] = [
             },
         ],
     },
+    {
+        "name": "send_saved_request",
+        "description": "Odošli uložený YAML request z PULSE_WORKSPACE podľa id/mena.",
+        "arguments": [
+            {
+                "name": "id",
+                "description": "id, name alebo filePath requestu (pulse_workspace_search ak nevieš id)",
+                "required": True,
+            },
+            {
+                "name": "envName",
+                "description": "Voliteľný názov environment YAML",
+                "required": False,
+            },
+        ],
+    },
+    {
+        "name": "workspace_status",
+        "description": "Zhrň Git workspace: requesty, envs, pending, história.",
+        "arguments": [],
+    },
+    {
+        "name": "contract_check",
+        "description": "Skontroluj YAML workspace kontrakt (schema + breaking diff voči previous.json).",
+        "arguments": [],
+    },
+    {
+        "name": "import_openapi_workspace",
+        "description": "Z OpenAPI zapíš YAML requesty priamo do PULSE_WORKSPACE.",
+        "arguments": [
+            {
+                "name": "path",
+                "description": "Cesta k OpenAPI JSON/YAML",
+                "required": True,
+            },
+            {
+                "name": "collection",
+                "description": "Názov collection priečinka v Git workspace",
+                "required": False,
+            },
+        ],
+    },
 ]
 
 
@@ -234,6 +276,50 @@ def get_prompt(name: str, arguments: dict | None) -> dict[str, Any] | None:
             "Vypíš checked/skipped a každé zlyhanie. Zhody nespomínaj."
         )
         return _user(text, description="Validuj last-run voči schema")
+    if name == "send_saved_request":
+        ident = args.get("id") or ""
+        env_name = args.get("envName")
+        env_line = (
+            f'envName="{env_name}".'
+            if env_name
+            else "envName pridaj len ak ho používateľ zadal."
+        )
+        text = (
+            f"Odošli YAML request `{ident}` z PULSE_WORKSPACE.\n"
+            "Ak id nepoznáš, najprv pulse_workspace_search s query.\n"
+            "Potom pulse_workspace_send s id. Mutujúce metódy potrebujú confirm=true.\n"
+            f"{env_line}\n"
+            "Vráť status, elapsedMs a skrátené body. Celý response do chatu nedávaj."
+        )
+        return _user(text, description="Odošli uložený YAML request")
+    if name == "workspace_status":
+        text = (
+            "Zhrň stav Git workspace.\n"
+            "Zavolaj pulse_workspace_status. Ak treba detaily, dočítaj pulse://workspace/pending "
+            "alebo pulse://workspace/history.\n"
+            "Vypíš name, počet requestov, environments, pending a history. Secret hodnoty nevypisuj — len secretKeys."
+        )
+        return _user(text, description="Zhrň Git workspace")
+    if name == "contract_check":
+        text = (
+            "Skontroluj kontrakt YAML workspace.\n"
+            "Zavolaj pulse_contract. Vypíš ok a každé error. Ak je ok=true, povedz to jednou vetou."
+        )
+        return _user(text, description="Skontroluj workspace kontrakt")
+    if name == "import_openapi_workspace":
+        path = args.get("path") or "python/examples/openapi.json"
+        collection = args.get("collection")
+        name_line = (
+            f'collection="{collection}".'
+            if collection
+            else "collection môžeš vynechať — tool ho zoberie z OpenAPI title."
+        )
+        text = (
+            f"Z OpenAPI `{path}` zapíš YAML requesty do PULSE_WORKSPACE.\n"
+            f"Zavolaj pulse_workspace_import_openapi s path. {name_line}\n"
+            "Vráť collection a count. Jednotlivé YAML súbory do chatu nedávaj."
+        )
+        return _user(text, description="Importuj OpenAPI do YAML workspace")
     return None
 
 

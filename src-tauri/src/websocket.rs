@@ -87,6 +87,16 @@ pub async fn connect(
         .into_client_request()
         .map_err(|error| format!("Invalid WebSocket request: {error}"))?;
 
+    let graphql_ws = payload.body_kind.eq_ignore_ascii_case("graphql");
+    if graphql_ws {
+        request.headers_mut().insert(
+            tokio_tungstenite::tungstenite::http::HeaderName::from_static("sec-websocket-protocol"),
+            tokio_tungstenite::tungstenite::http::HeaderValue::from_static(
+                pulse_core::graphql_ws::GRAPHQL_TRANSPORT_WS,
+            ),
+        );
+    }
+
     let headers = build_request_headers(&payload)?;
     for (key, value) in headers.iter() {
         if let (Ok(name), Ok(val)) = (
@@ -203,6 +213,12 @@ pub async fn connect(
 
         read_cancel.cancel();
     });
+
+    if graphql_ws {
+        let _ = write_tx.send(crate::ws_state::WsWriteMessage::Text(
+            pulse_core::graphql_ws::connection_init(None),
+        ));
+    }
 
     state.insert(
         connection_id.clone(),

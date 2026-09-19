@@ -1,5 +1,9 @@
 export const APP_NAME = "Pulse";
 export const APP_TITLE = `${APP_NAME} API Client`;
+export const APP_VERSION =
+  typeof __PULSE_VERSION__ === "string" && __PULSE_VERSION__.length > 0
+    ? __PULSE_VERSION__
+    : "2.0.0";
 
 const STORAGE_PREFIX = "pulse-api-client";
 const LEGACY_STORAGE_PREFIX = "relay-api-client";

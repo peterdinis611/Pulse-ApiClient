@@ -6,8 +6,10 @@ use pulse_core::{
     run_collection_with_progress, run_http_tests, run_pre_request_script_with_env, substitute_variables,
     CollectionRunInput, CollectionRunStep, HttpRequestPayload, HttpResponsePayload,
 };
+use pulse_core::contract::check_workspace;
 use pulse_core::simple_http::send_once;
 use pulse_core::types::EnvVariable;
+use pulse_core::workspace_fs::load_workspace;
 
 fn py_err(message: impl ToString) -> PyErr {
     PyRuntimeError::new_err(message.to_string())
@@ -48,6 +50,7 @@ fn interpolate(template: String, env_json: String) -> PyResult<String> {
                 other => other.to_string(),
             },
             enabled: true,
+            secret: key.starts_with("secret."),
         })
         .collect();
     Ok(substitute_variables(&template, &variables))
@@ -109,6 +112,18 @@ fn send_once_json(payload_json: String) -> PyResult<String> {
     serde_json::to_string(&response).map_err(py_err)
 }
 
+#[pyfunction]
+fn load_workspace_json(root: String) -> PyResult<String> {
+    let payload = load_workspace(&root).map_err(py_err)?;
+    serde_json::to_string(&payload).map_err(py_err)
+}
+
+#[pyfunction]
+fn check_workspace_json(root: String) -> PyResult<String> {
+    let report = check_workspace(&root).map_err(py_err)?;
+    serde_json::to_string(&serde_json::json!({ "ok": report.ok, "errors": report.errors })).map_err(py_err)
+}
+
 #[pymodule]
 fn pulse_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(interpolate, m)?)?;
@@ -116,5 +131,7 @@ fn pulse_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(run_pre_request, m)?)?;
     m.add_function(wrap_pyfunction!(run_collection_json, m)?)?;
     m.add_function(wrap_pyfunction!(send_once_json, m)?)?;
+    m.add_function(wrap_pyfunction!(load_workspace_json, m)?)?;
+    m.add_function(wrap_pyfunction!(check_workspace_json, m)?)?;
     Ok(())
 }

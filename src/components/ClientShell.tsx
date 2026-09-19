@@ -2,6 +2,9 @@ import { Suspense, lazy, useEffect, useState } from "react";
 import { useApp } from "@/machines";
 import { AppRail } from "./AppRail";
 import { CommandPalette } from "./CommandPalette";
+import { GitWorkspaceSync } from "./GitWorkspaceSync";
+import { WhatsNewHost } from "./WhatsNewHost";
+import { OnboardingHost } from "./OnboardingHost";
 import { ExplorerPanel } from "./ExplorerPanel";
 import { LoadingScreen } from "./LoadingScreen";
 import { ResizableConsole } from "./ResizableConsole";
@@ -86,7 +89,7 @@ export function ClientShell() {
           </Suspense>
         </main>
         {consoleOpen && (
-          <Suspense fallback={<LoadingScreen variant="inline" label="Loading console" />}>
+          <Suspense fallback={<LoadingScreen variant="inline" label={t("loading.console")} />}>
             <ResizableConsole>
               <ConsolePanel />
             </ResizableConsole>
@@ -95,6 +98,9 @@ export function ClientShell() {
         <StatusBar />
       </div>
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      <GitWorkspaceSync />
+      <OnboardingHost />
+      <WhatsNewHost />
     </div>
   );
 }

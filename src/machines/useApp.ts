@@ -47,6 +47,7 @@ export function useApp() {
     activeCollection?.variables,
     collectFolderVariables(activeCollection, activeTab?.folder),
     activeEnvironment?.variables,
+    context.persisted.secrets,
   ]);
   const inheritedAuth = resolveInheritedAuth(
     activeTab?.request.auth ?? createRequest().auth,
@@ -167,6 +168,12 @@ export function useApp() {
     importCollections: (raw: string) => send({ type: "IMPORT_COLLECTIONS", raw }),
     importCollectionsFolder: (files: Array<{ name: string; contents: string }>) =>
       send({ type: "IMPORT_COLLECTIONS_FOLDER", files }),
+    loadGitWorkspaceState: (payload: {
+      collectionGroups: CollectionGroup[];
+      collections: SavedRequest[];
+      environments: Environment[];
+      secrets: KeyValue[];
+    }) => send({ type: "LOAD_GIT_WORKSPACE", ...payload }),
     importPostmanCollection: (raw: string) => send({ type: "IMPORT_POSTMAN", raw }),
     importBrunoCollection: (raw: string) => send({ type: "IMPORT_BRUNO", raw }),
     importInsomniaCollection: (raw: string) => send({ type: "IMPORT_INSOMNIA", raw }),

@@ -11,10 +11,13 @@ pub mod custom_theme;
 pub mod db;
 pub mod dns_timing;
 pub mod engine;
+pub mod git_workspace;
 pub mod history;
 pub mod http;
+pub mod mock_server;
 pub mod oauth;
 pub mod search;
+pub mod secrets_store;
 pub mod settings;
 pub mod sql_safety;
 pub mod sse;
@@ -29,9 +32,16 @@ pub mod ws_state;
 use cache::CacheConfig;
 use db::{DbState, DbUserSession};
 use engine::HttpEngineStats;
+use git_workspace::{
+    git_workspace_agent_history, git_workspace_load, git_workspace_migrate, git_workspace_open,
+    git_workspace_pending, git_workspace_read_file, git_workspace_save, git_workspace_save_request,
+    git_workspace_unwatch, git_workspace_watch, GitWatchState,
+};
+use mock_server::{mock_server_start, mock_server_stop, MockServerState};
 use history::HistoryEntryPayload;
 use http::{BatchItemResult, HttpRequestPayload, HttpResponsePayload};
 use search::{SearchDocument, SearchMatch};
+use secrets_store::{secret_delete, secret_get, secret_set};
 use settings::AppSettings;
 use state::HttpState;
 use std::sync::Arc;
@@ -184,11 +194,18 @@ fn set_collections_folder(app: AppHandle, path: Option<String>) -> Result<AppSet
         .filter(|value| !value.is_empty());
 
     if let Some(ref folder) = normalized {
-        collections_folder::read_collection_files(folder)?;
+        git_workspace::open_workspace(folder, "Pulse")?;
     }
 
-    settings.collections_folder_path = normalized;
+    settings.collections_folder_path = normalized.clone();
     settings::save_settings(&app, &settings)?;
+    if let Some(state) = app.try_state::<GitWatchState>() {
+        if let Some(folder) = &normalized {
+            git_workspace::start_watch(app.clone(), state.inner(), folder)?;
+        } else {
+            git_workspace::stop_watch(state.inner())?;
+        }
+    }
     Ok(settings)
 }
 
@@ -504,6 +521,13 @@ pub fn run() {
             app.manage(db_state);
             app.manage(http_state);
             app.manage(WsState::new());
+            app.manage(GitWatchState::default());
+            app.manage(MockServerState::default());
+            if let Some(folder) = settings.collections_folder_path.clone() {
+                if let Some(state) = app.try_state::<GitWatchState>() {
+                    let _ = git_workspace::start_watch(app.handle().clone(), state.inner(), &folder);
+                }
+            }
             settings::apply_native_theme(app.handle(), &settings.theme)?;
             Ok(())
         })
@@ -527,6 +551,21 @@ pub fn run() {
             set_collections_folder,
             write_collections_folder,
             read_collections_folder,
+            git_workspace_open,
+            git_workspace_load,
+            git_workspace_save,
+            git_workspace_save_request,
+            git_workspace_migrate,
+            git_workspace_watch,
+            git_workspace_unwatch,
+            git_workspace_read_file,
+            git_workspace_pending,
+            git_workspace_agent_history,
+            mock_server_start,
+            mock_server_stop,
+            secret_set,
+            secret_get,
+            secret_delete,
             run_http_tests,
             run_pre_request_script,
             run_collection,

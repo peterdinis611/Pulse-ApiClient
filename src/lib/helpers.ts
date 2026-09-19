@@ -12,6 +12,7 @@ import { defaultGraphqlQuery, defaultGraphqlVariables } from "./graphql";
 import { defaultRequestTests } from "./default-tests";
 import { inferProtocolFromUrl } from "./protocol";
 import { syncPathParams } from "./path-params";
+import { getSecretsOverlay } from "./git-workspace";
 
 export function createId(prefix = "id"): string {
   return `${prefix}_${crypto.randomUUID()}`;
@@ -167,12 +168,41 @@ export function createSavedRequest(
 export function createHistoryEntry(
   request: ApiRequest,
   response?: HistoryEntry["response"],
+  source: HistoryEntry["source"] = "desktop",
 ): HistoryEntry {
   return {
     id: createId("hist"),
     sentAt: new Date().toISOString(),
-    request: structuredClone(request),
+    request: redactHistoryRequest(structuredClone(request)),
     response,
+    source,
+  };
+}
+
+function redactHistoryRequest(request: ApiRequest): ApiRequest {
+  const secrets = getSecretsOverlay();
+  if (!secrets.length) return request;
+  const replacements = secrets
+    .filter((item) => item.value)
+    .map((item) => {
+      const short = item.key.replace(/^secret\./, "");
+      return { value: item.value, placeholder: `{{secret.${short}}}` };
+    });
+  const replace = (input: string) =>
+    replacements.reduce((text, item) => (item.value ? text.split(item.value).join(item.placeholder) : text), input);
+  return {
+    ...request,
+    url: replace(request.url),
+    body: replace(request.body),
+    headers: request.headers.map((item) => ({ ...item, value: replace(item.value) })),
+    query: request.query.map((item) => ({ ...item, value: replace(item.value) })),
+    auth: {
+      ...request.auth,
+      bearerToken: replace(request.auth.bearerToken),
+      basicPassword: replace(request.auth.basicPassword),
+      apiKeyValue: replace(request.auth.apiKeyValue),
+      oauthClientSecret: replace(request.auth.oauthClientSecret),
+    },
   };
 }
 

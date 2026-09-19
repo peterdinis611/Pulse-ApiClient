@@ -1,0 +1,19 @@
+---
+title: "What's new & product tour"
+description: "Each app version opens a changelog once. Driver.js then walks the new controls."
+---
+
+Each app version opens a changelog once. Driver.js then walks the new controls.
+
+## In the product
+
+- On first launch of a new version, Pulse shows a What's new card with that release's changes
+- Walk through starts a Driver.js tour: first-run setup, Git folder, mock server, OpenAPI explorer, secrets, WebSocket/GraphQL, Docs
+- Got it dismisses the card and stores the seen version locally — it will not appear again until the next version
+- Replay from Settings → Appearance (setup) or Settings → Data (What's new / tour), or the command palette
+- Add a changelog block in `src/lib/changelog.ts` before bumping `package.json`
+
+## Walkthrough
+
+1. After an update, read the notes, then Walk through to highlight the new UI.
+2. Settings → Data → What's new / Product tour to replay notes. Settings → Appearance → First-run setup to replay language and theme.

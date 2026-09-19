@@ -1,0 +1,28 @@
+---
+title: "Local mock server"
+description: "Lock 127.0.0.1:4010 and replay every saved response example. Only headers from the example go on the wire."
+---
+
+Lock 127.0.0.1:4010 and replay every saved response example. Only headers from the example go on the wire.
+
+## In the product
+
+- Settings → Data → Start mock binds 127.0.0.1:4010 and fails if that port is already taken
+- One route per saved example (not only the first) — same method and path, different bodies and statuses
+- `?example=name` picks a snapshot by Examples-tab name; `?status=404` picks by status
+- Without a query, Pulse serves the first 2xx example, then the first example
+- Response headers are only those stored on the example — no Server, Date, Connection, Content-Length, or X-Pulse-*
+- Content-Type is sent only when the example has one
+- Git YAML stores `examples` plus a legacy `example` string (first 2xx body) for contract checks
+
+## Walkthrough
+
+1. Save 200 and 404 snapshots on a request (Examples tab), then Settings → Data → Start mock.
+2. Call `http://127.0.0.1:4010/pets` for the 2xx body, or `…/pets?example=missing` / `…/pets?status=404`.
+3. Stop from the same Settings row before starting again on :4010.
+
+<Callout title="Tip">
+
+The mock never invents headers. The desktop HTTP client also sends no default User-Agent unless you set one.
+
+</Callout>

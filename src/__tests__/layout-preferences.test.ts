@@ -4,6 +4,7 @@ import {
   clampExplorerWidth,
   defaultLayoutPreferences,
   getExplorerWidthMax,
+  isHomeView,
   loadLayoutPreferences,
   saveLayoutPreferences,
 } from "@/lib/layout-preferences";
@@ -40,6 +41,48 @@ describe("layout-preferences", () => {
     const loaded = loadLayoutPreferences();
     expect(loaded.explorerCollapsed).toBe(true);
     expect(loaded.explorerWidth).toBe(viewportMax);
+    expect(loaded.homeView).toBe("overview");
+  });
+
+  it("persists the start view", () => {
+    saveLayoutPreferences({
+      ...defaultLayoutPreferences(),
+      homeView: "request",
+    });
+    expect(loadLayoutPreferences().homeView).toBe("request");
+  });
+
+  it("accepts only overview and request as a start view", () => {
+    expect(isHomeView("overview")).toBe(true);
+    expect(isHomeView("request")).toBe(true);
+    expect(isHomeView("settings")).toBe(false);
+    expect(isHomeView("")).toBe(false);
+  });
+
+  it("falls back when storage has an unknown start view", () => {
+    localStorage.setItem(
+      "pulse-api-client/layout-v2",
+      JSON.stringify({
+        explorerCollapsed: true,
+        explorerWidth: 300,
+        consoleHeight: 208,
+        workspaceSplitRatio: 52,
+        homeView: "settings",
+      }),
+    );
+    expect(loadLayoutPreferences().homeView).toBe("overview");
+    expect(loadLayoutPreferences().explorerCollapsed).toBe(true);
+  });
+
+  it("keeps the start view when saving only explorer state", () => {
+    saveLayoutPreferences({
+      ...defaultLayoutPreferences(),
+      homeView: "request",
+    });
+    saveLayoutPreferences({ explorerCollapsed: true });
+    const loaded = loadLayoutPreferences();
+    expect(loaded.homeView).toBe("request");
+    expect(loaded.explorerCollapsed).toBe(true);
   });
 
   it("restores valid saved preferences", () => {

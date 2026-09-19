@@ -1,10 +1,13 @@
 import { readStorageItem, writeStorageItem } from "./app-config";
 
+export type HomeView = "overview" | "request";
+
 export type LayoutPreferences = {
   explorerCollapsed: boolean;
   explorerWidth: number;
   consoleHeight: number;
   workspaceSplitRatio: number;
+  homeView: HomeView;
 };
 
 export const EXPLORER_WIDTH_MIN = 240;
@@ -25,6 +28,11 @@ export const MAIN_CONTENT_MIN_HEIGHT = 220;
 export const WORKSPACE_SPLIT_RATIO_MIN = 8;
 export const WORKSPACE_SPLIT_RATIO_MAX = 92;
 export const WORKSPACE_SPLIT_RATIO_DEFAULT = 52;
+export const HOME_VIEW_DEFAULT: HomeView = "overview";
+
+export function isHomeView(value: unknown): value is HomeView {
+  return value === "overview" || value === "request";
+}
 
 const STORAGE_SUFFIX = "layout-v2";
 const LEGACY_SUFFIX = "layout-v1";
@@ -83,6 +91,7 @@ export function defaultLayoutPreferences(): LayoutPreferences {
     explorerWidth: EXPLORER_WIDTH_DEFAULT,
     consoleHeight: CONSOLE_HEIGHT_DEFAULT,
     workspaceSplitRatio: WORKSPACE_SPLIT_RATIO_DEFAULT,
+    homeView: HOME_VIEW_DEFAULT,
   };
 }
 
@@ -93,8 +102,10 @@ function migrateLegacy(raw: string): LayoutPreferences | null {
       sidebarWidth?: number;
       explorerCollapsed?: boolean;
       explorerWidth?: number;
+      homeView?: unknown;
     };
     const defaults = defaultLayoutPreferences();
+    const homeView = isHomeView(parsed.homeView) ? parsed.homeView : defaults.homeView;
     if (parsed.explorerWidth !== undefined || parsed.explorerCollapsed !== undefined) {
       return {
         explorerCollapsed: parsed.explorerCollapsed === true,
@@ -106,6 +117,7 @@ function migrateLegacy(raw: string): LayoutPreferences | null {
           (parsed as { workspaceSplitRatio?: number }).workspaceSplitRatio ??
             defaults.workspaceSplitRatio,
         ),
+        homeView,
       };
     }
     return {
@@ -118,6 +130,7 @@ function migrateLegacy(raw: string): LayoutPreferences | null {
         (parsed as { workspaceSplitRatio?: number }).workspaceSplitRatio ??
           defaults.workspaceSplitRatio,
       ),
+      homeView,
     };
   } catch {
     return null;
@@ -145,6 +158,7 @@ export function saveLayoutPreferences(preferences: Partial<LayoutPreferences>): 
       workspaceSplitRatio: clampWorkspaceSplitRatio(
         preferences.workspaceSplitRatio ?? current.workspaceSplitRatio,
       ),
+      homeView: isHomeView(preferences.homeView) ? preferences.homeView : current.homeView,
     }),
   );
 }

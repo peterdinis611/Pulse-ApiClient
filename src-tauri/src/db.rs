@@ -488,6 +488,10 @@ fn run_user_migration(conn: &Connection) -> Result<(), String> {
         ",
     )
     .map_err(|e| e.to_string())?;
+    let _ = conn.execute(
+        "ALTER TABLE request_history ADD COLUMN source TEXT NOT NULL DEFAULT 'desktop'",
+        [],
+    );
     crate::workspace_store::migrate_workspace_tables(conn)?;
     Ok(())
 }

@@ -1,0 +1,27 @@
+---
+title: "Git workspace"
+description: "When a folder is attached, YAML files are the source of truth. SQLite is history, cache, session, and local secrets overlay."
+---
+
+When a folder is attached, YAML files are the source of truth. SQLite is history, cache, session, and local secrets overlay.
+
+## In the product
+
+- Layout: `pulse.yaml`, `collections/<name>/collection.yaml`, one `*.pulse.yaml` per request, `environments/*.yaml`
+- Attach folder from Settings → Data — Pulse inits `.gitignore` and `.env.example`
+- Notify watch reloads a request from disk; a dirty tab shows a line-diff instead of silent overwrite
+- Secrets stay in gitignored `.env` / OS keychain as `{{secret.*}}` — never in request YAML or history JSON
+- JSON remains import/export (Postman, Pulse dump), not the native Git format
+- Detached mode (no folder) still uses the SQLite workspace for history, cache, and session
+
+## Walkthrough
+
+1. Settings → Data → Attach folder. Pick the Git repo that should hold collections.
+2. Save a request — Pulse writes `collections/…/name.pulse.yaml`. Commit that file.
+3. Put tokens in `.env` as `API_TOKEN=…` and reference `{{secret.API_TOKEN}}` on the Auth tab.
+
+<Callout title="Tip">
+
+Migrate old `*.pulse.json` dumps with Migrate on the same Settings row.
+
+</Callout>

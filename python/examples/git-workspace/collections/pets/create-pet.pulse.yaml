@@ -1,0 +1,17 @@
+id: req_create_pet
+name: Create pet
+protocol: http
+method: POST
+url: "{{baseUrl}}/posts"
+bodyKind: json
+body: '{"title":"hello","body":"pulse","userId":1}'
+example: '{"id":101,"title":"hello"}'
+examples:
+  - name: created
+    status: 201
+    body: '{"id":101,"title":"hello"}'
+    contentType: application/json
+  - name: invalid
+    status: 422
+    body: '{"error":"invalid"}'
+    contentType: application/json

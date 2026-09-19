@@ -1,0 +1,14 @@
+[package]
+name = "pulse-mcp"
+version = "2.0.0"
+edition = "2021"
+description = "Pulse MCP stdio server (Rust) — Git workspace + HTTP via pulse-core"
+
+[[bin]]
+name = "pulse-mcp"
+path = "src/main.rs"
+
+[dependencies]
+pulse-core = { path = "../pulse-core" }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

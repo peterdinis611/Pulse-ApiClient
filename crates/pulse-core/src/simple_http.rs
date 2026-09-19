@@ -54,6 +54,7 @@ fn apply_auth(headers: &mut HeaderMap, auth: &AuthConfig) -> Result<(), String> 
 
 pub async fn send_once(payload: HttpRequestPayload) -> Result<HttpResponsePayload, String> {
     let client = reqwest::Client::builder()
+        .referer(false)
         .danger_accept_invalid_certs(false)
         .build()
         .map_err(|e| e.to_string())?;

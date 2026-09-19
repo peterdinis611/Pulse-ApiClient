@@ -188,6 +188,50 @@ def cmd_send(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_contract(args: argparse.Namespace) -> int:
+    root = Path(args.workspace)
+    if not root.is_dir():
+        raise SystemExit(f"No such workspace directory: {root}")
+    native = None
+    try:
+        native = load_native()
+    except SystemExit:
+        native = None
+    if native is not None and hasattr(native, "check_workspace_json"):
+        report = json.loads(native.check_workspace_json(str(root)))
+        errors = report.get("errors") or []
+        if errors:
+            print("\n".join(errors), file=sys.stderr)
+            return 1
+        print("ok")
+        return 0
+    from pulse.workspace import list_requests
+    from pulse.schema import validate_json
+
+    try:
+        requests = list_requests(root)
+    except Exception as error:
+        raise SystemExit(str(error)) from error
+    errors: list[str] = []
+    for item in requests:
+        request = item.get("request") or {}
+        example = str(request.get("example") or "").strip()
+        schema_raw = str(request.get("responseSchema") or "").strip()
+        if example and schema_raw:
+            try:
+                schema = json.loads(schema_raw)
+                body = json.loads(example)
+            except json.JSONDecodeError as error:
+                errors.append(f"{item.get('filePath')}: {error}")
+                continue
+            errors.extend(f"{item.get('filePath')}: {message}" for message in validate_json(body, schema))
+    if errors:
+        print("\n".join(errors), file=sys.stderr)
+        return 1
+    print("ok")
+    return 0
+
+
 def _add_env_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--env", help="JSON object of variables, or a path to a JSON file")
     parser.add_argument("--env-file", help=".env or JSON file of variables")
@@ -259,6 +303,10 @@ def main(argv: list[str] | None = None) -> int:
     send.add_argument("--body")
     send.add_argument("--input", help="HttpRequestPayload JSON file")
     send.set_defaults(func=cmd_send)
+
+    contract = sub.add_parser("contract", help="Validate YAML workspace examples against responseSchema / snapshots")
+    contract.add_argument("workspace", help="Git workspace root (pulse.yaml + collections/)")
+    contract.set_defaults(func=cmd_contract)
 
     args = parser.parse_args(argv)
     if args.command == "send" and not args.input and not args.url:

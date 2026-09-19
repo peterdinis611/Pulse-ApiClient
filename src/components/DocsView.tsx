@@ -26,6 +26,7 @@ import {
   Terminal,
   Zap,
   Library,
+  Shield,
   type LucideIcon,
 } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
@@ -61,7 +62,10 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
   "http-engine": Cpu,
   themes: Palette,
   search: Keyboard,
+  "whats-new": Sparkles,
   data: Database,
+  privacy: Shield,
+  "git-workspace": GitBranch,
   "python-cli": Zap,
   mcp: Plug,
   libraries: Library,
@@ -160,7 +164,7 @@ export function DocsView() {
 
   return (
     <PageShell resetKey="docs" width="wide">
-      <div className="docs-masthead">
+      <div className="docs-masthead" data-tour="docs">
         <p className="docs-masthead__kicker">Field manual</p>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0 max-w-xl space-y-2">

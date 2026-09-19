@@ -14,6 +14,7 @@ Layered values: globals → collection → folder → environment. Later layers 
 - Secret — mask the current value in the UI (bullets)
 - Initial vs current — snapshot plus Reset current from initial
 - \{\{name\}\} substitution in URL, path, query, headers, auth, and body
+- \{\{secret.name\}\} reads gitignored `.env` (and the OS keychain overlay) — values are never written into YAML
 - Autocomplete and the `{ }` picker list the merged enabled variables
 - pulse.environment.set updates the real environment (current value), not globals
 - Click a JSON key in the response body to upsert that value as \{\{key\}\} on the active environment
@@ -27,6 +28,6 @@ Layered values: globals → collection → folder → environment. Later layers 
 
 <Callout title="Tip">
 
-Do not type secrets into collection JSON you plan to export and share — use environment or secret globals locally.
+Do not type secrets into collection YAML you plan to commit — use `{{secret.*}}`, `.env`, or the keychain.
 
 </Callout>

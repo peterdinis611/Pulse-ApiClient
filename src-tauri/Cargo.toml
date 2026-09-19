@@ -1,6 +1,6 @@
 [package]
 name = "api-client"
-version = "0.3.0"
+version = "2.0.0"
 description = "Pulse — desktop API client"
 authors = ["you"]
 edition = "2021"
@@ -32,6 +32,8 @@ tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3"
 tokio-util = "0.7"
 pulse-core = { path = "../crates/pulse-core" }
+notify = "7"
+keyring = "3"
 
 [dev-dependencies]
 wiremock = "0.6"

@@ -282,5 +282,38 @@ class BenchTests(unittest.TestCase):
         self.assertEqual(seen, [(1, 2), (2, 2)])
 
 
+class WorkspaceTests(unittest.TestCase):
+    def test_interpolate_and_search(self) -> None:
+        from pulse.workspace import interpolate_text, list_environments, search_requests, workspace_status
+
+        self.assertEqual(
+            interpolate_text("{{baseUrl}}/pets", {"baseUrl": "https://api.test"}),
+            "https://api.test/pets",
+        )
+        root = Path(__file__).resolve().parents[1] / "examples" / "git-workspace"
+        hits = search_requests(root, "list")
+        self.assertTrue(any(item["id"] == "req_list_pets" for item in hits))
+        env_names = {item["name"] for item in list_environments(root)}
+        self.assertIn("staging", env_names)
+        self.assertIn("local", env_names)
+        status = workspace_status(root)
+        self.assertGreaterEqual(status["requests"], 1)
+
+    def test_git_workspace_examples_and_local_mock(self) -> None:
+        from pulse.workspace import list_environments, read_request, vars_from_items
+
+        root = Path(__file__).resolve().parents[1] / "examples" / "git-workspace"
+        listed = read_request(root, "req_list_pets")
+        self.assertIsNotNone(listed)
+        examples = (listed or {}).get("request", {}).get("examples") or []
+        names = {str(example.get("name")) for example in examples if isinstance(example, dict)}
+        self.assertGreaterEqual(len(examples), 2)
+        self.assertIn("ok", names)
+        self.assertIn("empty", names)
+
+        local = next(item for item in list_environments(root) if item["name"] == "local")
+        self.assertEqual(vars_from_items(local["variables"]).get("baseUrl"), "http://127.0.0.1:4010")
+
+
 if __name__ == "__main__":
     unittest.main()

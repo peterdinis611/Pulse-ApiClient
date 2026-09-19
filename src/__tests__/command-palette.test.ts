@@ -20,13 +20,20 @@ describe("command palette", () => {
     expect(items.some((item) => item.kind === "settings" && item.settingsSection === "http")).toBe(
       true,
     );
-    expect(items.some((item) => item.kind === "docs")).toBe(true);
+    expect(items.some((item) => item.action === "whats-new")).toBe(true);
+    expect(items.some((item) => item.action === "product-tour")).toBe(true);
+    expect(items.some((item) => item.action === "onboarding")).toBe(true);
     expect(items.some((item) => item.kind === "collection" && item.collectionId === collection.id)).toBe(
       true,
     );
     expect(items.some((item) => item.kind === "request" && item.savedRequestId === saved.id)).toBe(
       true,
     );
+  });
+
+  it("finds first-run setup by query", () => {
+    const ranked = filterCommandPaletteItems(items, "first-run");
+    expect(ranked.some((item) => item.action === "onboarding")).toBe(true);
   });
 
   it("fuzzy-ranks requests when queried", () => {

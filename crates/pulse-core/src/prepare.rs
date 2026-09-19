@@ -12,6 +12,7 @@ fn map_vars(items: &[EnvVariable], variables: &[EnvVariable]) -> Vec<EnvVariable
             key: substitute_variables(&item.key, variables),
             value: substitute_variables(&item.value, variables),
             enabled: item.enabled,
+            secret: item.secret,
         })
         .collect()
 }

@@ -129,7 +129,10 @@ export function RequestBar() {
               updateRequest({ protocol: value as typeof request.protocol })
             }
           >
-            <SelectTrigger className="h-9 w-[88px] shrink-0 rounded-none border-0 border-r font-mono text-[10px] font-bold uppercase shadow-none focus:ring-0">
+            <SelectTrigger
+              data-tour="protocol"
+              className="h-9 w-[88px] shrink-0 rounded-none border-0 border-r font-mono text-[10px] font-bold uppercase shadow-none focus:ring-0"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent align="start">

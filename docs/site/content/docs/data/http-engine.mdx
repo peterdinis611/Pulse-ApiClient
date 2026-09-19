@@ -12,7 +12,7 @@ Native reqwest client — CORS does not apply; configure TLS, proxy, redirects, 
 - mTLS — client certificate, key, and CA PEM via file picker (like custom CSS)
 - HTTP(S) or SOCKS proxy URL
 - Follow redirects + max redirects
-- Default User-Agent, Origin, Referer
+- User-Agent, Origin, Referer only when you set them — empty means Pulse sends none (no reqwest defaults)
 - Send / store cookies toggles
 - Engine stats: active, completed, failed, cache hits
 - Timing waterfall: DNS, TLS (TCP + handshake + wait), TTFB, transfer, total

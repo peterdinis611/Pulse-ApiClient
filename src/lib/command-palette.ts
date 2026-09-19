@@ -19,12 +19,12 @@ export type CommandPaletteItem = SearchDocument & {
   environmentId?: string;
   settingsSection?: string;
   docsSection?: string;
-  action?: "new-request" | "toggle-explorer" | "toggle-console";
+  action?: "new-request" | "toggle-explorer" | "toggle-console" | "whats-new" | "product-tour" | "onboarding";
 };
 
 const SETTINGS_SECTIONS: Array<{ id: string; title: string; subtitle: string }> = [
   { id: "appearance", title: "Appearance", subtitle: "Theme, language, custom CSS" },
-  { id: "data", title: "Data & storage", subtitle: "Database, cache, collections folder" },
+  { id: "data", title: "Data & storage", subtitle: "Git workspace, database, cache" },
   { id: "http", title: "HTTP engine", subtitle: "TLS, proxy, mTLS, timeouts" },
   { id: "layout", title: "Layout", subtitle: "Explorer, shortcuts" },
   { id: "cookies", title: "Cookie jar", subtitle: "Stored cookies" },
@@ -115,6 +115,36 @@ const ACTIONS: CommandPaletteItem[] = [
     meta: "Action",
     action: "toggle-console",
     keywords: "logs eval",
+  },
+  {
+    id: "action:whats-new",
+    kind: "action",
+    title: "What's new",
+    subtitle: "Release notes for this version",
+    method: "",
+    meta: "Action",
+    action: "whats-new",
+    keywords: "changelog release notes version tour",
+  },
+  {
+    id: "action:product-tour",
+    kind: "action",
+    title: "Product tour",
+    subtitle: "Walk through Git workspace and 2.0 changes",
+    method: "",
+    meta: "Action",
+    action: "product-tour",
+    keywords: "driver walkthrough git yaml mock openapi",
+  },
+  {
+    id: "action:onboarding",
+    kind: "action",
+    title: "First-run setup",
+    subtitle: "Replay language, theme, and start view",
+    method: "",
+    meta: "Action",
+    action: "onboarding",
+    keywords: "onboarding welcome language theme appearance setup",
   },
 ];
 
