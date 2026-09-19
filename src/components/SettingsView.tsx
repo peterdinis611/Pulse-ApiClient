@@ -62,7 +62,13 @@ import {
   openGitWorkspace,
   unwatchGitWorkspace,
 } from "@/lib/git-workspace";
-import { mockRoutesFromCollections, startMockServer, stopMockServer } from "@/lib/mock-server";
+import {
+  LOCKED_MOCK_PORT,
+  mockRoutesFromCollections,
+  startMockServer,
+  stopMockServer,
+  type MockServerHandle,
+} from "@/lib/mock-server";
 import { requestProductTour, requestWhatsNew } from "@/lib/whats-new";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/useLocale";
@@ -254,7 +260,7 @@ export function SettingsView() {
   const [httpCaCertPath, setHttpCaCertPath] = useState("");
   const [collectionsFolderPath, setCollectionsFolderPathState] = useState("");
   const [syncingFolder, setSyncingFolder] = useState(false);
-  const [mockUrl, setMockUrl] = useState<string | null>(null);
+  const [mockHandle, setMockHandle] = useState<MockServerHandle | null>(null);
   const [engineStats, setEngineStats] = useState<Awaited<ReturnType<typeof getHttpEngineStats>> | null>(
     null,
   );
@@ -741,11 +747,15 @@ export function SettingsView() {
           <SettingRow
             tourId="mock-server"
             title="Local mock server"
-            description="Serve saved 2xx examples on 127.0.0.1. Routes come from the first example on each request."
+            description={`Locks 127.0.0.1:${LOCKED_MOCK_PORT} and serves every saved example. Pick one with ?example=name or ?status=404. Only headers from the example are sent.`}
           >
             <div className="flex min-w-0 flex-col items-end gap-2">
-              {mockUrl && (
-                <p className="max-w-[280px] truncate font-mono text-[11px] text-muted-foreground">{mockUrl}</p>
+              {mockHandle && (
+                <p className="max-w-[280px] truncate font-mono text-[11px] text-muted-foreground">
+                  {mockHandle.url}
+                  {mockHandle.locked ? " · locked" : ""}
+                  {` · ${mockHandle.routeCount} routes`}
+                </p>
               )}
               <div className="flex flex-wrap justify-end gap-2">
                 <Button
@@ -762,8 +772,11 @@ export function SettingsView() {
                           return;
                         }
                         const handle = await startMockServer(routes);
-                        setMockUrl(handle.url);
-                        toast.success("Mock listening", handle.url);
+                        setMockHandle(handle);
+                        toast.success(
+                          handle.locked ? `Mock locked on :${handle.port}` : "Mock listening",
+                          `${handle.url} · ${handle.routeCount} routes · ?example=name`,
+                        );
                       } catch (error) {
                         toast.error(error instanceof Error ? error.message : "Mock failed");
                       }
@@ -776,10 +789,10 @@ export function SettingsView() {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  disabled={!mockUrl}
+                  disabled={!mockHandle}
                   onClick={() => {
                     void stopMockServer().then(() => {
-                      setMockUrl(null);
+                      setMockHandle(null);
                       toast.success("Mock stopped");
                     });
                   }}
@@ -935,7 +948,7 @@ export function SettingsView() {
               <Label htmlFor="http-user-agent">Default User-Agent</Label>
               <Input
                 id="http-user-agent"
-                placeholder="Pulse/1.0 (leave empty for reqwest default)"
+                placeholder="Pulse/2.0 (leave empty — no default headers)"
                 value={httpUserAgent}
                 onChange={(event) => setHttpUserAgent(event.target.value)}
               />

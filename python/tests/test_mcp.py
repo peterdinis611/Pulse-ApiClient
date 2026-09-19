@@ -19,6 +19,7 @@ class McpProtocolTests(unittest.TestCase):
             }
         )
         self.assertEqual(init["result"]["serverInfo"]["name"], "pulse")
+        self.assertEqual(init["result"]["serverInfo"]["version"], "2.0.0")
         self.assertIn("resources", init["result"]["capabilities"])
         self.assertIn("prompts", init["result"]["capabilities"])
         self.assertIsNone(handle_message({"jsonrpc": "2.0", "method": "notifications/initialized"}))
@@ -613,7 +614,9 @@ class McpProtocolTests(unittest.TestCase):
             }
         )
         env_list = json.loads(envs["result"]["content"][0]["text"])
-        self.assertEqual(env_list[0]["name"], "staging")
+        names = {item["name"] for item in env_list}
+        self.assertIn("staging", names)
+        self.assertIn("local", names)
         contract = handle_message(
             {
                 "jsonrpc": "2.0",

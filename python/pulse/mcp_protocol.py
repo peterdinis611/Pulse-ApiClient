@@ -56,7 +56,7 @@ from .workspace import (
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "pulse"
-SERVER_VERSION = "0.3.0"
+SERVER_VERSION = "2.0.0"
 
 PYTHON_ROOT = Path(__file__).resolve().parent.parent
 REPO_ROOT = PYTHON_ROOT.parent

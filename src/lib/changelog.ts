@@ -100,6 +100,44 @@ export const CHANGELOG: ChangelogRelease[] = [
       },
     ],
   },
+  {
+    version: "2.0.0",
+    date: "2026-09-19",
+    title: {
+      en: "Pulse 2.0",
+      sk: "Pulse 2.0",
+    },
+    summary: {
+      en: "Locked local mock on :4010, every saved example as a route, no synthetic headers, and the public version is 2.0.",
+      sk: "Zamknutý lokálny mock na :4010, každý uložený príklad ako route, žiadne syntetické hlavičky a verejná verzia je 2.0.",
+    },
+    changes: [
+      {
+        id: "mock-lock",
+        title: { en: "Locked mock port", sk: "Zamknutý mock port" },
+        detail: {
+          en: "Settings → Data starts the mock on 127.0.0.1:4010. If the port is busy, Pulse errors instead of hopping to a random port.",
+          sk: "Nastavenia → Dáta spustí mock na 127.0.0.1:4010. Ak je port obsadený, Pulse neskáče na náhodný — vráti chybu.",
+        },
+      },
+      {
+        id: "mock-examples",
+        title: { en: "Every saved example", sk: "Každý uložený príklad" },
+        detail: {
+          en: "All Examples-tab snapshots become routes. Pick one with ?example=name or ?status=404. Git YAML stores the list.",
+          sk: "Všetky snímky z tabu Examples sú routy. Vyber ?example=name alebo ?status=404. Git YAML ich uloží ako zoznam.",
+        },
+      },
+      {
+        id: "no-hidden-headers",
+        title: { en: "No hidden headers", sk: "Žiadne skryté hlavičky" },
+        detail: {
+          en: "The mock echoes only headers on the saved example. The HTTP client sends no default User-Agent or Accept-Encoding unless you set them.",
+          sk: "Mock vráti len hlavičky z uloženého príkladu. HTTP klient neposiela predvolený User-Agent ani Accept-Encoding, kým ich nenastavíš.",
+        },
+      },
+    ],
+  },
 ];
 
 export function parseSemver(version: string): [number, number, number] {

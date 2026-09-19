@@ -43,6 +43,8 @@ describe("changelog", () => {
     expect(unseenReleases(null, "0.3.0").map((release) => release.version)).toEqual(["0.3.0"]);
     expect(unseenReleases("0.3.0", "0.3.0")).toEqual([]);
     expect(latestRelease("0.3.0")?.title.en).toMatch(/git/i);
+    expect(latestRelease("2.0.0")?.title.en).toMatch(/2\.0/);
+    expect(unseenReleases("0.3.0", "2.0.0").map((release) => release.version)).toEqual(["2.0.0"]);
     expect(CHANGELOG[0]?.changes.length).toBeGreaterThan(4);
   });
 

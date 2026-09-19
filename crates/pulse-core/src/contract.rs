@@ -141,7 +141,8 @@ fn walk_yaml(dir: &Path, errors: &mut Vec<String>) {
                 continue;
             }
         };
-        if !file.example.trim().is_empty() && !file.response_schema.trim().is_empty() {
+        let bodies = example_bodies(&file);
+        if !bodies.is_empty() && !file.response_schema.trim().is_empty() {
             let schema: Value = match serde_json::from_str(file.response_schema.trim()) {
                 Ok(value) => value,
                 Err(error) => {
@@ -149,9 +150,11 @@ fn walk_yaml(dir: &Path, errors: &mut Vec<String>) {
                     continue;
                 }
             };
-            let report = compare_to_schema(file.example.trim(), &schema);
-            for error in report.errors {
-                errors.push(format!("{}: {error}", path.display()));
+            for (label, body) in &bodies {
+                let report = compare_to_schema(body.trim(), &schema);
+                for error in report.errors {
+                    errors.push(format!("{} ({label}): {error}", path.display()));
+                }
             }
         }
         let snapshot = path.with_file_name(format!(
@@ -159,7 +162,12 @@ fn walk_yaml(dir: &Path, errors: &mut Vec<String>) {
             name.trim_end_matches(".pulse.yaml")
                 .trim_end_matches(".pulse.yml")
         ));
-        if snapshot.is_file() && !file.example.trim().is_empty() {
+        let snapshot_body = if !file.example.trim().is_empty() {
+            file.example.clone()
+        } else {
+            bodies.first().map(|(_, body)| body.clone()).unwrap_or_default()
+        };
+        if snapshot.is_file() && !snapshot_body.trim().is_empty() {
             let previous_raw = match fs::read_to_string(&snapshot) {
                 Ok(text) => text,
                 Err(error) => {
@@ -174,7 +182,7 @@ fn walk_yaml(dir: &Path, errors: &mut Vec<String>) {
                     continue;
                 }
             };
-            let current: Value = match serde_json::from_str(file.example.trim()) {
+            let current: Value = match serde_json::from_str(snapshot_body.trim()) {
                 Ok(value) => value,
                 Err(error) => {
                     errors.push(format!("{}: example is not JSON ({error})", path.display()));
@@ -186,6 +194,31 @@ fn walk_yaml(dir: &Path, errors: &mut Vec<String>) {
             }
         }
     }
+}
+
+fn example_bodies(file: &YamlRequestFile) -> Vec<(String, String)> {
+    if !file.examples.is_empty() {
+        return file
+            .examples
+            .iter()
+            .filter(|item| {
+                let status = if item.status == 0 { 200 } else { item.status };
+                (200..300).contains(&status) && !item.body.trim().is_empty()
+            })
+            .map(|item| {
+                let name = if item.name.trim().is_empty() {
+                    "example".into()
+                } else {
+                    item.name.clone()
+                };
+                (name, item.body.clone())
+            })
+            .collect();
+    }
+    if file.example.trim().is_empty() {
+        return Vec::new();
+    }
+    vec![("example".into(), file.example.clone())]
 }
 
 fn json_type(value: &Value) -> &'static str {

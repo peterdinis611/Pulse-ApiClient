@@ -7,7 +7,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::secrets::{is_secret_placeholder, parse_dotenv, strip_secret_values_from_vars};
 use crate::types::{
-    ApiRequestDto, CollectionDto, EnvVariable, EnvironmentDto, FolderConfigDto, RequestAuthDto, SavedRequestDto,
+    ApiRequestDto, CollectionDto, EnvVariable, EnvironmentDto, FolderConfigDto, RequestAuthDto, ResponseExampleDto,
+    SavedRequestDto,
 };
 
 pub const FORMAT_VERSION: u32 = 1;
@@ -89,6 +90,31 @@ pub struct YamlRequestFile {
     /// Non-secret 2xx snapshot stored in Git for contract checks.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub example: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub examples: Vec<YamlExampleFile>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct YamlExampleFile {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub status: u16,
+    #[serde(default)]
+    pub body: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub content_type: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub headers: Vec<YamlHeader>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct YamlHeader {
+    #[serde(default)]
+    pub key: String,
+    #[serde(default)]
+    pub value: String,
 }
 
 fn default_method() -> String {
@@ -227,8 +253,37 @@ fn request_to_yaml(request: &ApiRequestDto) -> YamlRequestFile {
         tests: request.tests.clone(),
         pre_request_script: request.pre_request_script.clone(),
         response_schema: request.response_schema.clone(),
-        example: String::new(),
+        example: default_example_body(&request.examples),
+        examples: request
+            .examples
+            .iter()
+            .map(|item| YamlExampleFile {
+                name: item.name.clone(),
+                status: item.response.status,
+                body: item.response.body.clone(),
+                content_type: item.response.content_type.clone().unwrap_or_default(),
+                headers: item
+                    .response
+                    .headers
+                    .iter()
+                    .filter(|header| !header.key.trim().is_empty())
+                    .map(|header| YamlHeader {
+                        key: header.key.clone(),
+                        value: header.value.clone(),
+                    })
+                    .collect(),
+            })
+            .collect(),
     }
+}
+
+fn default_example_body(examples: &[ResponseExampleDto]) -> String {
+    examples
+        .iter()
+        .find(|item| (200..300).contains(&item.response.status) && !item.response.body.trim().is_empty())
+        .or_else(|| examples.iter().find(|item| !item.response.body.trim().is_empty()))
+        .map(|item| item.response.body.clone())
+        .unwrap_or_default()
 }
 
 fn yaml_to_request(file: YamlRequestFile, fallback_id: &str) -> ApiRequestDto {
@@ -260,7 +315,63 @@ fn yaml_to_request(file: YamlRequestFile, fallback_id: &str) -> ApiRequestDto {
         tests: file.tests,
         pre_request_script: file.pre_request_script,
         response_schema: file.response_schema,
+        examples: yaml_examples(file.example, file.examples),
     }
+}
+
+fn yaml_examples(legacy: String, examples: Vec<YamlExampleFile>) -> Vec<ResponseExampleDto> {
+    if !examples.is_empty() {
+        return examples
+            .into_iter()
+            .enumerate()
+            .map(|(index, item)| ResponseExampleDto {
+                id: format!("ex_{index}"),
+                name: if item.name.trim().is_empty() {
+                    format!("example-{}", index + 1)
+                } else {
+                    item.name
+                },
+                saved_at: String::new(),
+                response: crate::types::ExampleResponseDto {
+                    status: if item.status == 0 { 200 } else { item.status },
+                    status_text: String::new(),
+                    headers: item
+                        .headers
+                        .into_iter()
+                        .map(|header| crate::types::ResponseHeader {
+                            key: header.key,
+                            value: header.value,
+                        })
+                        .collect(),
+                    elapsed_ms: 0,
+                    size_bytes: item.body.len(),
+                    body: item.body,
+                    content_type: if item.content_type.trim().is_empty() {
+                        None
+                    } else {
+                        Some(item.content_type)
+                    },
+                },
+            })
+            .collect();
+    }
+    if legacy.trim().is_empty() {
+        return Vec::new();
+    }
+    vec![ResponseExampleDto {
+        id: "ex_ok".into(),
+        name: "ok".into(),
+        saved_at: String::new(),
+        response: crate::types::ExampleResponseDto {
+            status: 200,
+            status_text: "OK".into(),
+            headers: vec![],
+            body: legacy,
+            content_type: Some("application/json".into()),
+            elapsed_ms: 0,
+            size_bytes: legacy.len(),
+        },
+    }]
 }
 
 fn walk_request_files(dir: &Path, folder: Option<String>, out: &mut Vec<(Option<String>, PathBuf)>) {
@@ -643,6 +754,7 @@ fn walk_json_items(
                 tests: String::new(),
                 pre_request_script: String::new(),
                 response_schema: String::new(),
+                examples: vec![],
             });
         if request.name.is_empty() {
             request.name = item
@@ -819,6 +931,39 @@ mod tests {
                     tests: String::new(),
                     pre_request_script: String::new(),
                     response_schema: String::new(),
+                    examples: vec![
+                        ResponseExampleDto {
+                            id: "ex_ok".into(),
+                            name: "ok".into(),
+                            saved_at: String::new(),
+                            response: crate::types::ExampleResponseDto {
+                                status: 200,
+                                status_text: "OK".into(),
+                                headers: vec![crate::types::ResponseHeader {
+                                    key: "Cache-Control".into(),
+                                    value: "no-store".into(),
+                                }],
+                                body: "{\"ok\":true}".into(),
+                                content_type: Some("application/json".into()),
+                                elapsed_ms: 0,
+                                size_bytes: 11,
+                            },
+                        },
+                        ResponseExampleDto {
+                            id: "ex_missing".into(),
+                            name: "missing".into(),
+                            saved_at: String::new(),
+                            response: crate::types::ExampleResponseDto {
+                                status: 404,
+                                status_text: "Not Found".into(),
+                                headers: vec![],
+                                body: "{\"error\":\"gone\"}".into(),
+                                content_type: Some("application/json".into()),
+                                elapsed_ms: 0,
+                                size_bytes: 16,
+                            },
+                        },
+                    ],
                 },
             }],
             environments: vec![],
@@ -828,6 +973,9 @@ mod tests {
         let loaded = load_workspace(dir.to_str().unwrap()).unwrap();
         assert_eq!(loaded.collection_groups[0].name, "Pets");
         assert_eq!(loaded.collections[0].request.url, "{{baseUrl}}/pets");
+        assert_eq!(loaded.collections[0].request.examples.len(), 2);
+        assert_eq!(loaded.collections[0].request.examples[1].name, "missing");
+        assert_eq!(loaded.collections[0].request.examples[1].response.status, 404);
         assert_eq!(
             loaded.collections[0].request.auth.bearer_token,
             "{{secret.bearerToken}}"
@@ -839,6 +987,8 @@ mod tests {
         )
         .unwrap();
         assert!(!yaml.contains("super-secret"));
+        assert!(yaml.contains("examples:"));
+        assert!(yaml.contains("missing"));
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -913,6 +1063,7 @@ mod tests {
                     tests: String::new(),
                     pre_request_script: String::new(),
                     response_schema: String::new(),
+                    examples: vec![],
                 },
             }],
             environments: vec![],

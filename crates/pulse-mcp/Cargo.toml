@@ -1,6 +1,6 @@
 [package]
 name = "pulse-mcp"
-version = "0.3.0"
+version = "2.0.0"
 edition = "2021"
 description = "Pulse MCP stdio server (Rust) — Git workspace + HTTP via pulse-core"
 

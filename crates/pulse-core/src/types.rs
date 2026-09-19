@@ -225,6 +225,40 @@ pub struct ApiRequestDto {
     pub pre_request_script: String,
     #[serde(default)]
     pub response_schema: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub examples: Vec<ResponseExampleDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ResponseExampleDto {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub saved_at: String,
+    #[serde(default)]
+    pub response: ExampleResponseDto,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ExampleResponseDto {
+    #[serde(default)]
+    pub status: u16,
+    #[serde(default)]
+    pub status_text: String,
+    #[serde(default)]
+    pub headers: Vec<ResponseHeader>,
+    #[serde(default)]
+    pub body: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_type: Option<String>,
+    #[serde(default)]
+    pub elapsed_ms: u64,
+    #[serde(default)]
+    pub size_bytes: usize,
 }
 
 fn default_method() -> String {

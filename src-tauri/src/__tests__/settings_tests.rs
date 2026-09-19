@@ -75,7 +75,7 @@ fn apply_http_input_normalizes_values() {
         http_proxy: Some("  http://127.0.0.1:8080  ".into()),
         http_follow_redirects: false,
         http_max_redirects: 99,
-        http_user_agent: Some("  Pulse/1.0  ".into()),
+        http_user_agent: Some("  Pulse/2.0  ".into()),
         http_send_cookies: false,
         http_store_cookies: false,
         http_connect_timeout_ms: 50,
@@ -94,7 +94,7 @@ fn apply_http_input_normalizes_values() {
     assert_eq!(settings.http_proxy.as_deref(), Some("http://127.0.0.1:8080"));
     assert!(!settings.http_follow_redirects);
     assert_eq!(settings.http_max_redirects, 50);
-    assert_eq!(settings.http_user_agent.as_deref(), Some("Pulse/1.0"));
+    assert_eq!(settings.http_user_agent.as_deref(), Some("Pulse/2.0"));
     assert!(!settings.http_send_cookies);
     assert!(!settings.http_store_cookies);
     assert_eq!(settings.http_connect_timeout_ms, 500);

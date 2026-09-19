@@ -48,6 +48,7 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
       "Desktop engine is not limited by browser CORS — set any header you need",
       "Send with `Cmd/Ctrl + Enter` (or the Send button); Cancel while in flight",
       "Name the request, pick a collection and folder, then Save",
+      "Examples tab — save any number of response snapshots; Git writes them as `examples` on `*.pulse.yaml`",
       "Save example stores the last response on the request (Examples tab) — a snapshot of how a 200 should look",
       "Import from cURL via the ⋯ menu on the request bar",
       "Protocol picker: HTTP, WebSocket, or SSE (server-sent events)",
@@ -306,7 +307,7 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
       "Notify watch reloads a request from disk; a dirty tab shows a line-diff instead of silent overwrite",
       "Secrets stay in gitignored `.env` / OS keychain as `{{secret.*}}` — never in request YAML or history JSON",
       "JSON remains import/export (Postman, Pulse dump), not the native Git format",
-      "Detached mode (no folder) still uses the 0.3 SQLite workspace",
+      "Detached mode (no folder) still uses the SQLite workspace for history, cache, and session",
     ],
     howTo: [
       "Settings → Data → Attach folder. Pick the Git repo that should hold collections.",
@@ -315,6 +316,29 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
     ],
     tips: [
       "Migrate old `*.pulse.json` dumps with Migrate on the same Settings row.",
+    ],
+  },
+  {
+    id: "mock-server",
+    title: "Local mock server",
+    summary: "Lock 127.0.0.1:4010 and replay every saved response example. Only headers from the example go on the wire.",
+    group: "Data",
+    items: [
+      "Settings → Data → Start mock binds 127.0.0.1:4010 and fails if that port is already taken",
+      "One route per saved example (not only the first) — same method and path, different bodies and statuses",
+      "`?example=name` picks a snapshot by Examples-tab name; `?status=404` picks by status",
+      "Without a query, Pulse serves the first 2xx example, then the first example",
+      "Response headers are only those stored on the example — no Server, Date, Connection, Content-Length, or X-Pulse-*",
+      "Content-Type is sent only when the example has one",
+      "Git YAML stores `examples` plus a legacy `example` string (first 2xx body) for contract checks",
+    ],
+    howTo: [
+      "Save 200 and 404 snapshots on a request (Examples tab), then Settings → Data → Start mock.",
+      "Call `http://127.0.0.1:4010/pets` for the 2xx body, or `…/pets?example=missing` / `…/pets?status=404`.",
+      "Stop from the same Settings row before starting again on :4010.",
+    ],
+    tips: [
+      "The mock never invents headers. The desktop HTTP client also sends no default User-Agent unless you set one.",
     ],
   },
   {
@@ -354,7 +378,7 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
       "mTLS — client certificate, key, and CA PEM via file picker (like custom CSS)",
       "HTTP(S) or SOCKS proxy URL",
       "Follow redirects + max redirects",
-      "Default User-Agent, Origin, Referer",
+      "User-Agent, Origin, Referer only when you set them — empty means Pulse sends none (no reqwest defaults)",
       "Send / store cookies toggles",
       "Engine stats: active, completed, failed, cache hits",
       "Timing waterfall: DNS, TLS (TCP + handshake + wait), TTFB, transfer, total",
@@ -558,7 +582,7 @@ export const FEATURE_DOC_GROUPS: FeatureDocGroup[] = [
 export const FEATURE_DOC_GROUP_BLURBS: Record<FeatureDocGroup, string> = {
   Workspace: "The request desk — URL, path params, auth, response, and extra windows.",
   Scripting: "Pre-request scripts, tests, and the bottom console against the last response.",
-  Data: "Collections, environments, history, cookies, and the HTTP engine.",
+  Data: "Collections, environments, history, cookies, the HTTP engine, and the local mock server.",
   Appearance: "Built-in themes, UI language, and CSS / JSON overlays for chrome.",
   Productivity: "Search, shortcuts, what's new, privacy, libraries, the Python CI satellite, and what stays on this machine.",
 };

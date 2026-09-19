@@ -293,7 +293,9 @@ class WorkspaceTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1] / "examples" / "git-workspace"
         hits = search_requests(root, "list")
         self.assertTrue(any(item["id"] == "req_list_pets" for item in hits))
-        self.assertEqual(list_environments(root)[0]["name"], "staging")
+        env_names = {item["name"] for item in list_environments(root)}
+        self.assertIn("staging", env_names)
+        self.assertIn("local", env_names)
         status = workspace_status(root)
         self.assertGreaterEqual(status["requests"], 1)
 

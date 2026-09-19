@@ -26,6 +26,7 @@ describe("feature-docs", () => {
         "tests",
         "collections",
         "git-workspace",
+        "mock-server",
         "environments",
         "cookies",
         "themes",

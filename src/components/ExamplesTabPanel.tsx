@@ -43,8 +43,8 @@ export function ExamplesTabPanel() {
                 {example.response.status}
               </span>
               <span>{example.response.statusText}</span>
-              <span>· {formatBytes(example.response.sizeBytes)}</span>
-              <span>· {new Date(example.savedAt).toLocaleString()}</span>
+              <span>· {formatBytes(example.response.sizeBytes ?? example.response.body.length)}</span>
+              {example.savedAt ? <span>· {new Date(example.savedAt).toLocaleString()}</span> : null}
             </p>
           </button>
           <div className="flex shrink-0 items-center gap-1">

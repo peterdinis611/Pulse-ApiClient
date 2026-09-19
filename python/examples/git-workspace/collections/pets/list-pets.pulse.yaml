@@ -2,6 +2,18 @@ id: req_list_pets
 name: List pets
 protocol: http
 method: GET
-url: "{{baseUrl}}/posts/1"
-responseSchema: '{"type":"object","required":["id"],"properties":{"id":{"type":"integer"}}}'
-example: '{"id":1,"title":"hello"}'
+url: "{{baseUrl}}/posts"
+responseSchema: '{"type":"array"}'
+example: '[{"id":1,"title":"hello"}]'
+examples:
+  - name: ok
+    status: 200
+    body: '[{"id":1,"title":"hello"}]'
+    contentType: application/json
+    headers:
+      - key: Cache-Control
+        value: no-store
+  - name: empty
+    status: 200
+    body: "[]"
+    contentType: application/json
