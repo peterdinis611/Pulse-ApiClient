@@ -8,6 +8,7 @@ Satellite around the Rust engine — collection runs, benches, OpenAPI/HAR impor
 ## In the product
 
 - `bun run pulse:cli run collection.json` — Pulse export or CollectionRunInput, optional `.env` / CSV iterations
+- `bun run pulse:cli contract path/to/workspace` — validate Git YAML examples vs responseSchema and `*.previous.json` snapshots
 - JUnit XML and a p50/p95 timing summary for GitHub Actions
 - `bench` repeats a collection and fails if p95 exceeds a budget or a previous baseline
 - OpenAPI import fills path params, query, JSON examples, tag folders, and a 2xx status test

@@ -37,6 +37,9 @@ class McpProtocolTests(unittest.TestCase):
         self.assertIn("pulse_graphql", names)
         self.assertIn("pulse_snippet", names)
         self.assertIn("pulse_validate_run", names)
+        self.assertIn("pulse_workspace_list", names)
+        self.assertIn("pulse_workspace_read", names)
+        self.assertIn("pulse_workspace_write", names)
 
     def test_schema_tool(self) -> None:
         result = handle_message(
@@ -459,6 +462,33 @@ class McpProtocolTests(unittest.TestCase):
         )
         self.assertTrue(result["result"]["isError"])
         self.assertIn("graphqlQuery", result["result"]["content"][0]["text"])
+
+    def test_mutating_send_requires_confirm(self) -> None:
+        result = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 42,
+                "method": "tools/call",
+                "params": {
+                    "name": "pulse_send",
+                    "arguments": {"method": "POST", "url": "https://example.test/items"},
+                },
+            }
+        )
+        self.assertTrue(result["result"]["isError"])
+        self.assertIn("confirm=true", result["result"]["content"][0]["text"])
+
+    def test_workspace_list_without_env(self) -> None:
+        result = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 43,
+                "method": "tools/call",
+                "params": {"name": "pulse_workspace_list", "arguments": {}},
+            }
+        )
+        self.assertTrue(result["result"]["isError"])
+        self.assertIn("PULSE_WORKSPACE", result["result"]["content"][0]["text"])
 
 
 if __name__ == "__main__":

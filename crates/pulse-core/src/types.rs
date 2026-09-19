@@ -153,6 +153,8 @@ pub struct EnvVariable {
     pub value: String,
     #[serde(default = "default_true")]
     pub enabled: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub secret: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -221,6 +223,8 @@ pub struct ApiRequestDto {
     pub tests: String,
     #[serde(default)]
     pub pre_request_script: String,
+    #[serde(default)]
+    pub response_schema: String,
 }
 
 fn default_method() -> String {
@@ -252,6 +256,8 @@ pub struct SavedRequestDto {
     pub collection_id: String,
     pub folder: Option<String>,
     pub request: ApiRequestDto,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_path: Option<String>,
 }
 
 impl From<RequestAuthDto> for AuthConfig {

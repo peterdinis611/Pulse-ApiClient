@@ -25,6 +25,7 @@ describe("feature-docs", () => {
         "pre-request",
         "tests",
         "collections",
+        "git-workspace",
         "environments",
         "cookies",
         "themes",
@@ -32,6 +33,7 @@ describe("feature-docs", () => {
         "console",
         "search",
         "data",
+        "privacy",
         "python-cli",
         "mcp",
         "libraries",
@@ -120,6 +122,11 @@ describe("feature-docs", () => {
     expect(
       FEATURE_DOC_SECTIONS.find((section) => section.id === "libraries")?.items.some((item) =>
         item.toLowerCase().includes("python/pulse"),
+      ),
+    ).toBe(true);
+    expect(
+      FEATURE_DOC_SECTIONS.find((section) => section.id === "privacy")?.items.some((item) =>
+        item.toLowerCase().includes("no telemetry"),
       ),
     ).toBe(true);
   });

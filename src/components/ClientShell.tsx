@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState } from "react";
 import { useApp } from "@/machines";
 import { AppRail } from "./AppRail";
 import { CommandPalette } from "./CommandPalette";
+import { GitWorkspaceSync } from "./GitWorkspaceSync";
 import { ExplorerPanel } from "./ExplorerPanel";
 import { LoadingScreen } from "./LoadingScreen";
 import { ResizableConsole } from "./ResizableConsole";
@@ -95,6 +96,7 @@ export function ClientShell() {
         <StatusBar />
       </div>
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      <GitWorkspaceSync />
     </div>
   );
 }

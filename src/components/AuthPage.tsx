@@ -118,6 +118,9 @@ export function AuthPage() {
         <p className="text-caption normal-case tracking-normal text-rail-foreground">
           {t("auth.stays")}
         </p>
+        <p className="text-caption normal-case tracking-normal text-rail-foreground/80">
+          {t("auth.privacy")}
+        </p>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">

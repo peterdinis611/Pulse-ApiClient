@@ -14,7 +14,8 @@ fn setup_conn() -> Connection {
           request_json TEXT NOT NULL,
           status INTEGER,
           elapsed_ms INTEGER,
-          size_bytes INTEGER
+          size_bytes INTEGER,
+          source TEXT NOT NULL DEFAULT 'desktop'
         );
         CREATE INDEX idx_request_history_sent_at ON request_history(sent_at DESC);
         ",
@@ -46,6 +47,7 @@ fn sample_entry(id_suffix: &str, name: &str, url: &str) -> HistoryEntryPayload {
             elapsed_ms: 12,
             size_bytes: 100,
         }),
+        source: "desktop".into(),
     }
 }
 

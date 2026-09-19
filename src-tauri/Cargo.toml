@@ -32,6 +32,8 @@ tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3"
 tokio-util = "0.7"
 pulse-core = { path = "../crates/pulse-core" }
+notify = "7"
+keyring = "3"
 
 [dev-dependencies]
 wiremock = "0.6"

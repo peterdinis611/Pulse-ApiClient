@@ -24,6 +24,7 @@ type ExplorerTransferMenuProps = {
   requestCount: number;
   exportCollections: () => string;
   importCollections: (raw: string) => void;
+  onOpenApiExplorer?: () => void;
   className?: string;
 };
 
@@ -32,6 +33,7 @@ export function ExplorerTransferMenu({
   requestCount,
   exportCollections,
   importCollections,
+  onOpenApiExplorer,
   className,
 }: ExplorerTransferMenuProps) {
   const importRef = useRef<HTMLInputElement>(null);
@@ -144,6 +146,17 @@ export function ExplorerTransferMenu({
               </span>
             </span>
           </DropdownMenuItem>
+          {onOpenApiExplorer && (
+            <DropdownMenuItem onClick={onOpenApiExplorer}>
+              <FileUp className="size-3.5" />
+              <span className="flex min-w-0 flex-col items-start gap-0.5">
+                <span>OpenAPI explorer…</span>
+                <span className="text-[11px] font-normal text-muted-foreground">
+                  Browse operations, open as YAML requests
+                </span>
+              </span>
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 

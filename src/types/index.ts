@@ -223,6 +223,7 @@ export type SavedRequest = {
   collectionId: string;
   folder?: string;
   request: ApiRequest;
+  filePath?: string;
 };
 
 export type Environment = {
@@ -236,6 +237,7 @@ export type HistoryEntry = {
   sentAt: string;
   request: ApiRequest;
   response?: Pick<HttpResponse, "status" | "elapsedMs" | "sizeBytes">;
+  source?: "desktop" | "agent" | "cli";
 };
 
 export type RequestTab =

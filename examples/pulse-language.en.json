@@ -30,6 +30,7 @@
     "auth.feature.http": "Send HTTP, GraphQL, and WebSocket requests",
     "auth.feature.local": "Local-first workspaces stored on your device",
     "auth.stays": "Data stays on this device",
+    "auth.privacy": "Local accounts only. No Pulse cloud — read the privacy policy in Docs after sign-in.",
     "auth.welcome": "Welcome back",
     "auth.create": "Create account",
     "auth.signInLead": "Sign in to open your workspace.",

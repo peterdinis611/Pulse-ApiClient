@@ -5,6 +5,16 @@ use std::sync::LazyLock;
 static VARIABLE_PATTERN: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}").unwrap());
 
+fn keys_match(stored: &str, requested: &str) -> bool {
+    if stored == requested {
+        return true;
+    }
+    if let Some(rest) = requested.strip_prefix("secret.") {
+        return stored == rest || stored == requested;
+    }
+    false
+}
+
 pub fn substitute_variables(input: &str, variables: &[EnvVariable]) -> String {
     if input.is_empty() || !input.contains("{{") {
         return input.to_string();
@@ -14,7 +24,7 @@ pub fn substitute_variables(input: &str, variables: &[EnvVariable]) -> String {
             let name = &caps[1];
             variables
                 .iter()
-                .find(|item| item.enabled && item.key.trim() == name)
+                .find(|item| item.enabled && keys_match(item.key.trim(), name))
                 .map(|item| item.value.clone())
                 .unwrap_or_else(|| caps[0].to_string())
         })
@@ -50,6 +60,7 @@ pub fn apply_mutations(variables: &mut Vec<EnvVariable>, mutations: &[(String, S
                 key: key.to_string(),
                 value: value.clone(),
                 enabled: true,
+                secret: key.starts_with("secret."),
             });
         }
     }
@@ -66,10 +77,26 @@ mod tests {
             key: "id".into(),
             value: "42".into(),
             enabled: true,
+            secret: false,
         }];
         assert_eq!(
             substitute_variables("https://api.test/{{id}}", &vars),
             "https://api.test/42"
+        );
+    }
+
+    #[test]
+    fn substitutes_secret_namespace() {
+        let vars = vec![EnvVariable {
+            id: "1".into(),
+            key: "apiToken".into(),
+            value: "tok".into(),
+            enabled: true,
+            secret: true,
+        }];
+        assert_eq!(
+            substitute_variables("Bearer {{secret.apiToken}}", &vars),
+            "Bearer tok"
         );
     }
 }

@@ -24,6 +24,12 @@ pub struct HistoryEntryPayload {
     pub sent_at: String,
     pub request: serde_json::Value,
     pub response: Option<HistoryResponsePayload>,
+    #[serde(default = "default_source")]
+    pub source: String,
+}
+
+fn default_source() -> String {
+    "desktop".into()
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -80,6 +86,7 @@ fn row_to_entry(
     status: Option<i64>,
     elapsed_ms: Option<i64>,
     size_bytes: Option<i64>,
+    source: Option<String>,
 ) -> Result<HistoryEntryPayload, String> {
     let request: serde_json::Value =
         serde_json::from_str(&request_json).map_err(|error| error.to_string())?;
@@ -97,6 +104,7 @@ fn row_to_entry(
         sent_at,
         request,
         response,
+        source: source.filter(|item| !item.is_empty()).unwrap_or_else(|| "desktop".into()),
     })
 }
 
@@ -108,7 +116,7 @@ fn fetch_history_entry_by_id(
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, sent_at, request_json, status, elapsed_ms, size_bytes
+            "SELECT id, sent_at, request_json, status, elapsed_ms, size_bytes, COALESCE(source, 'desktop')
              FROM request_history
              WHERE id = ?1",
         )
@@ -126,6 +134,7 @@ fn fetch_history_entry_by_id(
             row.get(3).map_err(|e| e.to_string())?,
             row.get(4).map_err(|e| e.to_string())?,
             row.get(5).map_err(|e| e.to_string())?,
+            row.get(6).map_err(|e| e.to_string()).ok(),
         )?));
     }
 
@@ -148,8 +157,8 @@ pub fn append_history_entry(conn: &Connection, entry: &HistoryEntryPayload) -> R
 
     conn.execute(
         "INSERT INTO request_history (
-            id, sent_at, method, name, url, request_json, status, elapsed_ms, size_bytes
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            id, sent_at, method, name, url, request_json, status, elapsed_ms, size_bytes, source
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
          ON CONFLICT(id) DO UPDATE SET
             sent_at = excluded.sent_at,
             method = excluded.method,
@@ -158,7 +167,8 @@ pub fn append_history_entry(conn: &Connection, entry: &HistoryEntryPayload) -> R
             request_json = excluded.request_json,
             status = excluded.status,
             elapsed_ms = excluded.elapsed_ms,
-            size_bytes = excluded.size_bytes",
+            size_bytes = excluded.size_bytes,
+            source = excluded.source",
         params![
             entry.id,
             entry.sent_at,
@@ -168,7 +178,8 @@ pub fn append_history_entry(conn: &Connection, entry: &HistoryEntryPayload) -> R
             request_json,
             status,
             elapsed_ms,
-            size_bytes
+            size_bytes,
+            if entry.source.trim().is_empty() { "desktop" } else { entry.source.trim() }
         ],
     )
     .map_err(|e| e.to_string())?;
@@ -212,7 +223,7 @@ pub fn list_history_page(
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, sent_at, request_json, status, elapsed_ms, size_bytes
+            "SELECT id, sent_at, request_json, status, elapsed_ms, size_bytes, COALESCE(source, 'desktop')
              FROM request_history
              ORDER BY sent_at DESC
              LIMIT ?1 OFFSET ?2",
@@ -228,13 +239,14 @@ pub fn list_history_page(
                 row.get::<_, Option<i64>>(3)?,
                 row.get::<_, Option<i64>>(4)?,
                 row.get::<_, Option<i64>>(5)?,
+                row.get::<_, Option<String>>(6)?,
             ))
         })
         .map_err(|e| e.to_string())?;
 
     let mut items = Vec::new();
     for row in rows {
-        let (id, sent_at, request_json, status, elapsed_ms, size_bytes) =
+        let (id, sent_at, request_json, status, elapsed_ms, size_bytes, source) =
             row.map_err(|e| e.to_string())?;
         items.push(row_to_entry(
             id,
@@ -243,6 +255,7 @@ pub fn list_history_page(
             status,
             elapsed_ms,
             size_bytes,
+            source,
         )?);
     }
 

@@ -15,9 +15,11 @@ Organize saved requests and run them as a set.
 - Data file — CSV or JSON, one row = one full iteration of the collection or folder
 - Runner uses the same inheritance and variable layers as a single Send
 - Import Pulse JSON, Postman v2.1, Bruno, Insomnia, OpenAPI
+- OpenAPI explorer in the explorer transfer menu — fetch a spec, click an operation, open it as a request (save writes YAML when Git is attached)
 - Export one collection as Pulse, Postman, or OpenAPI 3.0 (⋯ menu), or the whole workspace
 - OpenAPI import attaches JSON Schema from 200/201 when present; Send asserts 2xx vs that schema
-- Collections folder — Settings → Data: pick a Git directory, Write *.pulse.json, Reload from folder
+- Collections folder — Settings → Data: attach a Git directory; YAML tree is the workspace (one `*.pulse.yaml` per request)
+- Migrate leftover `*.pulse.json` dumps into the YAML tree from Settings → Data
 - Postman import/export keeps collection and folder auth, variables, and scripts
 - OpenAPI `{id}` paths become path params; operations land as requests
 
@@ -27,4 +29,4 @@ Organize saved requests and run them as a set.
 2. Play on a collection runs every request; Play on a folder runs that folder. View results for status and tests.
 3. Spreadsheet icon (or Run with CSV / JSON) picks a data file: each row becomes `{{column}}` for one iteration.
 4. Explorer transfer menu imports a file; collection ⋯ exports Pulse, Postman, or OpenAPI JSON.
-5. Settings → Data → Collections folder writes the workspace as Git-friendly `*.pulse.json` files.
+5. Settings → Data → Attach folder opens a Git workspace (`pulse.yaml`, `collections/`, `environments/`). SQLite keeps history, cache, and session only.

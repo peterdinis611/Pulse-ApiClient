@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { importOpenApiCollection, isOpenApiSpec } from "@/lib/openapi-import";
+import { importOpenApiCollection, isOpenApiSpec, listOpenApiOperations } from "@/lib/openapi-import";
 
 const sampleSpec = JSON.stringify({
   openapi: "3.0.0",
@@ -33,5 +33,11 @@ describe("openapi-import", () => {
     expect(imported.collection.name).toBe("Petstore");
     expect(imported.requests).toHaveLength(2);
     expect(imported.requests[0]?.request.url).toContain("https://api.example.com/pets");
+  });
+
+  it("lists operations for the live explorer without importing", () => {
+    const ops = listOpenApiOperations(sampleSpec);
+    expect(ops.map((item) => item.method).sort()).toEqual(["GET", "POST"]);
+    expect(ops[0]?.request.url).toContain("/pets");
   });
 });

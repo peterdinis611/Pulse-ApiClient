@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["src-tauri", "crates/pulse-core", "crates/pulse-native"]
+members = ["src-tauri", "crates/pulse-core", "crates/pulse-native", "crates/pulse-mcp"]
 default-members = ["src-tauri", "crates/pulse-core"]
 
 [profile.dev]

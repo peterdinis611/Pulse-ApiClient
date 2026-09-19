@@ -28,6 +28,12 @@ describe("env", () => {
     expect(substituteVariables(input, environment)).toBe(expected);
   });
 
+  it("substitutes secret namespace", () => {
+    const env = createEnvironment("Local");
+    env.variables = [createKeyValue({ key: "secret.apiToken", value: "tok", secret: true })];
+    expect(substituteVariables("Bearer {{secret.apiToken}}", env)).toBe("Bearer tok");
+  });
+
   it("ignores disabled variables", () => {
     expect(substituteVariables("{{disabled}}", environment)).toBe("{{disabled}}");
   });

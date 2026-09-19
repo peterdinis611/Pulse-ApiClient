@@ -1,0 +1,7 @@
+id: req_list_pets
+name: List pets
+protocol: http
+method: GET
+url: "{{baseUrl}}/posts/1"
+responseSchema: '{"type":"object","required":["id"],"properties":{"id":{"type":"integer"}}}'
+example: '{"id":1,"title":"hello"}'

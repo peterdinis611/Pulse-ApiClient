@@ -7,11 +7,11 @@ Workspace data is local to your account on this device.
 
 ## In the product
 
-- SQLite per user: workspace, history, HTTP cache
+- SQLite per user: history, HTTP cache, and UI session (collections live on disk when a Git folder is attached)
 - Settings — export collections, reset database, clear cache
 - Sign in keeps a separate auth database from workspace data
 - No Pulse cloud — collections stay on disk unless you export them or sync a Git folder
-- Settings → Data → Collections folder writes/reloads `*.pulse.json` for Bruno-style Git diffs
+- Settings → Data → Attach folder uses YAML as the canonical Git workspace; Write/Reload of `*.pulse.json` is no longer the primary flow
 - File pickers (custom CSS, language pack, mTLS PEMs, runner data, collections folder) are OS-agnostic — no hardcoded `~/Library` paths
 
 <Callout title="Tip">

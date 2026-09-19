@@ -128,6 +128,30 @@ export function importOpenApiCollection(raw: string): {
   return { collection, requests };
 }
 
+export function listOpenApiOperations(raw: string): Array<{
+  method: HttpMethod;
+  path: string;
+  summary: string;
+  request: ApiRequest;
+}> {
+  const imported = importOpenApiCollection(raw);
+  return imported.requests.map((saved) => {
+    let path = saved.request.url;
+    try {
+      path = new URL(saved.request.url).pathname;
+    } catch {
+      const slash = saved.request.url.indexOf("/", saved.request.url.indexOf("//") + 2);
+      path = slash >= 0 ? saved.request.url.slice(slash).split("?")[0] : saved.request.url;
+    }
+    return {
+      method: saved.request.method,
+      path,
+      summary: saved.name,
+      request: saved.request,
+    };
+  });
+}
+
 export function importOpenApiIntoState(
   raw: string,
   state: { collectionGroups: CollectionGroup[]; collections: SavedRequest[] },

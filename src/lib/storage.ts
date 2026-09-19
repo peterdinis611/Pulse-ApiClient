@@ -2,6 +2,7 @@ import { readStorageItem, storageKey } from "./app-config";
 import { dbLoadWorkspace, dbSaveWorkspace } from "./db-client";
 import { importHistoryEntries } from "./history-client";
 import { emitHistoryUpdated } from "./history-sync";
+import { emitWorkspaceUpdated } from "./workspace-sync";
 import { canUseTauriIpc } from "./tauri-runtime";
 import { getCurrentWindowLabel } from "./window-manager";
 import type {
@@ -27,7 +28,15 @@ import { importBrunoIntoState, isBrunoCollection } from "./bruno-import";
 import { importInsomniaIntoState, isInsomniaExport } from "./insomnia-import";
 import { exportPulseCollection, importPulseCollection, isPulseCollection } from "./pulse-collection";
 import { isOpenApiSpec, importOpenApiIntoState } from "./openapi-import";
-import { emitWorkspaceUpdated } from "./workspace-sync";
+import { getAppSettings } from "./http-client";
+import {
+  getGitWorkspaceRoot,
+  isGitWorkspaceActive,
+  loadGitWorkspace,
+  mapGitWorkspace,
+  saveGitWorkspace,
+  setGitWorkspaceRoot,
+} from "./git-workspace";
 
 const STATE_SUFFIX = "v1";
 const MAX_WINDOW_SESSIONS = 12;
@@ -53,6 +62,7 @@ export type PersistedState = {
   lastRequest: ReturnType<typeof createRequest>;
   windowSessions: Record<string, WindowSessionState>;
   globals: KeyValue[];
+  secrets?: KeyValue[];
 };
 
 export function clearLegacyPersistedState(): void {
@@ -73,6 +83,7 @@ export function defaultPersistedState(): PersistedState {
     lastRequest: createRequest(),
     windowSessions: {},
     globals: [],
+    secrets: [],
   };
 }
 
@@ -157,6 +168,7 @@ function migratePersistedState(parsed: Partial<PersistedState>): PersistedState 
     lastRequest: normalizeRequest(parsed.lastRequest),
     windowSessions,
     globals: parsed.globals ?? [],
+    secrets: parsed.secrets ?? [],
   };
 }
 
@@ -175,16 +187,39 @@ export async function loadPersistedState(): Promise<PersistedState> {
   if (canUseTauriIpc()) {
     try {
       const raw = await dbLoadWorkspace();
+      let state = defaultPersistedState();
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<PersistedState>;
         const embeddedHistory = (parsed.history ?? []).map((entry) => ({
           ...entry,
           request: normalizeRequest(entry.request),
         }));
-        const migrated = migratePersistedState(parsed);
-        return migrateEmbeddedHistory(migrated, embeddedHistory);
+        state = await migrateEmbeddedHistory(migratePersistedState(parsed), embeddedHistory);
       }
-      return defaultPersistedState();
+      try {
+        const settings = await getAppSettings();
+        const root = settings.collectionsFolderPath?.trim();
+        if (root) {
+          const payload = await loadGitWorkspace(root);
+          const mapped = mapGitWorkspace(payload);
+          state = {
+            ...state,
+            collectionGroups: mapped.collectionGroups.length
+              ? mapped.collectionGroups
+              : state.collectionGroups,
+            collections: mapped.collections,
+            environments: mapped.environments.length ? mapped.environments : state.environments,
+            activeCollectionId: mapped.collectionGroups[0]?.id ?? state.activeCollectionId,
+            activeEnvironmentId: mapped.environments[0]?.id ?? state.activeEnvironmentId,
+            secrets: mapped.secrets,
+          };
+        } else {
+          setGitWorkspaceRoot(null);
+        }
+      } catch {
+        // Keep SQLite workspace if the folder is missing or unreadable.
+      }
+      return state;
     } catch {
       return defaultPersistedState();
     }
@@ -212,7 +247,7 @@ async function migrateEmbeddedHistory(
 
 export async function savePersistedState(
   state: PersistedState,
-  options?: { sourceWindowId?: string; broadcast?: boolean },
+  options?: { sourceWindowId?: string; broadcast?: boolean; syncGit?: boolean },
 ): Promise<void> {
   if (!canUseTauriIpc()) return;
 
@@ -220,7 +255,38 @@ export async function savePersistedState(
     ...state,
     windowSessions: trimWindowSessions(state.windowSessions),
   };
-  await dbSaveWorkspace(JSON.stringify(nextState));
+
+  const root = getGitWorkspaceRoot();
+  const syncGit = options?.syncGit !== false;
+  if (root && isGitWorkspaceActive() && syncGit) {
+    try {
+      await saveGitWorkspace(root, {
+        name: "Pulse",
+        root,
+        collectionGroups: nextState.collectionGroups,
+        collections: nextState.collections,
+        environments: nextState.environments,
+        secrets: [],
+      });
+    } catch (error) {
+      console.warn("Git workspace save failed:", error);
+    }
+    await dbSaveWorkspace(
+      JSON.stringify({
+        ...nextState,
+        collectionGroups: [],
+        collections: [],
+        environments: [],
+        secrets: [],
+      }),
+    );
+  } else {
+    const sqliteState =
+      root && isGitWorkspaceActive()
+        ? { ...nextState, collectionGroups: [], collections: [], environments: [], secrets: [] }
+        : { ...nextState, secrets: [] };
+    await dbSaveWorkspace(JSON.stringify(sqliteState));
+  }
   if (options?.broadcast !== false && options?.sourceWindowId) {
     await emitWorkspaceUpdated(options.sourceWindowId);
   }

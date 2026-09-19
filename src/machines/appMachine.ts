@@ -65,6 +65,7 @@ import { resolveRequestForSend } from "@/lib/resolve-request";
 import { upsertFolderConfig } from "@/lib/inherit";
 import { importOpenApiIntoState } from "@/lib/openapi-import";
 import { importPulseCollectionsFromFolder } from "@/lib/pulse-collection";
+import { getGitWorkspaceRoot, saveGitRequest } from "@/lib/git-workspace";
 import { validateResponseAgainstSchema } from "@/lib/json-schema";
 import { wsClose, wsConnect, sseConnect, wsPing, wsSend } from "@/lib/ws-client";
 
@@ -296,6 +297,13 @@ export type AppMachineEvent =
   | { type: "IMPORT_INSOMNIA"; raw: string }
   | { type: "IMPORT_OPENAPI"; raw: string }
   | { type: "IMPORT_COLLECTIONS_FOLDER"; files: Array<{ name: string; contents: string }> }
+  | {
+      type: "LOAD_GIT_WORKSPACE";
+      collectionGroups: CollectionGroup[];
+      collections: SavedRequest[];
+      environments: Environment[];
+      secrets: KeyValue[];
+    }
   | { type: "IMPORT_ENVIRONMENTS"; raw: string }
   | { type: "ADD_COLLECTION_GROUP"; name: string }
   | { type: "DELETE_COLLECTION_GROUP"; id: string }
@@ -463,7 +471,17 @@ function persistLastRequest(context: AppMachineContext, broadcast = false) {
   void savePersistedState(buildPersistedFromContext(context), {
     sourceWindowId: context.windowId,
     broadcast,
+    syncGit: false,
   });
+  const root = getGitWorkspaceRoot();
+  const tab = getActiveTab(context);
+  if (!root || !tab?.savedRequestId) return;
+  const saved = context.persisted.collections.find((item) => item.id === tab.savedRequestId);
+  const group = context.persisted.collectionGroups.find((item) => item.id === saved?.collectionId);
+  if (!saved || !group) return;
+  void saveGitRequest(root, { ...saved, request: tab.request, name: tab.request.name }, group.name).catch(
+    (error) => console.warn("Git request save failed:", error),
+  );
 }
 
 export async function flushWorkspaceFromContext(context: AppMachineContext): Promise<void> {
@@ -477,6 +495,7 @@ function saveSharedWorkspace(context: AppMachineContext, patch: Partial<Persiste
   void savePersistedState(buildPersistedFromContext(context, patch), {
     sourceWindowId: context.windowId,
     broadcast: true,
+    syncGit: true,
   });
 }
 
@@ -645,12 +664,24 @@ export const appMachine = setup({
         },
         UPDATE_REQUEST: {
           actions: [
-            assign({
-              tabs: ({ context, event }) =>
-                mapActiveTab(context, (tab) => ({
-                  ...tab,
-                  request: patchRequest(tab.request, event.patch),
-                })),
+            assign(({ context, event }) => {
+              const tabs = mapActiveTab(context, (tab) => ({
+                ...tab,
+                request: patchRequest(tab.request, event.patch),
+              }));
+              const tab = tabs.find((item) => item.id === context.activeTabId);
+              if (!tab?.savedRequestId) {
+                return { tabs };
+              }
+              const persisted = {
+                ...context.persisted,
+                collections: context.persisted.collections.map((item) =>
+                  item.id === tab.savedRequestId
+                    ? { ...item, name: tab.request.name, request: tab.request }
+                    : item,
+                ),
+              };
+              return { tabs, persisted };
             }),
             "persistLastRequest",
           ],
@@ -959,6 +990,25 @@ export const appMachine = setup({
             const imported = importPulseCollectionsFromFolder(event.files, context.persisted);
             const persisted = { ...context.persisted, ...imported };
             saveSharedWorkspace(context, persisted);
+            return { persisted };
+          }),
+        },
+        LOAD_GIT_WORKSPACE: {
+          actions: assign(({ context, event }) => {
+            const persisted = {
+              ...context.persisted,
+              collectionGroups: event.collectionGroups,
+              collections: event.collections,
+              environments: event.environments.length ? event.environments : context.persisted.environments,
+              secrets: event.secrets,
+              activeCollectionId: event.collectionGroups[0]?.id ?? context.persisted.activeCollectionId,
+              activeEnvironmentId: event.environments[0]?.id ?? context.persisted.activeEnvironmentId,
+            };
+            void savePersistedState(buildPersistedFromContext(context, persisted), {
+              sourceWindowId: context.windowId,
+              broadcast: true,
+              syncGit: false,
+            });
             return { persisted };
           }),
         },

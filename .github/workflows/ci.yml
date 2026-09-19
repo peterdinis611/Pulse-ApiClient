@@ -59,6 +59,9 @@ jobs:
       - name: Unit tests (Python satellite)
         run: python3 -m unittest discover -s python/tests -p "test_*.py"
 
+      - name: YAML workspace contracts
+        run: cargo run -q -p pulse-core --bin pulse-contract -- python/examples/git-workspace
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

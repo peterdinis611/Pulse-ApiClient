@@ -29,6 +29,16 @@ from .openapi import export_spec, load_spec
 from .report import summarize_run
 from .schema import validate_json
 from .snippet import to_curl, to_fetch
+from .workspace import (
+    append_history as append_agent_history,
+    is_mutating_method,
+    list_requests as list_workspace_requests,
+    load_dotenv_secrets,
+    read_request as read_workspace_request,
+    workspace_root,
+    write_pending,
+    write_request as write_workspace_request,
+)
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "pulse"
@@ -214,13 +224,60 @@ def tool_send(arguments: dict) -> dict:
     url = str(arguments.get("url") or "")
     if not url:
         return _text("url is required", error=True)
-    return _text(_native().send_once_json(json.dumps(_http_payload(arguments))))
+    method = str(arguments.get("method") or "GET")
+    if is_mutating_method(method) and arguments.get("confirm") is not True:
+        root = workspace_root()
+        if root is not None:
+            write_pending(root, {"method": method, "url": url, "source": "agent"})
+        return _text(
+            "Mutating method requires confirm=true. Wrote .pulse/pending for desktop approval.",
+            error=True,
+        )
+    payload = _http_payload(arguments)
+    root = workspace_root()
+    if root is not None:
+        secrets = load_dotenv_secrets(root)
+        native = _native()
+        payload["url"] = native.interpolate(payload["url"], json.dumps(secrets))
+    raw = _native().send_once_json(json.dumps(payload))
+    if root is not None:
+        try:
+            response = json.loads(raw)
+        except json.JSONDecodeError:
+            response = {}
+        append_agent_history(
+            root,
+            {
+                "id": f"hist_agent_{os_id()}",
+                "sentAt": _now(),
+                "source": "agent",
+                "request": {"method": method, "url": url},
+                "response": {
+                    "status": response.get("status") if isinstance(response, dict) else None,
+                    "elapsedMs": response.get("elapsedMs") if isinstance(response, dict) else None,
+                    "sizeBytes": response.get("sizeBytes") if isinstance(response, dict) else None,
+                },
+            },
+        )
+    return _text(raw)
 
 
 def tool_run_collection(arguments: dict) -> dict:
     run_input, error = _run_input_from_args(arguments)
     if error:
         return error
+    methods = [
+        ((item.get("request") or {}).get("method") or "GET")
+        for item in (run_input or {}).get("requests") or []
+    ]
+    if any(is_mutating_method(str(method)) for method in methods) and arguments.get("confirm") is not True:
+        root = workspace_root()
+        if root is not None:
+            write_pending(root, {"kind": "collection", "path": arguments.get("path"), "source": "agent"})
+        return _text(
+            "Collection run includes mutating methods. Pass confirm=true after desktop approval.",
+            error=True,
+        )
     result = _run_collection_json(run_input or {})
     save_last_run(result)
     summary = arguments.get("summary")
@@ -500,6 +557,54 @@ def tool_validate_run(arguments: dict) -> dict:
     )
 
 
+def os_id() -> str:
+    import time
+
+    return str(int(time.time() * 1000))
+
+
+def _now() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).isoformat()
+
+
+def tool_workspace_list(_arguments: dict) -> dict:
+    root = workspace_root()
+    if root is None:
+        return _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    try:
+        return _json(list_workspace_requests(root))
+    except Exception as error:
+        return _text(str(error), error=True)
+
+
+def tool_workspace_read(arguments: dict) -> dict:
+    root = workspace_root()
+    if root is None:
+        return _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    item = read_workspace_request(root, str(arguments.get("id") or ""))
+    if item is None:
+        return _text("Request not found", error=True)
+    return _json(item)
+
+
+def tool_workspace_write(arguments: dict) -> dict:
+    root = workspace_root()
+    if root is None:
+        return _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    saved = arguments.get("saved")
+    if isinstance(saved, str):
+        saved = json.loads(saved)
+    if not isinstance(saved, dict):
+        return _text("saved must be a request object", error=True)
+    try:
+        path = write_workspace_request(root, saved, str(arguments.get("groupName") or "collection"))
+    except Exception as error:
+        return _text(str(error), error=True)
+    return _text(str(path))
+
+
 def tool_help(_arguments: dict) -> dict:
     return _json(
         {
@@ -529,6 +634,9 @@ TOOLS: dict[str, Callable[[dict], dict]] = {
     "pulse_snippet": tool_snippet,
     "pulse_last_run": tool_last_run,
     "pulse_validate_run": tool_validate_run,
+    "pulse_workspace_list": tool_workspace_list,
+    "pulse_workspace_read": tool_workspace_read,
+    "pulse_workspace_write": tool_workspace_write,
     "pulse_help": tool_help,
 }
 
@@ -564,6 +672,10 @@ TOOL_DEFS = [
                 "graphqlQuery": {"type": "string"},
                 "graphqlVariables": {"description": "JSON object or string"},
                 "graphqlOperationName": {"type": "string"},
+                "confirm": {
+                    "type": "boolean",
+                    "description": "Required true for POST/PUT/PATCH/DELETE",
+                },
             },
         },
     },
@@ -579,6 +691,10 @@ TOOL_DEFS = [
                 "dataPath": {"type": "string", "description": "Optional CSV/JSON iteration file"},
                 "collectionId": {"type": "string"},
                 "summary": {"type": "boolean", "default": True},
+                "confirm": {
+                    "type": "boolean",
+                    "description": "Required true when the collection includes POST/PUT/PATCH/DELETE",
+                },
             },
         },
     },
@@ -769,6 +885,32 @@ TOOL_DEFS = [
                 "result": {"type": "object", "description": "Run result instead of last-run"},
                 "body": {},
                 "schema": {"type": "object"},
+            },
+        },
+    },
+    {
+        "name": "pulse_workspace_list",
+        "description": "List YAML requests in PULSE_WORKSPACE (Git folder).",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "pulse_workspace_read",
+        "description": "Read one YAML request from PULSE_WORKSPACE by id or relative path.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {"id": {"type": "string"}},
+        },
+    },
+    {
+        "name": "pulse_workspace_write",
+        "description": "Write a saved request as *.pulse.yaml into PULSE_WORKSPACE.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["saved", "groupName"],
+            "properties": {
+                "saved": {"type": "object"},
+                "groupName": {"type": "string"},
             },
         },
     },

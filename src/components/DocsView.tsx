@@ -26,6 +26,7 @@ import {
   Terminal,
   Zap,
   Library,
+  Shield,
   type LucideIcon,
 } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
@@ -62,6 +63,8 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
   themes: Palette,
   search: Keyboard,
   data: Database,
+  privacy: Shield,
+  "git-workspace": GitBranch,
   "python-cli": Zap,
   mcp: Plug,
   libraries: Library,

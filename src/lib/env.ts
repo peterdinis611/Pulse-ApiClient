@@ -54,9 +54,14 @@ export function substituteVariables(
   if (!input.includes("{{")) return input;
 
   return input.replace(VARIABLE_PATTERN, (_, name: string) => {
-    const variable = environment?.variables.find(
-      (item) => item.enabled && item.key.trim() === name,
-    );
+    const variable =
+      environment?.variables.find((item) => item.enabled && item.key.trim() === name) ??
+      environment?.variables.find(
+        (item) =>
+          item.enabled &&
+          name.startsWith("secret.") &&
+          (item.key.trim() === name.slice("secret.".length) || item.key.trim() === name),
+      );
     return variable?.value ?? `{{${name}}}`;
   });
 }

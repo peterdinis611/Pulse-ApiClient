@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollAreaWithTop } from "@/components/ui/scroll-area-with-top";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { graphqlSubscribe } from "@/lib/graphql-ws";
 import type { WebSocketMessage } from "@/types";
 
 function formatMessageData(message: WebSocketMessage): string {
@@ -42,6 +43,7 @@ export function WebSocketPanel() {
   const { ws, request, connectWebSocket, disconnectWebSocket, sendWebSocketMessage, sendWebSocketPing } =
     useApp();
   const isSse = isSseProtocol(request.protocol);
+  const isGraphqlWs = !isSse && request.bodyKind === "graphql";
   const [draft, setDraft] = useState('{"type":"ping"}');
   const [sendBinary, setSendBinary] = useState(false);
   const [view, setView] = useState<"messages" | "handshake">("messages");
@@ -200,6 +202,27 @@ export function WebSocketPanel() {
                 <Radio className="size-4" />
                 Ping
               </Button>
+              {isGraphqlWs && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={ws.status !== "open"}
+                  onClick={() => {
+                    let variables: unknown;
+                    try {
+                      variables = JSON.parse(request.graphqlVariables || "{}");
+                    } catch {
+                      variables = {};
+                    }
+                    sendWebSocketMessage(
+                      graphqlSubscribe("1", request.graphqlQuery || "subscription { _ }", variables, request.graphqlOperationName),
+                    );
+                  }}
+                >
+                  Subscribe
+                </Button>
+              )}
             </div>
             <div className="flex gap-2">
               <Input

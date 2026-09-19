@@ -4,6 +4,7 @@
     "index",
     "collections",
     "environments",
+    "git-workspace",
     "history",
     "cookies",
     "http-engine"

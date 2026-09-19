@@ -177,6 +177,7 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
       "Connect / Disconnect replace Send while the stream is active",
       "Headers, query, path params, and inherited auth apply on connect",
       "WebSocket: send text or binary frames; ping; inspect incoming messages",
+      "GraphQL subscriptions: set body to GraphQL on a `ws://` request — Pulse negotiates `graphql-transport-ws` and can send subscribe frames",
       "SSE is incoming-only — events land in the same message list, no send/ping",
     ],
     howTo: [
@@ -250,9 +251,11 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
       "Data file — CSV or JSON, one row = one full iteration of the collection or folder",
       "Runner uses the same inheritance and variable layers as a single Send",
       "Import Pulse JSON, Postman v2.1, Bruno, Insomnia, OpenAPI",
+      "OpenAPI explorer in the explorer transfer menu — fetch a spec, click an operation, open it as a request (save writes YAML when Git is attached)",
       "Export one collection as Pulse, Postman, or OpenAPI 3.0 (⋯ menu), or the whole workspace",
       "OpenAPI import attaches JSON Schema from 200/201 when present; Send asserts 2xx vs that schema",
-      "Collections folder — Settings → Data: pick a Git directory, Write *.pulse.json, Reload from folder",
+      "Collections folder — Settings → Data: attach a Git directory; YAML tree is the workspace (one `*.pulse.yaml` per request)",
+      "Migrate leftover `*.pulse.json` dumps into the YAML tree from Settings → Data",
       "Postman import/export keeps collection and folder auth, variables, and scripts",
       "OpenAPI `{id}` paths become path params; operations land as requests",
     ],
@@ -261,7 +264,7 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
       "Play on a collection runs every request; Play on a folder runs that folder. View results for status and tests.",
       "Spreadsheet icon (or Run with CSV / JSON) picks a data file: each row becomes `{{column}}` for one iteration.",
       "Explorer transfer menu imports a file; collection ⋯ exports Pulse, Postman, or OpenAPI JSON.",
-      "Settings → Data → Collections folder writes the workspace as Git-friendly `*.pulse.json` files.",
+      "Settings → Data → Attach folder opens a Git workspace (`pulse.yaml`, `collections/`, `environments/`). SQLite keeps history, cache, and session only.",
     ],
   },
   {
@@ -277,6 +280,7 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
       "Secret — mask the current value in the UI (bullets)",
       "Initial vs current — snapshot plus Reset current from initial",
       "{{name}} substitution in URL, path, query, headers, auth, and body",
+      "{{secret.name}} reads gitignored `.env` (and the OS keychain overlay) — values are never written into YAML",
       "Autocomplete and the `{ }` picker list the merged enabled variables",
       "pulse.environment.set updates the real environment (current value), not globals",
       "Click a JSON key in the response body to upsert that value as {{key}} on the active environment",
@@ -288,7 +292,29 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
       "After Send, click `token` in the JSON tree — Pulse writes it to the environment and copies `{{token}}`.",
     ],
     tips: [
-      "Do not type secrets into collection JSON you plan to export and share — use environment or secret globals locally.",
+      "Do not type secrets into collection YAML you plan to commit — use `{{secret.*}}`, `.env`, or the keychain.",
+    ],
+  },
+  {
+    id: "git-workspace",
+    title: "Git workspace",
+    summary: "When a folder is attached, YAML files are the source of truth. SQLite is history, cache, session, and local secrets overlay.",
+    group: "Data",
+    items: [
+      "Layout: `pulse.yaml`, `collections/<name>/collection.yaml`, one `*.pulse.yaml` per request, `environments/*.yaml`",
+      "Attach folder from Settings → Data — Pulse inits `.gitignore` and `.env.example`",
+      "Notify watch reloads a request from disk; a dirty tab shows a line-diff instead of silent overwrite",
+      "Secrets stay in gitignored `.env` / OS keychain as `{{secret.*}}` — never in request YAML or history JSON",
+      "JSON remains import/export (Postman, Pulse dump), not the native Git format",
+      "Detached mode (no folder) still uses the 0.3 SQLite workspace",
+    ],
+    howTo: [
+      "Settings → Data → Attach folder. Pick the Git repo that should hold collections.",
+      "Save a request — Pulse writes `collections/…/name.pulse.yaml`. Commit that file.",
+      "Put tokens in `.env` as `API_TOKEN=…` and reference `{{secret.API_TOKEN}}` on the Auth tab.",
+    ],
+    tips: [
+      "Migrate old `*.pulse.json` dumps with Migrate on the same Settings row.",
     ],
   },
   {
@@ -302,6 +328,7 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
       "Fuzzy search across method, URL, and name",
       "Reload a past request into a tab; preview without opening",
       "Clear history from the explorer or Settings → Data",
+      "Source badge: desktop, agent (MCP), or cli",
     ],
   },
   {
@@ -387,15 +414,44 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
     summary: "Workspace data is local to your account on this device.",
     group: "Productivity",
     items: [
-      "SQLite per user: workspace, history, HTTP cache",
+      "SQLite per user: history, HTTP cache, and UI session (collections live on disk when a Git folder is attached)",
       "Settings — export collections, reset database, clear cache",
       "Sign in keeps a separate auth database from workspace data",
       "No Pulse cloud — collections stay on disk unless you export them or sync a Git folder",
-      "Settings → Data → Collections folder writes/reloads `*.pulse.json` for Bruno-style Git diffs",
+      "Settings → Data → Attach folder uses YAML as the canonical Git workspace; Write/Reload of `*.pulse.json` is no longer the primary flow",
       "File pickers (custom CSS, language pack, mTLS PEMs, runner data, collections folder) are OS-agnostic — no hardcoded `~/Library` paths",
     ],
     tips: [
       "Linux AppImage and .deb need webkit2gtk 4.1 at runtime, not only when compiling. Install `libwebkit2gtk-4.1-0` (Debian/Ubuntu) if the window fails to open.",
+    ],
+  },
+  {
+    id: "privacy",
+    title: "Privacy policy",
+    summary:
+      "Pulse does not operate a cloud. Your workspace stays on this device unless you send a request, share a Git repo, or export a file yourself.",
+    group: "Productivity",
+    items: [
+      "Effective 19 September 2026. This policy describes the Pulse desktop app, CLI, and MCP satellite — not the APIs you call.",
+      "No Pulse account in the cloud. Sign-in is a local SQLite auth database (name, email, password hash) on this machine.",
+      "Workspace data (collections, environments, history, cookies, HTTP cache, window session) is stored locally. With a Git folder attached, collections live in YAML on disk; SQLite keeps history, cache, and session.",
+      "Pulse does not phone home: no telemetry, crash reports, analytics, or ads to Pulse servers. There is no Pulse operator that receives your collections.",
+      "HTTP, GraphQL, WebSocket, and SSE traffic goes only to URLs you enter (or that an MCP/CLI run you started enters). Those destinations have their own policies.",
+      "Secrets: `{{secret.*}}` values come from a gitignored `.env` and the OS keychain. They are stripped from YAML and redacted from history JSON. Do not commit `.env`.",
+      "The cookie jar holds cookies for APIs you called — not Pulse tracking cookies.",
+      "MCP (`pulse_send`, collection runs) writes agent history locally (`source=agent`) and requires `confirm=true` before POST/PUT/PATCH/DELETE.",
+      "Export, Git push, and file copies are under your control. Anyone with the files can read non-secret request definitions.",
+      "To delete local data: Settings → Data → clear history, clear cache, or reset the database; detach the Git folder; delete the app data directory and `.env` if you want a full wipe.",
+      "Pulse is not directed at children. It does not collect personal data over the network for Pulse’s own purposes.",
+      "We do not sell personal data. Pulse never receives it. Third parties are only the APIs, Git hosts, and MCP clients you choose.",
+    ],
+    howTo: [
+      "Read this page in-app (Docs → Privacy policy) or on the field-manual site at `/docs/productivity/privacy`.",
+      "Keep tokens out of Git: `.env` + `{{secret.NAME}}` on Auth, or the OS keychain.",
+      "Wipe this device copy from Settings → Data when you are done with a workspace.",
+    ],
+    tips: [
+      "If you self-host docs or redistribute Pulse, keep this policy with the app. Changing network behavior (telemetry, accounts, sync) would require an updated policy.",
     ],
   },
   {
@@ -405,6 +461,7 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
     group: "Productivity",
     items: [
       "`bun run pulse:cli run collection.json` — Pulse export or CollectionRunInput, optional `.env` / CSV iterations",
+      "`bun run pulse:cli contract path/to/workspace` — validate Git YAML examples vs responseSchema and `*.previous.json` snapshots",
       "JUnit XML and a p50/p95 timing summary for GitHub Actions",
       "`bench` repeats a collection and fails if p95 exceeds a budget or a previous baseline",
       "OpenAPI import fills path params, query, JSON examples, tag folders, and a 2xx status test",
@@ -423,9 +480,10 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
     summary: "Cursor (and other MCP clients) can call the Pulse Rust engine over stdio — send, GraphQL, cURL, collections, bench, OpenAPI, diff.",
     group: "Productivity",
     items: [
-      "Project config: `.cursor/mcp.json` launches `.venv/bin/python python/pulse_mcp.py`",
+      "Project config: `.cursor/mcp.json` launches Python (`python/pulse_mcp.py`) for OpenAPI/HAR and `cargo run -p pulse-mcp` for the Rust YAML workspace server",
+      "Set `PULSE_WORKSPACE` to the same Git folder the desktop attached",
       "Resources: `pulse://examples/pets.json`, `pulse://last-run`, `pulse://openapi/{file}`, `pulse://out/{file}`",
-      "Tools: pulse_send, pulse_run_collection, pulse_bench, pulse_write_collection, pulse_pre_request, pulse_interpolate, pulse_run_tests, pulse_openapi, pulse_har, pulse_schema, pulse_diff, pulse_export_openapi, pulse_graphql, pulse_curl, pulse_snippet, pulse_last_run, pulse_validate_run, pulse_help",
+      "Tools: pulse_workspace_list/read/write, pulse_send (mutating methods need confirm=true), pulse_run_collection, pulse_bench, pulse_write_collection, pulse_pre_request, pulse_interpolate, pulse_run_tests, pulse_openapi, pulse_har, pulse_schema, pulse_diff, pulse_export_openapi, pulse_graphql, pulse_curl, pulse_snippet, pulse_last_run, pulse_validate_run, pulse_help",
       "Prompts: run_and_explain, openapi_to_pulse, compare_responses, graphql_introspect, curl_import, export_openapi, explain_last_run, validate_schema — the prompt text names the tools",
       "Long collection runs and bench emit MCP progress (request name, status, ms) after each step",
       "OpenAPI/HAR write to `python/examples/.out/` and return a path — not a huge JSON blob",
@@ -452,10 +510,11 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
       "State & effects — XState 5, @xstate/react, Effect",
       "Desktop bridge — @tauri-apps/api, @tauri-apps/plugin-dialog, @tauri-apps/plugin-opener",
       "Workspace UX — @tanstack/react-hotkeys, @tanstack/react-pacer, fuse.js (fuzzy search), xlsx (Excel preview / runner data)",
-      "Desktop crate (`src-tauri`) — Tauri 2, tauri-plugin-dialog, tauri-plugin-opener, reqwest (rustls, JSON, multipart, cookies, SOCKS, stream), tokio, tokio-tungstenite, tokio-util, futures-util, rusqlite (bundled), moka, serde / serde_json, url, base64, sha2, regex, fuzzy-matcher, pulse-core",
-      "Engine crate (`crates/pulse-core`) — boa_engine (JS tests / pre-request), reqwest, tokio, serde, regex, url, base64",
+      "Desktop crate (`src-tauri`) — Tauri 2, tauri-plugin-dialog, tauri-plugin-opener, reqwest (rustls, JSON, multipart, cookies, SOCKS, stream), tokio, tokio-tungstenite, tokio-util, futures-util, rusqlite (bundled), moka, serde / serde_json, url, base64, sha2, regex, fuzzy-matcher, notify, keyring, pulse-core",
+      "Engine crate (`crates/pulse-core`) — boa_engine (JS tests / pre-request), reqwest, tokio, serde, serde_yaml, regex, url, base64",
+      "MCP crate (`crates/pulse-mcp`) — stdio JSON-RPC on pulse-core (YAML workspace + send)",
       "Python binding (`crates/pulse-native`) — PyO3 (abi3-py310) around pulse-core",
-      "Python package (`python/pulse`) — stdlib only: openapi, har, schema, runner, bench, junit, export, envfile, report, curl, diff, graphql, snippet, MCP protocol / tools / prompts / resources",
+      "Python package (`python/pulse`) — stdlib only: openapi, har, schema, runner, bench, junit, export, envfile, report, curl, diff, graphql, snippet, workspace (PULSE_WORKSPACE YAML), MCP protocol / tools / prompts / resources",
       "Optional Python — PyYAML (OpenAPI YAML), schemathesis (`python/tools/schemathesis_pulse.py`), maturin to build pulse_native",
       "Docs site (`docs/site`) — Next.js, Fumadocs (core, MDX, UI), lucide-react, cnfast",
       "Tests — Vitest (UI), wiremock (Rust HTTP), Python unittest",
@@ -484,7 +543,7 @@ export const FEATURE_DOC_GROUP_BLURBS: Record<FeatureDocGroup, string> = {
   Scripting: "Pre-request scripts, tests, and the bottom console against the last response.",
   Data: "Collections, environments, history, cookies, and the HTTP engine.",
   Appearance: "Built-in themes, UI language, and CSS / JSON overlays for chrome.",
-  Productivity: "Search, shortcuts, libraries, the Python CI satellite, and what stays on this machine.",
+  Productivity: "Search, shortcuts, privacy, libraries, the Python CI satellite, and what stays on this machine.",
 };
 
 const FUMADOCS_SCREENSHOTS: Partial<Record<string, { src: string; alt: string }>> = {

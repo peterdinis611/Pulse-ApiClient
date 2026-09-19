@@ -26,7 +26,7 @@ export const CHAPTERS = [
   {
     n: '05',
     title: 'Productivity',
-    blurb: 'Search, shortcuts, and what stays on this machine.',
+    blurb: 'Search, shortcuts, privacy, and what stays on this machine.',
     href: '/docs/productivity/search',
   },
 ] as const;

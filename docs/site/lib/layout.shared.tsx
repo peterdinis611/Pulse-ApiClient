@@ -22,6 +22,10 @@ export function baseOptions(): BaseLayoutProps {
         text: 'Requests',
         url: '/docs/workspace/requests',
       },
+      {
+        text: 'Privacy',
+        url: '/docs/productivity/privacy',
+      },
     ],
   };
 }

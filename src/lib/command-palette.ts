@@ -24,7 +24,7 @@ export type CommandPaletteItem = SearchDocument & {
 
 const SETTINGS_SECTIONS: Array<{ id: string; title: string; subtitle: string }> = [
   { id: "appearance", title: "Appearance", subtitle: "Theme, language, custom CSS" },
-  { id: "data", title: "Data & storage", subtitle: "Database, cache, collections folder" },
+  { id: "data", title: "Data & storage", subtitle: "Git workspace, database, cache" },
   { id: "http", title: "HTTP engine", subtitle: "TLS, proxy, mTLS, timeouts" },
   { id: "layout", title: "Layout", subtitle: "Explorer, shortcuts" },
   { id: "cookies", title: "Cookie jar", subtitle: "Stored cookies" },

@@ -2,7 +2,17 @@
   "mcpServers": {
     "pulse": {
       "command": "${workspaceFolder}/.venv/bin/python",
-      "args": ["${workspaceFolder}/python/pulse_mcp.py"]
+      "args": ["${workspaceFolder}/python/pulse_mcp.py"],
+      "env": {
+        "PULSE_WORKSPACE": "${workspaceFolder}/python/examples/git-workspace"
+      }
+    },
+    "pulse-rust": {
+      "command": "cargo",
+      "args": ["run", "-q", "-p", "pulse-mcp"],
+      "env": {
+        "PULSE_WORKSPACE": "${workspaceFolder}/python/examples/git-workspace"
+      }
     }
   }
 }
