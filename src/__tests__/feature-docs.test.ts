@@ -140,6 +140,16 @@ describe("feature-docs", () => {
         item.toLowerCase().includes("driver.js"),
       ),
     ).toBe(true);
+    expect(
+      FEATURE_DOC_SECTIONS.find((section) => section.id === "mock-server")?.items.some((item) =>
+        item.includes("4010"),
+      ),
+    ).toBe(true);
+    expect(
+      FEATURE_DOC_SECTIONS.find((section) => section.id === "whats-new")?.howTo?.some((step) =>
+        step.toLowerCase().includes("first-run"),
+      ),
+    ).toBe(true);
   });
 
   it("renders markdown for the docs folder", () => {

@@ -46,6 +46,11 @@ describe("changelog", () => {
     expect(latestRelease("2.0.0")?.title.en).toMatch(/2\.0/);
     expect(unseenReleases("0.3.0", "2.0.0").map((release) => release.version)).toEqual(["2.0.0"]);
     expect(CHANGELOG[0]?.changes.length).toBeGreaterThan(4);
+    expect(
+      CHANGELOG.find((release) => release.version === "2.0.0")?.changes.some(
+        (change) => change.id === "onboarding",
+      ),
+    ).toBe(true);
   });
 
   it("ships bilingual copy for every change", () => {

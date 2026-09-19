@@ -196,3 +196,7 @@ export function startProductTour(ctx: ProductTourContext): void {
 }
 
 export const PRODUCT_TOUR_STEP_COUNT = TOUR_STEPS.length;
+
+export const PRODUCT_TOUR_SELECTORS = TOUR_STEPS.map((step) => step.selector).filter(
+  (selector): selector is string => Boolean(selector),
+);

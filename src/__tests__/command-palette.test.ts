@@ -31,6 +31,11 @@ describe("command palette", () => {
     );
   });
 
+  it("finds first-run setup by query", () => {
+    const ranked = filterCommandPaletteItems(items, "first-run");
+    expect(ranked.some((item) => item.action === "onboarding")).toBe(true);
+  });
+
   it("fuzzy-ranks requests when queried", () => {
     const ranked = filterCommandPaletteItems(items, "list pe");
     expect(ranked[0]?.kind).toBe("request");
