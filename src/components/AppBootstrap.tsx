@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { LoadingScreen } from "@/components/LoadingScreen";
+import { t } from "@/lib/i18n";
 import { loadAppBootstrapData } from "@/lib/app-bootstrap-data";
 import { loadPersistedState } from "@/lib/storage";
 import { canUseTauriIpc, waitForTauriIpc } from "@/lib/tauri-runtime";
@@ -146,7 +147,7 @@ export function AppBootstrap({ children }: { children: ReactNode }) {
   }, [actorRef]);
 
   if (!ready) {
-    return <LoadingScreen label="Starting Pulse" />;
+    return <LoadingScreen label={t("loading.start")} />;
   }
 
   return children;

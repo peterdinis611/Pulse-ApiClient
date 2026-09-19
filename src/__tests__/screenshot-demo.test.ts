@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { getScreenshotMainView, isScreenshotMode } from "@/lib/screenshot-demo";
+import { getScreenshotMainView, getScreenshotShotParam, isScreenshotMode } from "@/lib/screenshot-demo";
 
 function setSearch(search: string) {
   Object.defineProperty(globalThis, "window", {
@@ -22,6 +22,12 @@ describe("screenshot mode", () => {
     setSearch("?shot=settings");
     expect(isScreenshotMode()).toBe(true);
     expect(getScreenshotMainView()).toBe("settings");
+  });
+
+  it("keeps the boot screen when capturing preload", () => {
+    setSearch("?shot=boot");
+    expect(isScreenshotMode()).toBe(false);
+    expect(getScreenshotShotParam()).toBe("boot");
   });
 
   it("ignores unknown shot names", () => {

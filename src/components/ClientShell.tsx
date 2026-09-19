@@ -89,7 +89,7 @@ export function ClientShell() {
           </Suspense>
         </main>
         {consoleOpen && (
-          <Suspense fallback={<LoadingScreen variant="inline" label="Loading console" />}>
+          <Suspense fallback={<LoadingScreen variant="inline" label={t("loading.console")} />}>
             <ResizableConsole>
               <ConsolePanel />
             </ResizableConsole>

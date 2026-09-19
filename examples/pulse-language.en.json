@@ -120,6 +120,13 @@
     "onboarding.replayHint": "Replay language, theme, and start-view setup. The same controls live below.",
     "loading.app": "Loading app",
     "loading.view": "Loading view",
+    "loading.start": "Starting Pulse",
+    "loading.console": "Loading console",
+    "loading.request": "Loading request",
+    "loading.panel": "Loading panel",
+    "loading.kicker": "Desk boot",
+    "loading.method": "GET",
+    "loading.path": "/workspace",
     "chrome.theme": "Theme",
     "chrome.language": "Language",
     "chrome.appearanceMore": "Language, CSS & appearance"

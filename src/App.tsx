@@ -3,6 +3,7 @@ import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { PacerProvider } from "@tanstack/react-pacer";
 import { AppProvider, useApp } from "@/machines";
 import { useT } from "@/hooks/useLocale";
+import { getScreenshotShotParam } from "@/lib/screenshot-demo";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { LoadingScreen } from "./components/LoadingScreen";
 import { ThemeSync } from "./components/ThemeSync";
@@ -22,6 +23,10 @@ const ClientShell = lazy(() =>
 function AppContent() {
   const { user } = useApp();
   const t = useT();
+
+  if (getScreenshotShotParam() === "boot") {
+    return <LoadingScreen label={t("loading.app")} />;
+  }
 
   return (
     <Suspense fallback={<LoadingScreen label={t("loading.app")} />}>

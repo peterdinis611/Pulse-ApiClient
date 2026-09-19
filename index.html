@@ -8,9 +8,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+    <link rel="stylesheet" href="/src/styles/preload.css" />
     <script>
       (function () {
         try {
@@ -51,18 +52,31 @@
 
   <body>
     <div id="root">
-      <div
-        style="
-          display: flex;
-          min-height: 100vh;
-          align-items: center;
-          justify-content: center;
-          font-family: 'Plus Jakarta Sans', ui-sans-serif, sans-serif;
-          font-size: 13px;
-          color: oklch(0.55 0.01 264);
-        "
-      >
-        Loading Pulse…
+      <div class="pulse-boot pulse-boot--full" role="status" aria-live="polite" aria-label="Loading Pulse">
+        <div class="pulse-boot__grain" aria-hidden="true"></div>
+        <div class="pulse-boot__scan" aria-hidden="true"></div>
+        <div class="pulse-boot__card">
+          <div class="pulse-boot__meta">
+            <p class="pulse-boot__kicker">Desk boot</p>
+            <p class="pulse-boot__clock">2.0.0</p>
+          </div>
+          <p class="pulse-boot__title" aria-hidden="true">
+            <span>P</span><span>U</span><span>L</span><span>S</span><span>E</span>
+          </p>
+          <p class="pulse-boot__line">
+            <span class="pulse-boot__method">GET</span>
+            <span class="pulse-boot__path">/workspace</span>
+            <span class="pulse-boot__cursor" aria-hidden="true"></span>
+          </p>
+          <div class="pulse-boot__rail" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+          <ol class="pulse-boot__ticks" aria-hidden="true">
+            <li>DNS</li>
+            <li>TLS</li>
+            <li>TTFB</li>
+            <li>BODY</li>
+          </ol>
+          <p class="pulse-boot__label">Loading Pulse</p>
+        </div>
       </div>
     </div>
     <script type="module" src="/src/main.tsx"></script>
