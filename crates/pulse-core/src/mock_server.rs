@@ -364,7 +364,10 @@ mod tests {
     async fn refuses_busy_lock_port() {
         let first = start_mock_server_on(vec![], Some(0)).await.unwrap();
         let port = first.handle.port;
-        let error = start_mock_server_on(vec![], Some(port)).await.unwrap_err();
+        let error = match start_mock_server_on(vec![], Some(port)).await {
+            Ok(_) => panic!("expected the lock to fail"),
+            Err(error) => error,
+        };
         assert!(error.contains("Could not lock"), "{error}");
     }
 }

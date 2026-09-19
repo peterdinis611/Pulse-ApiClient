@@ -15,5 +15,5 @@ examples:
         value: no-store
   - name: empty
     status: 200
-    body: "[]"
+    body: '[]'
     contentType: application/json

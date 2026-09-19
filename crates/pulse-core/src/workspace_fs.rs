@@ -366,10 +366,10 @@ fn yaml_examples(legacy: String, examples: Vec<YamlExampleFile>) -> Vec<Response
             status: 200,
             status_text: "OK".into(),
             headers: vec![],
-            body: legacy,
-            content_type: Some("application/json".into()),
             elapsed_ms: 0,
             size_bytes: legacy.len(),
+            body: legacy,
+            content_type: Some("application/json".into()),
         },
     }]
 }

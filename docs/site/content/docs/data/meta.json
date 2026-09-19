@@ -5,6 +5,7 @@
     "collections",
     "environments",
     "git-workspace",
+    "mock-server",
     "history",
     "cookies",
     "http-engine"

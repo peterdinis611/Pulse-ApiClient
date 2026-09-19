@@ -33,7 +33,7 @@ impl HttpState {
         dns: TimingResolver,
     ) -> Result<Client, String> {
         let mut builder = Client::builder()
-            .no_default_headers()
+            .referer(false)
             .pool_max_idle_per_host(32)
             .pool_idle_timeout(Duration::from_secs(90))
             .tcp_keepalive(Duration::from_secs(60))
