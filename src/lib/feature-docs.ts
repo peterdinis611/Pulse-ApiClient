@@ -397,6 +397,7 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
     group: "Appearance",
     items: [
       "Built-in themes via the theme picker",
+      "First-run setup asks for language, theme, start view, and explorer visibility — replay from Settings → Appearance",
       "UI language: Match system, English, or Slovenčina",
       "Custom language pack: upload or paste a JSON object of key → string overrides",
       "Missing language keys fall back to the built-in locale, then English",
@@ -407,7 +408,8 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
       "Example file: examples/pulse-theme-override.example.css",
     ],
     howTo: [
-      "Open Settings → Appearance. Pick Match system, English, or Slovenčina.",
+      "On first launch, pick a language and theme, then how the desk opens. Finish writes the same values Settings already uses.",
+      "Open Settings → Appearance. Pick Match system, English, or Slovenčina. Replay First-run setup from that row.",
       "Optional: Browse or paste a JSON language pack (see examples/pulse-language.en.json). Missing keys fall back to the language you picked.",
     ],
   },
@@ -418,7 +420,7 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
     group: "Productivity",
     items: [
       "Fuzzy search in the explorer and Overview",
-      "`Cmd/Ctrl + K` — command palette (jump to request, collection, setting, docs, What's new, product tour)",
+      "`Cmd/Ctrl + K` — command palette (jump to request, collection, setting, docs, What's new, product tour, first-run setup)",
       "`Cmd/Ctrl + Enter` — Send",
       "`Cmd/Ctrl + T` — new request tab",
       "`Cmd/Ctrl + W` — close tab",
@@ -439,14 +441,14 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
     group: "Productivity",
     items: [
       "On first launch of a new version, Pulse shows a What's new card with that release's changes",
-      "Walk through starts a Driver.js tour: Git folder, mock server, OpenAPI explorer, secrets, WebSocket/GraphQL, Docs",
+      "Walk through starts a Driver.js tour: first-run setup, Git folder, mock server, OpenAPI explorer, secrets, WebSocket/GraphQL, Docs",
       "Got it dismisses the card and stores the seen version locally — it will not appear again until the next version",
-      "Replay from Settings → Data, or the command palette (`What's new`, `Product tour`)",
+      "Replay from Settings → Appearance (setup) or Settings → Data (What's new / tour), or the command palette",
       "Add a changelog block in `src/lib/changelog.ts` before bumping `package.json`",
     ],
     howTo: [
       "After an update, read the notes, then Walk through to highlight the new UI.",
-      "Settings → Data → What's new / Product tour to replay without waiting for the next version.",
+      "Settings → Data → What's new / Product tour to replay notes. Settings → Appearance → First-run setup to replay language and theme.",
     ],
   },
   {

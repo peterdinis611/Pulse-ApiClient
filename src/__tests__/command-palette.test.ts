@@ -22,6 +22,7 @@ describe("command palette", () => {
     );
     expect(items.some((item) => item.action === "whats-new")).toBe(true);
     expect(items.some((item) => item.action === "product-tour")).toBe(true);
+    expect(items.some((item) => item.action === "onboarding")).toBe(true);
     expect(items.some((item) => item.kind === "collection" && item.collectionId === collection.id)).toBe(
       true,
     );

@@ -79,7 +79,11 @@ describe("feature-docs", () => {
     expect(preRequest?.tips?.length).toBeGreaterThan(0);
     expect(themes?.items.some((item) => item.toLowerCase().includes("css"))).toBe(true);
     expect(themes?.items.some((item) => item.toLowerCase().includes("language"))).toBe(true);
-    expect(themes?.howTo?.length).toBeGreaterThan(0);
+    expect(
+      FEATURE_DOC_SECTIONS.find((section) => section.id === "themes")?.items.some((item) =>
+        item.toLowerCase().includes("first-run"),
+      ),
+    ).toBe(true);
     expect(tests?.items.some((item) => item.includes("pulse.test"))).toBe(true);
     expect(inherit?.howTo?.length).toBeGreaterThan(0);
     expect(pathParams?.items.some((item) => item.includes(":id"))).toBe(true);

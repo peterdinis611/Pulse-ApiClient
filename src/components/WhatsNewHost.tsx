@@ -15,6 +15,7 @@ import {
   shouldShowWhatsNew,
   WHATS_NEW_EVENT,
 } from "@/lib/whats-new";
+import { ONBOARDING_COMPLETED_EVENT, shouldShowOnboarding } from "@/lib/onboarding";
 import { isScreenshotMode } from "@/lib/screenshot-demo";
 import { useApp } from "@/machines";
 import { useI18n } from "@/hooks/useLocale";
@@ -44,6 +45,7 @@ export function WhatsNewHost() {
   useEffect(() => {
     if (isScreenshotMode()) return;
     const timer = window.setTimeout(() => {
+      if (shouldShowOnboarding()) return;
       if (shouldShowWhatsNew()) {
         setForced(false);
         setOpen(true);
@@ -81,11 +83,18 @@ export function WhatsNewHost() {
         ensureExplorerOpen: () => setExplorerCollapsed(false),
       });
     };
+    const onOnboardingDone = () => {
+      if (!shouldShowWhatsNew()) return;
+      setForced(false);
+      setOpen(true);
+    };
     window.addEventListener(WHATS_NEW_EVENT, onWhatsNew);
     window.addEventListener(PRODUCT_TOUR_EVENT, onTour);
+    window.addEventListener(ONBOARDING_COMPLETED_EVENT, onOnboardingDone);
     return () => {
       window.removeEventListener(WHATS_NEW_EVENT, onWhatsNew);
       window.removeEventListener(PRODUCT_TOUR_EVENT, onTour);
+      window.removeEventListener(ONBOARDING_COMPLETED_EVENT, onOnboardingDone);
     };
   }, [resolvedLocale, setExplorerCollapsed, setMainView]);
 

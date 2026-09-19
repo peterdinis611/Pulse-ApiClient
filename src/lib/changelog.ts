@@ -136,6 +136,14 @@ export const CHANGELOG: ChangelogRelease[] = [
           sk: "Mock vráti len hlavičky z uloženého príkladu. HTTP klient neposiela predvolený User-Agent ani Accept-Encoding, kým ich nenastavíš.",
         },
       },
+      {
+        id: "onboarding",
+        title: { en: "First-run setup", sk: "Úvodné nastavenie" },
+        detail: {
+          en: "On a fresh install Pulse asks for language, theme, and start view. The same controls stay in Settings → Appearance and Layout.",
+          sk: "Pri čistej inštalácii Pulse požiada o jazyk, tému a úvodný pohľad. Tie isté ovládania ostávajú v Nastavenia → Vzhľad a Rozloženie.",
+        },
+      },
     ],
   },
 ];

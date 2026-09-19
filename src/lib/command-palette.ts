@@ -19,7 +19,7 @@ export type CommandPaletteItem = SearchDocument & {
   environmentId?: string;
   settingsSection?: string;
   docsSection?: string;
-  action?: "new-request" | "toggle-explorer" | "toggle-console" | "whats-new" | "product-tour";
+  action?: "new-request" | "toggle-explorer" | "toggle-console" | "whats-new" | "product-tour" | "onboarding";
 };
 
 const SETTINGS_SECTIONS: Array<{ id: string; title: string; subtitle: string }> = [
@@ -135,6 +135,16 @@ const ACTIONS: CommandPaletteItem[] = [
     meta: "Action",
     action: "product-tour",
     keywords: "driver walkthrough git yaml mock openapi",
+  },
+  {
+    id: "action:onboarding",
+    kind: "action",
+    title: "First-run setup",
+    subtitle: "Replay language, theme, and start view",
+    method: "",
+    meta: "Action",
+    action: "onboarding",
+    keywords: "onboarding welcome language theme appearance setup",
   },
 ];
 

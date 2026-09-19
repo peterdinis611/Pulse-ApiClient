@@ -40,6 +40,15 @@ describe("layout-preferences", () => {
     const loaded = loadLayoutPreferences();
     expect(loaded.explorerCollapsed).toBe(true);
     expect(loaded.explorerWidth).toBe(viewportMax);
+    expect(loaded.homeView).toBe("overview");
+  });
+
+  it("persists the start view", () => {
+    saveLayoutPreferences({
+      ...defaultLayoutPreferences(),
+      homeView: "request",
+    });
+    expect(loadLayoutPreferences().homeView).toBe("request");
   });
 
   it("restores valid saved preferences", () => {

@@ -70,6 +70,12 @@ import {
   type MockServerHandle,
 } from "@/lib/mock-server";
 import { requestProductTour, requestWhatsNew } from "@/lib/whats-new";
+import { requestOnboarding } from "@/lib/onboarding";
+import {
+  loadLayoutPreferences,
+  saveLayoutPreferences,
+  type HomeView,
+} from "@/lib/layout-preferences";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/useLocale";
 import type { MessageKey } from "@/lib/i18n";
@@ -261,6 +267,7 @@ export function SettingsView() {
   const [collectionsFolderPath, setCollectionsFolderPathState] = useState("");
   const [syncingFolder, setSyncingFolder] = useState(false);
   const [mockHandle, setMockHandle] = useState<MockServerHandle | null>(null);
+  const [homeView, setHomeViewState] = useState<HomeView>(() => loadLayoutPreferences().homeView);
   const [engineStats, setEngineStats] = useState<Awaited<ReturnType<typeof getHttpEngineStats>> | null>(
     null,
   );
@@ -622,6 +629,15 @@ export function SettingsView() {
           title={t("settings.appearance.title")}
           description={t("settings.appearance.description")}
         >
+          <SettingRow
+            tourId="onboarding"
+            title={t("onboarding.replay")}
+            description={t("onboarding.replayHint")}
+          >
+            <Button type="button" variant="outline" size="sm" onClick={() => requestOnboarding()}>
+              {t("onboarding.replay")}
+            </Button>
+          </SettingRow>
           <ThemePicker value={theme} onChange={setTheme} />
           <LanguageSettings />
           <CustomThemeSettings />
@@ -1183,8 +1199,42 @@ export function SettingsView() {
         <SettingsSection
           id="layout"
           title="Layout"
-          description="Explorer panel visibility and keyboard shortcuts."
+          description="Explorer panel visibility, start view, and keyboard shortcuts."
         >
+          <div className="space-y-2">
+            <p className="text-sm font-medium">{t("onboarding.workspace.title")}</p>
+            <p className="text-xs text-muted-foreground">{t("onboarding.workspace.hint")}</p>
+            <div className="grid grid-cols-2 gap-2">
+              {(["overview", "request"] as const).map((view) => {
+                const active = homeView === view;
+                return (
+                  <button
+                    key={view}
+                    type="button"
+                    onClick={() => {
+                      setHomeViewState(view);
+                      saveLayoutPreferences({ homeView: view });
+                    }}
+                    className={cn(
+                      "rounded-lg border px-3 py-2.5 text-left transition-all",
+                      active
+                        ? "border-primary ring-2 ring-primary/35"
+                        : "border-border/80 hover:border-primary/35",
+                    )}
+                  >
+                    <span className="block text-sm font-medium">
+                      {view === "overview" ? t("onboarding.home.overview") : t("onboarding.home.request")}
+                    </span>
+                    <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                      {view === "overview"
+                        ? t("onboarding.home.overviewHint")
+                        : t("onboarding.home.requestHint")}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <label className="flex items-center gap-3 rounded-md border border-border p-3 text-sm">
             <Checkbox
               checked={explorerCollapsed}

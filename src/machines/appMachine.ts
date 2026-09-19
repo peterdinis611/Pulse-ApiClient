@@ -403,7 +403,7 @@ function createInitialContext(): AppMachineContext {
     tabs: [initialTab],
     activeTabId: initialTab.id,
     requestTab: "params",
-    mainView: "overview",
+    mainView: loadLayoutPreferences().homeView,
     sidebarSearch: "",
     consoleOpen: false,
     responsePanelOpen: true,

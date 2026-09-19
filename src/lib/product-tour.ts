@@ -44,6 +44,17 @@ const TOUR_STEPS: TourStepDef[] = [
   },
   {
     view: "settings",
+    settingsSection: "appearance",
+    selector: "[data-tour='onboarding']",
+    side: "left",
+    title: { en: "First-run setup", sk: "Úvodné nastavenie" },
+    description: {
+      en: "Language, theme, and how the desk opens. Replay this wizard anytime — the same controls live here and under Layout.",
+      sk: "Jazyk, téma a ako sa otvorí stôl. Sprievodcu spustíš kedykoľvek — tie isté ovládania sú tu a v Rozložení.",
+    },
+  },
+  {
+    view: "settings",
     settingsSection: "data",
     selector: "[data-tour='git-workspace']",
     side: "left",

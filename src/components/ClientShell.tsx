@@ -4,6 +4,7 @@ import { AppRail } from "./AppRail";
 import { CommandPalette } from "./CommandPalette";
 import { GitWorkspaceSync } from "./GitWorkspaceSync";
 import { WhatsNewHost } from "./WhatsNewHost";
+import { OnboardingHost } from "./OnboardingHost";
 import { ExplorerPanel } from "./ExplorerPanel";
 import { LoadingScreen } from "./LoadingScreen";
 import { ResizableConsole } from "./ResizableConsole";
@@ -98,6 +99,7 @@ export function ClientShell() {
       </div>
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <GitWorkspaceSync />
+      <OnboardingHost />
       <WhatsNewHost />
     </div>
   );

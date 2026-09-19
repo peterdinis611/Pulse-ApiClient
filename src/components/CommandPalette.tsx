@@ -19,6 +19,7 @@ import {
 } from "@/lib/command-palette";
 import { navigatePulse } from "@/lib/app-navigate";
 import { requestProductTour, requestWhatsNew } from "@/lib/whats-new";
+import { requestOnboarding } from "@/lib/onboarding";
 import { formatModShortcut, PULSE_HOTKEYS } from "@/lib/hotkeys";
 import { methodTextClass } from "@/lib/method-colors";
 import { cn } from "@/lib/utils";
@@ -107,6 +108,7 @@ export function CommandPalette({
       if (item.action === "toggle-console") setConsoleOpen(!consoleOpen);
       if (item.action === "whats-new") requestWhatsNew();
       if (item.action === "product-tour") requestProductTour();
+      if (item.action === "onboarding") requestOnboarding();
     } else if (item.view) {
       setMainView(item.view);
       if (item.settingsSection || item.docsSection) {
