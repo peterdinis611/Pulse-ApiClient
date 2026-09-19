@@ -720,6 +720,30 @@ pub fn append_agent_history(root: &str, entry: &serde_json::Value) -> Result<(),
     file.write_all(line.as_bytes()).map_err(|e| e.to_string())
 }
 
+pub fn delete_request(root: &str, id: &str) -> Result<String, String> {
+    let payload = load_workspace(root)?;
+    let needle = id.trim();
+    let item = payload
+        .collections
+        .iter()
+        .find(|item| {
+            item.id == needle
+                || item.name == needle
+                || item.file_path.as_deref() == Some(needle)
+        })
+        .ok_or_else(|| format!("Request not found: {needle}"))?;
+    let rel = item
+        .file_path
+        .clone()
+        .ok_or_else(|| "Request has no file path".to_string())?;
+    let path = Path::new(root).join(&rel);
+    if !path.is_file() {
+        return Err(format!("File not found: {}", path.display()));
+    }
+    fs::remove_file(&path).map_err(|e| e.to_string())?;
+    Ok(rel)
+}
+
 pub fn read_agent_history(root: &str) -> Result<Vec<serde_json::Value>, String> {
     let path = PathBuf::from(root).join(".pulse").join("history.jsonl");
     let Ok(text) = fs::read_to_string(path) else {

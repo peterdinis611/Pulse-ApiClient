@@ -340,7 +340,7 @@ Appearance lives under Settings → Appearance.
 Find requests quickly and stay on the keyboard.
 
 - Fuzzy search in the explorer and Overview
-- `Cmd/Ctrl + K` — command palette (jump to request, collection, setting, docs)
+- `Cmd/Ctrl + K` — command palette (jump to request, collection, setting, docs, What's new, product tour)
 - `Cmd/Ctrl + Enter` — Send
 - `Cmd/Ctrl + T` — new request tab
 - `Cmd/Ctrl + W` — close tab
@@ -352,6 +352,21 @@ Find requests quickly and stay on the keyboard.
 - `Cmd/Ctrl + Shift + O` — overview window
 - Cheat sheet also lives in Settings → Layout
 - Shortcut labels show ⌘ on macOS and Ctrl+ on Windows/Linux
+
+### What's new & product tour
+
+Each app version opens a changelog once. Driver.js then walks the new controls.
+
+- On first launch of a new version, Pulse shows a What's new card with that release's changes
+- Walk through starts a Driver.js tour: Git folder, mock server, OpenAPI explorer, secrets, WebSocket/GraphQL, Docs
+- Got it dismisses the card and stores the seen version locally — it will not appear again until the next version
+- Replay from Settings → Data, or the command palette (`What's new`, `Product tour`)
+- Add a changelog block in `src/lib/changelog.ts` before bumping `package.json`
+
+**How to**
+
+1. After an update, read the notes, then Walk through to highlight the new UI.
+2. Settings → Data → What's new / Product tour to replay without waiting for the next version.
 
 ### Data & privacy
 

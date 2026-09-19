@@ -106,6 +106,14 @@ export const EN_MESSAGES = {
   }
 }`,
 
+  "whatsNew.kicker": "Release notes",
+  "whatsNew.takeTour": "Walk through",
+  "whatsNew.dismiss": "Got it",
+  "whatsNew.closeOverlay": "Close release notes",
+  "whatsNew.replay": "What's new",
+  "whatsNew.tour": "Product tour",
+  "whatsNew.tourHint": "Replay the guided walkthrough of this release.",
+
   "loading.app": "Loading app",
   "loading.view": "Loading view",
   "chrome.theme": "Theme",
@@ -214,6 +222,14 @@ export const SK_MESSAGES: Record<MessageKey, string> = {
     "rail.overview": "Übersicht"
   }
 }`,
+
+  "whatsNew.kicker": "Poznámky k verzii",
+  "whatsNew.takeTour": "Prejsť zmeny",
+  "whatsNew.dismiss": "Rozumiem",
+  "whatsNew.closeOverlay": "Zavrieť poznámky",
+  "whatsNew.replay": "Novinky",
+  "whatsNew.tour": "Prehliadka produktu",
+  "whatsNew.tourHint": "Znova spustiť sprievodcu touto verziou.",
 
   "loading.app": "Načítavam aplikáciu",
   "loading.view": "Načítavam pohľad",

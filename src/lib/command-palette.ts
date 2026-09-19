@@ -19,7 +19,7 @@ export type CommandPaletteItem = SearchDocument & {
   environmentId?: string;
   settingsSection?: string;
   docsSection?: string;
-  action?: "new-request" | "toggle-explorer" | "toggle-console";
+  action?: "new-request" | "toggle-explorer" | "toggle-console" | "whats-new" | "product-tour";
 };
 
 const SETTINGS_SECTIONS: Array<{ id: string; title: string; subtitle: string }> = [
@@ -115,6 +115,26 @@ const ACTIONS: CommandPaletteItem[] = [
     meta: "Action",
     action: "toggle-console",
     keywords: "logs eval",
+  },
+  {
+    id: "action:whats-new",
+    kind: "action",
+    title: "What's new",
+    subtitle: "Release notes for this version",
+    method: "",
+    meta: "Action",
+    action: "whats-new",
+    keywords: "changelog release notes version tour",
+  },
+  {
+    id: "action:product-tour",
+    kind: "action",
+    title: "Product tour",
+    subtitle: "Walk through Git workspace and 2.0 changes",
+    method: "",
+    meta: "Action",
+    action: "product-tour",
+    keywords: "driver walkthrough git yaml mock openapi",
   },
 ];
 

@@ -18,6 +18,7 @@ import {
   type CommandPaletteItem,
 } from "@/lib/command-palette";
 import { navigatePulse } from "@/lib/app-navigate";
+import { requestProductTour, requestWhatsNew } from "@/lib/whats-new";
 import { formatModShortcut, PULSE_HOTKEYS } from "@/lib/hotkeys";
 import { methodTextClass } from "@/lib/method-colors";
 import { cn } from "@/lib/utils";
@@ -104,6 +105,8 @@ export function CommandPalette({
       if (item.action === "new-request") newRequestTab();
       if (item.action === "toggle-explorer") toggleExplorerCollapsed();
       if (item.action === "toggle-console") setConsoleOpen(!consoleOpen);
+      if (item.action === "whats-new") requestWhatsNew();
+      if (item.action === "product-tour") requestProductTour();
     } else if (item.view) {
       setMainView(item.view);
       if (item.settingsSection || item.docsSection) {

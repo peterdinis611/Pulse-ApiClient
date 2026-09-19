@@ -14,6 +14,7 @@ from .envfile import load_data_rows
 from .export import to_run_input
 from .graphql import INTROSPECTION_QUERY, build_body as build_graphql_body, summarize_schema
 from .har import har_to_pulse
+from .junit import to_junit
 from .mcp_prompts import get_prompt, list_prompts
 from .mcp_resources import (
     list_resource_templates,
@@ -23,19 +24,32 @@ from .mcp_resources import (
     save_last_run,
     write_collection_file,
     write_out_json,
+    write_out_text,
 )
 from .openapi import convert as convert_openapi
 from .openapi import export_spec, load_spec
 from .report import summarize_run
 from .schema import validate_json
-from .snippet import to_curl, to_fetch
+from .snippet import SNIPPET_FORMATS
 from .workspace import (
     append_history as append_agent_history,
+    check_workspace_files,
+    delete_request as delete_workspace_request,
+    import_openapi_requests,
+    interpolate_value,
     is_mutating_method,
+    list_environments,
+    list_pending,
     list_requests as list_workspace_requests,
     load_dotenv_secrets,
+    merge_variables,
+    read_history,
     read_request as read_workspace_request,
+    request_to_http_payload,
+    search_requests,
+    workspace_as_payload,
     workspace_root,
+    workspace_status,
     write_pending,
     write_request as write_workspace_request,
 )
@@ -89,6 +103,21 @@ def _native():
     from .native import load_native
 
     return load_native()
+
+
+def _native_optional():
+    try:
+        import pulse_native
+    except ImportError:
+        return None
+    return pulse_native
+
+
+def _require_workspace() -> tuple[Path | None, dict | None]:
+    root = workspace_root()
+    if root is None:
+        return None, _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    return root, None
 
 
 def emit_step(event: dict) -> None:
@@ -487,7 +516,7 @@ def tool_snippet(arguments: dict) -> dict:
             return _text("url or request is required", error=True)
         payload = _http_payload(arguments)
     fmt = str(arguments.get("format") or "curl").lower()
-    snippets = {"curl": to_curl(payload), "fetch": to_fetch(payload)}
+    snippets = {name: builder(payload) for name, builder in SNIPPET_FORMATS.items()}
     if fmt in snippets:
         return _text(snippets[fmt])
     return _json(snippets)
@@ -605,6 +634,165 @@ def tool_workspace_write(arguments: dict) -> dict:
     return _text(str(path))
 
 
+def tool_workspace_send(arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    ident = str(arguments.get("id") or "")
+    if not ident:
+        return _text("id is required", error=True)
+    item = read_workspace_request(root, ident)
+    if item is None:
+        return _text(f"Request not found: {ident}", error=True)
+    method = str(item.get("method") or "GET")
+    url = str(item.get("url") or "")
+    if is_mutating_method(method) and arguments.get("confirm") is not True:
+        write_pending(root, {"id": ident, "method": method, "url": url, "source": "agent"})
+        return _text(
+            "Mutating method requires confirm=true. Wrote .pulse/pending for desktop approval.",
+            error=True,
+        )
+    extra = arguments.get("env") if isinstance(arguments.get("env"), dict) else {}
+    variables = merge_variables(
+        root,
+        group_name=str(item.get("groupName") or ""),
+        env_name=str(arguments.get("envName") or "") or None,
+        extra=extra,
+    )
+    interpolated = interpolate_value(item.get("request") or {}, variables)
+    payload = request_to_http_payload(interpolated if isinstance(interpolated, dict) else {})
+    raw = _native().send_once_json(json.dumps(payload))
+    try:
+        response = json.loads(raw)
+    except json.JSONDecodeError:
+        response = {}
+    append_agent_history(
+        root,
+        {
+            "id": f"hist_agent_{os_id()}",
+            "sentAt": _now(),
+            "source": "agent",
+            "request": {"id": ident, "method": payload.get("method"), "url": payload.get("url")},
+            "response": {
+                "status": response.get("status") if isinstance(response, dict) else None,
+                "elapsedMs": response.get("elapsedMs") if isinstance(response, dict) else None,
+                "sizeBytes": response.get("sizeBytes") if isinstance(response, dict) else None,
+            },
+        },
+    )
+    return _text(raw)
+
+
+def tool_workspace_envs(_arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    return _json(list_environments(root))
+
+
+def tool_workspace_history(arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    try:
+        limit = int(arguments.get("limit") or 20)
+    except (TypeError, ValueError):
+        limit = 20
+    return _json(read_history(root, limit=limit))
+
+
+def tool_workspace_pending(_arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    return _json(list_pending(root))
+
+
+def tool_workspace_search(arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    return _json(search_requests(root, str(arguments.get("query") or "")))
+
+
+def tool_workspace_delete(arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    ident = str(arguments.get("id") or "")
+    if not ident:
+        return _text("id is required", error=True)
+    if arguments.get("confirm") is not True:
+        return _text("Deleting a YAML request requires confirm=true", error=True)
+    try:
+        path = delete_workspace_request(root, ident)
+    except FileNotFoundError as error:
+        return _text(str(error), error=True)
+    return _json({"deleted": path.relative_to(root).as_posix()})
+
+
+def tool_workspace_status(_arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    return _json(workspace_status(root))
+
+
+def tool_workspace_import_openapi(arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    path = Path(arguments.get("path") or "")
+    if not path.is_file():
+        path = REPO_ROOT / path
+    if not path.is_file():
+        return _text(f"No such OpenAPI file: {arguments.get('path')}", error=True)
+    payload = convert_openapi(load_spec(path))
+    result = import_openapi_requests(root, payload, str(arguments.get("collection") or "") or None)
+    return _json(result)
+
+
+def tool_workspace_export_openapi(arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    spec = export_spec(workspace_as_payload(root))
+    if arguments.get("inline"):
+        return _json(spec)
+    written = write_out_json(spec, str(arguments.get("name") or "workspace-openapi"))
+    return _json({"path": str(written), "paths": len(spec.get("paths") or {})})
+
+
+def tool_contract(_arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    native = _native_optional()
+    if native is not None and hasattr(native, "check_workspace_json"):
+        raw = native.check_workspace_json(str(root))
+        try:
+            return _json(json.loads(raw))
+        except json.JSONDecodeError:
+            return _text(raw)
+    return _json(check_workspace_files(root))
+
+
+def tool_junit(arguments: dict) -> dict:
+    result = arguments.get("result")
+    if isinstance(result, str):
+        result = json.loads(result)
+    if not isinstance(result, dict):
+        result = load_last_run()
+    if not isinstance(result, dict):
+        return _text("No last run and no result provided", error=True)
+    xml = to_junit(result, str(arguments.get("suiteName") or "") or None)
+    if arguments.get("inline"):
+        return _text(xml)
+    written = write_out_text(xml, str(arguments.get("name") or "junit"), ".xml")
+    failures = xml.count("<failure")
+    return _json({"path": str(written), "failures": failures})
+
+
 def tool_help(_arguments: dict) -> dict:
     return _json(
         {
@@ -637,6 +825,17 @@ TOOLS: dict[str, Callable[[dict], dict]] = {
     "pulse_workspace_list": tool_workspace_list,
     "pulse_workspace_read": tool_workspace_read,
     "pulse_workspace_write": tool_workspace_write,
+    "pulse_workspace_send": tool_workspace_send,
+    "pulse_workspace_envs": tool_workspace_envs,
+    "pulse_workspace_history": tool_workspace_history,
+    "pulse_workspace_pending": tool_workspace_pending,
+    "pulse_workspace_search": tool_workspace_search,
+    "pulse_workspace_delete": tool_workspace_delete,
+    "pulse_workspace_status": tool_workspace_status,
+    "pulse_workspace_import_openapi": tool_workspace_import_openapi,
+    "pulse_workspace_export_openapi": tool_workspace_export_openapi,
+    "pulse_contract": tool_contract,
+    "pulse_junit": tool_junit,
     "pulse_help": tool_help,
 }
 
@@ -850,11 +1049,15 @@ TOOL_DEFS = [
     },
     {
         "name": "pulse_snippet",
-        "description": "Generate a curl or fetch snippet from method/url/headers/body (or a Pulse request object).",
+        "description": "Generate a curl, fetch, HTTPie, Python requests, or axios snippet from method/url/headers/body (or a Pulse request object).",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "format": {"type": "string", "enum": ["curl", "fetch", "all"], "default": "curl"},
+                "format": {
+                    "type": "string",
+                    "enum": ["curl", "fetch", "httpie", "python", "axios", "all"],
+                    "default": "curl",
+                },
                 "method": {"type": "string"},
                 "url": {"type": "string"},
                 "headers": {"type": "object", "additionalProperties": {"type": "string"}},
@@ -911,6 +1114,107 @@ TOOL_DEFS = [
             "properties": {
                 "saved": {"type": "object"},
                 "groupName": {"type": "string"},
+            },
+        },
+    },
+    {
+        "name": "pulse_workspace_send",
+        "description": "Send a saved YAML request from PULSE_WORKSPACE by id, name, or filePath. Interpolates collection vars, envName, and {{secret.*}}.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+                "id": {"type": "string"},
+                "envName": {"type": "string", "description": "Environment YAML name or id"},
+                "env": {"type": "object", "additionalProperties": {"type": "string"}},
+                "confirm": {
+                    "type": "boolean",
+                    "description": "Required true for POST/PUT/PATCH/DELETE",
+                },
+            },
+        },
+    },
+    {
+        "name": "pulse_workspace_envs",
+        "description": "List environment YAML files in PULSE_WORKSPACE (secret values are not in YAML).",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "pulse_workspace_history",
+        "description": "Read agent history.jsonl from PULSE_WORKSPACE/.pulse/.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"limit": {"type": "integer", "default": 20, "minimum": 0}},
+        },
+    },
+    {
+        "name": "pulse_workspace_pending",
+        "description": "List mutating MCP calls waiting in .pulse/pending until confirm=true.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "pulse_workspace_search",
+        "description": "Search YAML requests in PULSE_WORKSPACE by id, name, method, URL, or path.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+        },
+    },
+    {
+        "name": "pulse_workspace_delete",
+        "description": "Delete a YAML request file from PULSE_WORKSPACE. Requires confirm=true.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+                "id": {"type": "string"},
+                "confirm": {"type": "boolean"},
+            },
+        },
+    },
+    {
+        "name": "pulse_workspace_status",
+        "description": "Summarize PULSE_WORKSPACE: name, request count, environments, pending, history, secret key names.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "pulse_workspace_import_openapi",
+        "description": "Convert OpenAPI 3 into *.pulse.yaml files under PULSE_WORKSPACE/collections/.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["path"],
+            "properties": {
+                "path": {"type": "string"},
+                "collection": {"type": "string", "description": "Collection folder name (defaults to OpenAPI title)"},
+            },
+        },
+    },
+    {
+        "name": "pulse_workspace_export_openapi",
+        "description": "Export PULSE_WORKSPACE YAML requests as OpenAPI 3.0.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "inline": {"type": "boolean"},
+            },
+        },
+    },
+    {
+        "name": "pulse_contract",
+        "description": "Check PULSE_WORKSPACE contracts: JSON Schema on requests and breaking diffs vs *.previous.json snapshots.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "pulse_junit",
+        "description": "Turn the last collection run (or a given result) into JUnit XML under python/examples/.out/.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "result": {"type": "object"},
+                "suiteName": {"type": "string"},
+                "name": {"type": "string", "description": "Output filename stem"},
+                "inline": {"type": "boolean"},
             },
         },
     },

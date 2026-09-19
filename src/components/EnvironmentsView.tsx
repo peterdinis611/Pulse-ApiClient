@@ -88,7 +88,7 @@ export function EnvironmentsView() {
         />
       </PageToolbar>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2" data-tour="environments">
         <button
           type="button"
           onClick={() => setSelectedId(GLOBALS_ID)}

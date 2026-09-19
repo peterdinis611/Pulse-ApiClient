@@ -11,12 +11,28 @@ import {
 import { buildWindowSession, defaultPersistedState, type PersistedState } from "./storage";
 
 export function isScreenshotMode(): boolean {
-  return import.meta.env.VITE_SCREENSHOT_MODE === "true";
+  if (import.meta.env.VITE_SCREENSHOT_MODE === "true") return true;
+  const shot = getScreenshotShotParam();
+  return (
+    shot === "auth" ||
+    shot === "overview" ||
+    shot === "request" ||
+    shot === "settings" ||
+    shot === "environments"
+  );
+}
+
+export function getScreenshotShotParam(): string | null {
+  if (typeof window === "undefined") return null;
+  return new URLSearchParams(window.location.search).get("shot");
+}
+
+export function isScreenshotAuthShot(): boolean {
+  return getScreenshotShotParam() === "auth";
 }
 
 export function getScreenshotMainView(): MainView {
-  const params = new URLSearchParams(window.location.search);
-  const shot = params.get("shot");
+  const shot = getScreenshotShotParam();
   if (
     shot === "overview" ||
     shot === "request" ||

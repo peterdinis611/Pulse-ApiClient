@@ -2,10 +2,12 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { AppErrorScreen } from "./components/AppErrorScreen";
+import { writeStorageItem } from "./lib/app-config";
 import { bootstrapTheme } from "./lib/theme-bootstrap";
 import { loadAndApplyCustomThemeCss } from "./lib/custom-theme";
 import { bootstrapLocale } from "./lib/i18n";
 import { loadAndApplyCustomLanguage } from "./lib/custom-language";
+import { isScreenshotMode } from "./lib/screenshot-demo";
 import "./index.css";
 
 async function main() {
@@ -16,6 +18,10 @@ async function main() {
   }
 
   try {
+    if (isScreenshotMode()) {
+      writeStorageItem("locale", "en");
+      writeStorageItem("theme", "light");
+    }
     bootstrapLocale();
     await Promise.all([
       bootstrapTheme(),

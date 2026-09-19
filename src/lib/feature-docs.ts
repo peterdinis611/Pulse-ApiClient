@@ -394,7 +394,7 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
     group: "Productivity",
     items: [
       "Fuzzy search in the explorer and Overview",
-      "`Cmd/Ctrl + K` — command palette (jump to request, collection, setting, docs)",
+      "`Cmd/Ctrl + K` — command palette (jump to request, collection, setting, docs, What's new, product tour)",
       "`Cmd/Ctrl + Enter` — Send",
       "`Cmd/Ctrl + T` — new request tab",
       "`Cmd/Ctrl + W` — close tab",
@@ -406,6 +406,23 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
       "`Cmd/Ctrl + Shift + O` — overview window",
       "Cheat sheet also lives in Settings → Layout",
       "Shortcut labels show ⌘ on macOS and Ctrl+ on Windows/Linux",
+    ],
+  },
+  {
+    id: "whats-new",
+    title: "What's new & product tour",
+    summary: "Each app version opens a changelog once. Driver.js then walks the new controls.",
+    group: "Productivity",
+    items: [
+      "On first launch of a new version, Pulse shows a What's new card with that release's changes",
+      "Walk through starts a Driver.js tour: Git folder, mock server, OpenAPI explorer, secrets, WebSocket/GraphQL, Docs",
+      "Got it dismisses the card and stores the seen version locally — it will not appear again until the next version",
+      "Replay from Settings → Data, or the command palette (`What's new`, `Product tour`)",
+      "Add a changelog block in `src/lib/changelog.ts` before bumping `package.json`",
+    ],
+    howTo: [
+      "After an update, read the notes, then Walk through to highlight the new UI.",
+      "Settings → Data → What's new / Product tour to replay without waiting for the next version.",
     ],
   },
   {
@@ -543,7 +560,7 @@ export const FEATURE_DOC_GROUP_BLURBS: Record<FeatureDocGroup, string> = {
   Scripting: "Pre-request scripts, tests, and the bottom console against the last response.",
   Data: "Collections, environments, history, cookies, and the HTTP engine.",
   Appearance: "Built-in themes, UI language, and CSS / JSON overlays for chrome.",
-  Productivity: "Search, shortcuts, privacy, libraries, the Python CI satellite, and what stays on this machine.",
+  Productivity: "Search, shortcuts, what's new, privacy, libraries, the Python CI satellite, and what stays on this machine.",
 };
 
 const FUMADOCS_SCREENSHOTS: Partial<Record<string, { src: string; alt: string }>> = {

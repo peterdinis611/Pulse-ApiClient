@@ -93,7 +93,7 @@ export function ExplorerTransferMenu({
   };
 
   return (
-    <div className={cn("flex items-center gap-0.5", className)}>
+    <div className={cn("flex items-center gap-0.5", className)} data-tour="openapi-import">
       <TooltipIconButton
         variant="ghost"
         size="icon"

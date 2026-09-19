@@ -63,6 +63,7 @@ import {
   unwatchGitWorkspace,
 } from "@/lib/git-workspace";
 import { mockRoutesFromCollections, startMockServer, stopMockServer } from "@/lib/mock-server";
+import { requestProductTour, requestWhatsNew } from "@/lib/whats-new";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/useLocale";
 import type { MessageKey } from "@/lib/i18n";
@@ -99,14 +100,17 @@ function SettingRow({
   description,
   children,
   danger,
+  tourId,
 }: {
   title: string;
   description: string;
   children: ReactNode;
   danger?: boolean;
+  tourId?: string;
 }) {
   return (
     <div
+      data-tour={tourId}
       className={cn(
         "flex flex-col gap-3 border-b border-border/60 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between",
         danger && "rounded-md border border-destructive/30 bg-destructive/5 px-3 py-3",
@@ -632,6 +636,7 @@ export function SettingsView() {
           )}
 
           <SettingRow
+            tourId="git-workspace"
             title="Git workspace"
             description="Folder is the source of truth: YAML tree (one request per file). SQLite keeps history, cache, and session. Desktop only."
           >
@@ -734,6 +739,7 @@ export function SettingsView() {
           </SettingRow>
 
           <SettingRow
+            tourId="mock-server"
             title="Local mock server"
             description="Serve saved 2xx examples on 127.0.0.1. Routes come from the first example on each request."
           >
@@ -781,6 +787,17 @@ export function SettingsView() {
                   Stop
                 </Button>
               </div>
+            </div>
+          </SettingRow>
+
+          <SettingRow title={t("whatsNew.replay")} description={t("whatsNew.tourHint")}>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => requestWhatsNew()}>
+                {t("whatsNew.replay")}
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => requestProductTour()}>
+                {t("whatsNew.tour")}
+              </Button>
             </div>
           </SettingRow>
 

@@ -34,6 +34,7 @@ describe("feature-docs", () => {
         "search",
         "data",
         "privacy",
+        "whats-new",
         "python-cli",
         "mcp",
         "libraries",
@@ -127,6 +128,11 @@ describe("feature-docs", () => {
     expect(
       FEATURE_DOC_SECTIONS.find((section) => section.id === "privacy")?.items.some((item) =>
         item.toLowerCase().includes("no telemetry"),
+      ),
+    ).toBe(true);
+    expect(
+      FEATURE_DOC_SECTIONS.find((section) => section.id === "whats-new")?.items.some((item) =>
+        item.toLowerCase().includes("driver.js"),
       ),
     ).toBe(true);
   });
