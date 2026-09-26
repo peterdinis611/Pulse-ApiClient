@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { LOCKED_MOCK_PORT, mockRoutesFromCollections, startMockServer } from "@/lib/mock-server";
+import { LOCKED_MOCK_PORT, clampMockDelayMs, mockRoutesFromCollections, startMockServer } from "@/lib/mock-server";
 import { createRequest, createSavedRequest } from "@/lib/helpers";
 
 describe("mock routes", () => {
   it("locks the desktop mock to 127.0.0.1:4010", () => {
     expect(LOCKED_MOCK_PORT).toBe(4010);
+  });
+
+  it("clamps mock delay to 0..60000", () => {
+    expect(clampMockDelayMs(-1)).toBe(0);
+    expect(clampMockDelayMs(80)).toBe(80);
+    expect(clampMockDelayMs(90_000)).toBe(60_000);
   });
 
   it("refuses to start outside the desktop shell", async () => {

@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pulse.bench import compare_bench, run_bench
 from pulse.envfile import load_data_rows, load_env, parse_dotenv
 from pulse.export import is_run_input, to_run_input
-from pulse.har import har_to_pulse
+from pulse.har import har_to_pulse, pulse_to_har
 from pulse.junit import to_junit
 from pulse.openapi import convert
 from pulse.report import percentile, summarize_run
@@ -206,6 +206,25 @@ class HarTests(unittest.TestCase):
         self.assertEqual(request["method"], "POST")
         self.assertEqual(request["bodyKind"], "json")
         self.assertEqual(request["query"][0]["value"], "2")
+
+    def test_pulse_to_har(self) -> None:
+        payload = {
+            "collections": [
+                {
+                    "request": {
+                        "method": "GET",
+                        "url": "https://api.test/health",
+                        "headers": [{"key": "Accept", "value": "application/json", "enabled": True}],
+                        "query": [],
+                        "bodyKind": "none",
+                    }
+                }
+            ]
+        }
+        har = pulse_to_har(payload)
+        self.assertEqual(har["log"]["version"], "1.2")
+        self.assertEqual(len(har["log"]["entries"]), 1)
+        self.assertEqual(har["log"]["entries"][0]["request"]["method"], "GET")
 
 
 class ReportTests(unittest.TestCase):

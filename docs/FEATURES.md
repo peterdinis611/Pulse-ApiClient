@@ -214,7 +214,7 @@ Organize saved requests and run them as a set.
 - Runner uses the same inheritance and variable layers as a single Send
 - Import Pulse JSON, Postman v2.1, Bruno, Insomnia, OpenAPI
 - OpenAPI explorer in the explorer transfer menu — fetch a spec, click an operation, open it as a request (save writes YAML when Git is attached)
-- Export one collection as Pulse, Postman, or OpenAPI 3.0 (⋯ menu), or the whole workspace
+- Export one collection as Pulse, Postman, Bruno, Insomnia, or OpenAPI 3.0 (⋯ menu), or the whole workspace
 - OpenAPI import attaches JSON Schema from 200/201 when present; Send asserts 2xx vs that schema
 - Collections folder — Settings → Data: attach a Git directory; YAML tree is the workspace (one `*.pulse.yaml` per request)
 - Migrate leftover `*.pulse.json` dumps into the YAML tree from Settings → Data
@@ -226,7 +226,7 @@ Organize saved requests and run them as a set.
 1. Save from the request bar (collection + optional folder).
 2. Play on a collection runs every request; Play on a folder runs that folder. View results for status and tests.
 3. Spreadsheet icon (or Run with CSV / JSON) picks a data file: each row becomes `{{column}}` for one iteration.
-4. Explorer transfer menu imports a file; collection ⋯ exports Pulse, Postman, or OpenAPI JSON.
+4. Explorer transfer menu imports a file; collection ⋯ exports Pulse, Postman, Bruno, Insomnia, or OpenAPI JSON.
 5. Settings → Data → Attach folder opens a Git workspace (`pulse.yaml`, `collections/`, `environments/`). SQLite keeps history, cache, and session only.
 
 ### Variables & environments
@@ -278,6 +278,7 @@ When a folder is attached, YAML files are the source of truth. SQLite is history
 Lock 127.0.0.1:4010 and replay every saved response example. Only headers from the example go on the wire.
 
 - Settings → Data → Start mock binds 127.0.0.1:4010 and fails if that port is already taken
+- Optional base delay (ms) on Start; per-request `?delay=80` overrides (max 60s)
 - One route per saved example (not only the first) — same method and path, different bodies and statuses
 - `?example=name` picks a snapshot by Examples-tab name; `?status=404` picks by status
 - Without a query, Pulse serves the first 2xx example, then the first example
@@ -288,7 +289,7 @@ Lock 127.0.0.1:4010 and replay every saved response example. Only headers from t
 **How to**
 
 1. Save 200 and 404 snapshots on a request (Examples tab), then Settings → Data → Start mock.
-2. Call `http://127.0.0.1:4010/pets` for the 2xx body, or `…/pets?example=missing` / `…/pets?status=404`.
+2. Call `http://127.0.0.1:4010/pets` for the 2xx body, or `…/pets?example=missing` / `…/pets?status=404` / `…/pets?delay=120`.
 3. Stop from the same Settings row before starting again on :4010.
 
 > The mock never invents headers. The desktop HTTP client also sends no default User-Agent unless you set one.
@@ -302,6 +303,7 @@ Past sends stored in SQLite with search.
 - Fuzzy search across method, URL, and name
 - Reload a past request into a tab; preview without opening
 - Clear history from the explorer or Settings → Data
+- Export loaded history as HAR 1.2 from the explorer (request + status/timing; body not stored)
 - Source badge: desktop, agent (MCP), or cli
 
 ### Cookie jar
@@ -438,26 +440,28 @@ Satellite around the Rust engine — collection runs, benches, OpenAPI/HAR impor
 - JUnit XML and a p50/p95 timing summary for GitHub Actions
 - `bench` repeats a collection and fails if p95 exceeds a budget or a previous baseline
 - OpenAPI import fills path params, query, JSON examples, tag folders, and a 2xx status test
-- HAR capture → Pulse collection; JSON Schema subset for response bodies
+- HAR capture → Pulse collection; Pulse dump / history → HAR (`har --export`); JSON Schema subset for response bodies
+- `curl`, `diff`, and `snippet` subcommands (same helpers MCP already uses)
 - HTTP still goes through Rust (`pulse_native`); Python only prepares inputs and reports
 
 **How to**
 
 1. First `bun run tauri dev` (or `bun run pulse:cli:install`) builds the PyO3 module into `.venv`.
 2. Export a collection from Pulse, then `bun run pulse:cli run pets.json --env-file staging.env --summary --junit junit.xml`.
-3. Keep a `bench.json` from a good run and compare with `--baseline bench.json --factor 1.2`.
+3. `bun run pulse:cli curl 'curl -X POST https://api.test -d {"a":1}'` or `snippet --url https://api.test --format python`.
+4. Keep a `bench.json` from a good run and compare with `--baseline bench.json --factor 1.2`.
 
 ### MCP
 
-Cursor (and other MCP clients) can call the Pulse Rust engine over stdio — send, GraphQL, cURL, collections, bench, OpenAPI, Git workspace, contract, JUnit.
+Cursor (and other MCP clients) call the Pulse engine over stdio via one Python server — send, GraphQL, cURL, collections, bench, OpenAPI, Git workspace, contract, JUnit.
 
-- Project config: `.cursor/mcp.json` launches Python (`python/pulse_mcp.py`) for OpenAPI/HAR and `cargo run -p pulse-mcp` for the Rust YAML workspace server
+- Project config: `.cursor/mcp.json` launches **pulse** only (`python/pulse_mcp.py`) — covers OpenAPI/HAR plus YAML workspace tools
 - Set `PULSE_WORKSPACE` to the same Git folder the desktop attached
 - Resources: `pulse://examples/pets.json`, `pulse://last-run`, `pulse://openapi/{file}`, `pulse://out/{file}`, `pulse://workspace/requests|environments|history|pending`, `pulse://workspace/request/{id}`
 - Tools: pulse_workspace_list/read/write/send/envs/history/pending/search/delete/status/import_openapi/export_openapi, pulse_send (mutating methods need confirm=true), pulse_run_collection, pulse_bench, pulse_write_collection, pulse_pre_request, pulse_interpolate, pulse_run_tests, pulse_openapi, pulse_har, pulse_schema, pulse_diff, pulse_export_openapi, pulse_graphql, pulse_curl, pulse_snippet (curl/fetch/httpie/python/axios), pulse_last_run, pulse_validate_run, pulse_contract, pulse_junit, pulse_help
 - Prompts: run_and_explain, openapi_to_pulse, compare_responses, graphql_introspect, curl_import, export_openapi, explain_last_run, validate_schema, send_saved_request, workspace_status, contract_check, import_openapi_workspace
 - Long collection runs and bench emit MCP progress (request name, status, ms) after each step
-- OpenAPI/HAR write to `python/examples/.out/` and return a path — not a huge JSON blob
+- OpenAPI/HAR write to `python/examples/.out/` and return a POSIX path — not a huge JSON blob
 - Same engine as the CLI — not inside the Tauri window
 - Install once with `bun run pulse:cli:install`, then reload Cursor MCP
 

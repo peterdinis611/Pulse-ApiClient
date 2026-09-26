@@ -146,6 +146,60 @@ export const CHANGELOG: ChangelogRelease[] = [
       },
     ],
   },
+  {
+    version: "2.1.0",
+    date: "2026-09-26",
+    title: {
+      en: "Round-trips & agent CI",
+      sk: "Round-trip a agent CI",
+    },
+    summary: {
+      en: "Bruno and Insomnia export, mock latency, one MCP entrypoint, CLI curl/diff/snippet, and HAR from history.",
+      sk: "Bruno a Insomnia export, latencia mocku, jeden MCP vstup, CLI curl/diff/snippet a HAR z histórie.",
+    },
+    changes: [
+      {
+        id: "bruno-insomnia-export",
+        title: { en: "Bruno & Insomnia export", sk: "Bruno a Insomnia export" },
+        detail: {
+          en: "Collection ⋯ and the export menu write Bruno and Insomnia JSON — round-trip with the existing importers.",
+          sk: "Menu kolekcie a export zapíšu Bruno a Insomnia JSON — round-trip s existujúcimi importérmi.",
+        },
+      },
+      {
+        id: "mock-delay",
+        title: { en: "Mock latency", sk: "Latencia mocku" },
+        detail: {
+          en: "Settings → Data sets a base delay (ms). Override per call with ?delay=80. Cap is 60s; port stays :4010.",
+          sk: "Nastavenia → Dáta nastavia základné oneskorenie (ms). Na volanie prepíšeš ?delay=80. Strop 60s; port ostáva :4010.",
+        },
+      },
+      {
+        id: "mcp-one",
+        title: { en: "One MCP server", sk: "Jeden MCP server" },
+        detail: {
+          en: ".cursor/mcp.json keeps only pulse (Python). Paths in tool results stay POSIX on Windows.",
+          sk: ".cursor/mcp.json drží len pulse (Python). Cesty vo výsledkoch tools ostávajú POSIX aj na Windowse.",
+        },
+      },
+      {
+        id: "cli-curl-diff-snippet",
+        title: { en: "CLI curl / diff / snippet", sk: "CLI curl / diff / snippet" },
+        detail: {
+          en: "pulse curl, pulse diff, and pulse snippet are first-class subcommands. har accepts --export for Pulse → HAR.",
+          sk: "pulse curl, pulse diff a pulse snippet sú riadne subcommands. har berie --export pre Pulse → HAR.",
+        },
+      },
+      {
+        id: "har-history",
+        title: { en: "HAR from history", sk: "HAR z histórie" },
+        detail: {
+          en: "Explorer History → download exports the loaded entries as HAR 1.2 (status/timing; body not stored in history).",
+          sk: "Explorer História → download exportuje načítané záznamy ako HAR 1.2 (status/čas; telo v histórii nie je).",
+        },
+      },
+    ],
+  },
 ];
 
 export function parseSemver(version: string): [number, number, number] {

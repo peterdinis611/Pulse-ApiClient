@@ -12,11 +12,13 @@ Satellite around the Rust engine — collection runs, benches, OpenAPI/HAR impor
 - JUnit XML and a p50/p95 timing summary for GitHub Actions
 - `bench` repeats a collection and fails if p95 exceeds a budget or a previous baseline
 - OpenAPI import fills path params, query, JSON examples, tag folders, and a 2xx status test
-- HAR capture → Pulse collection; JSON Schema subset for response bodies
+- HAR capture → Pulse collection; Pulse dump / history → HAR (`har --export`); JSON Schema subset for response bodies
+- `curl`, `diff`, and `snippet` subcommands (same helpers MCP already uses)
 - HTTP still goes through Rust (`pulse_native`); Python only prepares inputs and reports
 
 ## Walkthrough
 
 1. First `bun run tauri dev` (or `bun run pulse:cli:install`) builds the PyO3 module into `.venv`.
 2. Export a collection from Pulse, then `bun run pulse:cli run pets.json --env-file staging.env --summary --junit junit.xml`.
-3. Keep a `bench.json` from a good run and compare with `--baseline bench.json --factor 1.2`.
+3. `bun run pulse:cli curl 'curl -X POST https://api.test -d {"a":1}'` or `snippet --url https://api.test --format python`.
+4. Keep a `bench.json` from a good run and compare with `--baseline bench.json --factor 1.2`.

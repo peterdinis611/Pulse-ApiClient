@@ -12,15 +12,18 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from pulse.bench import compare_bench, run_bench
+from pulse.curl import curl_to_payload
+from pulse.diff import compare as diff_compare
 from pulse.envfile import load_data_rows, load_env
 from pulse.export import is_run_input, to_run_input
-from pulse.har import har_to_pulse
+from pulse.har import har_to_pulse, pulse_to_har
 from pulse.junit import to_junit
 from pulse.native import load_native
 from pulse.openapi import convert as convert_openapi
 from pulse.openapi import load_spec
 from pulse.report import summarize_run
 from pulse.schema import validate_json
+from pulse.snippet import SNIPPET_FORMATS
 from pulse._util import write_json
 
 EXAMPLES = ROOT / "examples"
@@ -154,9 +157,52 @@ def cmd_schema(args: argparse.Namespace) -> int:
 
 
 def cmd_har(args: argparse.Namespace) -> int:
-    har = json.loads(_require_file(args.input, "har").read_text())
-    payload = har_to_pulse(har)
+    raw = json.loads(_require_file(args.input, "har").read_text())
+    if getattr(args, "export", False) or (
+        isinstance(raw, dict)
+        and ("collectionGroups" in raw or "collections" in raw or "history" in raw)
+        and "log" not in raw
+    ):
+        payload = pulse_to_har(raw)
+    else:
+        payload = har_to_pulse(raw)
     write_json(Path(args.out), payload) if args.out else print(json.dumps(payload, indent=2))
+    return 0
+
+
+def cmd_curl(args: argparse.Namespace) -> int:
+    payload = curl_to_payload(args.command)
+    if args.out:
+        write_json(Path(args.out), payload)
+    else:
+        print(json.dumps(payload, indent=2))
+    return 0
+
+
+def cmd_diff(args: argparse.Namespace) -> int:
+    left_path = Path(args.left)
+    right_path = Path(args.right)
+    left = json.loads(left_path.read_text()) if left_path.is_file() else _load_json(args.left)
+    right = json.loads(right_path.read_text()) if right_path.is_file() else _load_json(args.right)
+    report = diff_compare(left, right)
+    print(report.get("diff") or json.dumps(report, indent=2))
+    return 0 if report.get("equal") else 1
+
+
+def cmd_snippet(args: argparse.Namespace) -> int:
+    payload = json.loads(_require_file(args.input, "snippet").read_text()) if args.input else {
+        "method": args.method,
+        "url": args.url,
+        "headers": [],
+        "bodyKind": "none" if not args.body else "json",
+        "body": args.body or "",
+        "auth": {"authType": "none"},
+    }
+    fmt = (args.format or "curl").lower()
+    renderer = SNIPPET_FORMATS.get(fmt)
+    if renderer is None:
+        raise SystemExit(f"Unknown format {fmt!r}. Choose: {', '.join(SNIPPET_FORMATS)}")
+    print(renderer(payload))
     return 0
 
 
@@ -287,10 +333,38 @@ def main(argv: list[str] | None = None) -> int:
     schema.add_argument("schema")
     schema.set_defaults(func=cmd_schema)
 
-    har = sub.add_parser("har", help="Convert a HAR capture into a Pulse collection export")
+    har = sub.add_parser("har", help="HAR ↔ Pulse: import a capture, or --export a Pulse dump / history")
     har.add_argument("input")
     har.add_argument("--out")
+    har.add_argument(
+        "--export",
+        action="store_true",
+        help="Write HAR from a Pulse collection/history JSON (default auto-detects)",
+    )
     har.set_defaults(func=cmd_har)
+
+    curl = sub.add_parser("curl", help="Parse a cURL command into a Pulse HTTP payload JSON")
+    curl.add_argument("command", help="Full curl command (quote the whole string)")
+    curl.add_argument("--out")
+    curl.set_defaults(func=cmd_curl)
+
+    diff = sub.add_parser("diff", help="Unified diff between two JSON values or files")
+    diff.add_argument("left")
+    diff.add_argument("right")
+    diff.set_defaults(func=cmd_diff)
+
+    snippet = sub.add_parser("snippet", help="Generate curl/fetch/httpie/python/axios from a request JSON")
+    snippet.add_argument("--input", help="HttpRequestPayload JSON file")
+    snippet.add_argument("--url")
+    snippet.add_argument("--method", default="GET")
+    snippet.add_argument("--body")
+    snippet.add_argument(
+        "--format",
+        default="curl",
+        choices=sorted(SNIPPET_FORMATS),
+        help="Snippet language (default curl)",
+    )
+    snippet.set_defaults(func=cmd_snippet)
 
     openapi = sub.add_parser("openapi", help="Convert OpenAPI 3 into a Pulse collection export")
     openapi.add_argument("spec")
@@ -311,6 +385,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "send" and not args.input and not args.url:
         send.error("provide --url or --input")
+    if args.command == "snippet" and not args.input and not args.url:
+        snippet.error("provide --url or --input")
     return args.func(args)
 
 
