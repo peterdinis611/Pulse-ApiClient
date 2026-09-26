@@ -3,6 +3,7 @@ import type { SavedRequest } from "@/types";
 import { canUseTauriIpc } from "./tauri-runtime";
 
 export const LOCKED_MOCK_PORT = 4010;
+export const MAX_MOCK_DELAY_MS = 60_000;
 
 const HIDDEN_HEADERS = new Set([
   "x-request-id",
@@ -34,6 +35,7 @@ export type MockServerHandle = {
   port: number;
   locked: boolean;
   routeCount: number;
+  delayMs: number;
 };
 
 function isHiddenHeader(key: string): boolean {
@@ -69,11 +71,22 @@ export function mockRoutesFromCollections(collections: SavedRequest[]): MockRout
   });
 }
 
-export async function startMockServer(routes: MockRoute[]): Promise<MockServerHandle> {
+export function clampMockDelayMs(value: number): number {
+  if (!Number.isFinite(value) || value < 0) return 0;
+  return Math.min(Math.floor(value), MAX_MOCK_DELAY_MS);
+}
+
+export async function startMockServer(
+  routes: MockRoute[],
+  delayMs = 0,
+): Promise<MockServerHandle> {
   if (!canUseTauriIpc()) {
     throw new Error("Mock server is desktop-only");
   }
-  return invoke<MockServerHandle>("mock_server_start", { routes });
+  return invoke<MockServerHandle>("mock_server_start", {
+    routes,
+    delayMs: clampMockDelayMs(delayMs),
+  });
 }
 
 export async function stopMockServer(): Promise<void> {

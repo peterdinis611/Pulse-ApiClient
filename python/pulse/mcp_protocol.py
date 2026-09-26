@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Callable
@@ -75,6 +76,11 @@ def _text(text: str, *, error: bool = False) -> dict:
 
 def _json(value: object, *, error: bool = False) -> dict:
     return _text(json.dumps(value, indent=2), error=error)
+
+
+def _mcp_path(path: Path) -> str:
+    """Repo-relative paths in MCP JSON stay POSIX on Windows."""
+    return path.as_posix()
 
 
 def _headers(value: object) -> list[dict]:
@@ -376,7 +382,7 @@ def _written(payload: dict, name: str | None) -> dict:
     groups = payload.get("collectionGroups") or []
     return _json(
         {
-            "path": str(path),
+            "path": _mcp_path(path),
             "name": (groups[0] or {}).get("name") if groups else Path(path).stem,
             "requests": len(payload.get("collections") or []),
         }
@@ -463,7 +469,7 @@ def tool_export_openapi(arguments: dict) -> dict:
         return _json(spec)
     title = (spec.get("info") or {}).get("title") or "openapi"
     written = write_out_json(spec, arguments.get("name") or title)
-    return _json({"path": str(written), "title": title, "paths": len(spec.get("paths") or {})})
+    return _json({"path": _mcp_path(written), "title": title, "paths": len(spec.get("paths") or {})})
 
 
 def tool_graphql(arguments: dict) -> dict:
@@ -631,7 +637,7 @@ def tool_workspace_write(arguments: dict) -> dict:
         path = write_workspace_request(root, saved, str(arguments.get("groupName") or "collection"))
     except Exception as error:
         return _text(str(error), error=True)
-    return _text(str(path))
+    return _text(_mcp_path(path))
 
 
 def tool_workspace_send(arguments: dict) -> dict:
@@ -760,7 +766,7 @@ def tool_workspace_export_openapi(arguments: dict) -> dict:
     if arguments.get("inline"):
         return _json(spec)
     written = write_out_json(spec, str(arguments.get("name") or "workspace-openapi"))
-    return _json({"path": str(written), "paths": len(spec.get("paths") or {})})
+    return _json({"path": _mcp_path(written), "paths": len(spec.get("paths") or {})})
 
 
 def tool_contract(_arguments: dict) -> dict:
@@ -790,7 +796,39 @@ def tool_junit(arguments: dict) -> dict:
         return _text(xml)
     written = write_out_text(xml, str(arguments.get("name") or "junit"), ".xml")
     failures = xml.count("<failure")
-    return _json({"path": str(written), "failures": failures})
+    return _json({"path": _mcp_path(written), "failures": failures})
+
+
+def tool_mock_start(arguments: dict) -> dict:
+    native = load_native()
+    if not hasattr(native, "mock_start_json"):
+        return _text(
+            "pulse_native is outdated (missing mock_start_json). Rebuild with: bun run pulse:cli:install",
+            error=True,
+        )
+    delay_ms = int(arguments.get("delayMs") or 0)
+    routes = arguments.get("routes")
+    routes_json = json.dumps(routes) if routes is not None else None
+    workspace = str(arguments.get("workspace") or os.environ.get("PULSE_WORKSPACE") or "").strip() or None
+    try:
+        handle = native.mock_start_json(routes_json, delay_ms, workspace)
+    except Exception as error:  # noqa: BLE001 — surface engine errors to the agent
+        return _text(str(error), error=True)
+    return _json(json.loads(handle) if isinstance(handle, str) else handle)
+
+
+def tool_mock_stop(_arguments: dict) -> dict:
+    native = load_native()
+    if not hasattr(native, "mock_stop"):
+        return _text(
+            "pulse_native is outdated (missing mock_stop). Rebuild with: bun run pulse:cli:install",
+            error=True,
+        )
+    try:
+        native.mock_stop()
+    except Exception as error:  # noqa: BLE001
+        return _text(str(error), error=True)
+    return _text("ok")
 
 
 def tool_help(_arguments: dict) -> dict:
@@ -836,6 +874,8 @@ TOOLS: dict[str, Callable[[dict], dict]] = {
     "pulse_workspace_export_openapi": tool_workspace_export_openapi,
     "pulse_contract": tool_contract,
     "pulse_junit": tool_junit,
+    "pulse_mock_start": tool_mock_start,
+    "pulse_mock_stop": tool_mock_stop,
     "pulse_help": tool_help,
 }
 
@@ -1217,6 +1257,23 @@ TOOL_DEFS = [
                 "inline": {"type": "boolean"},
             },
         },
+    },
+    {
+        "name": "pulse_mock_start",
+        "description": "Start the local mock on 127.0.0.1:4010 from PULSE_WORKSPACE examples or explicit routes.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "delayMs": {"type": "integer", "default": 0},
+                "routes": {"type": "array", "description": "Optional MockRoute[]"},
+                "workspace": {"type": "string", "description": "Override PULSE_WORKSPACE"},
+            },
+        },
+    },
+    {
+        "name": "pulse_mock_stop",
+        "description": "Stop the local mock server started by pulse_mock_start.",
+        "inputSchema": {"type": "object", "properties": {}},
     },
     {
         "name": "pulse_help",

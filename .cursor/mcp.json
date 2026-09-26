@@ -6,13 +6,6 @@
       "env": {
         "PULSE_WORKSPACE": "${workspaceFolder}/python/examples/git-workspace"
       }
-    },
-    "pulse-rust": {
-      "command": "cargo",
-      "args": ["run", "-q", "-p", "pulse-mcp"],
-      "env": {
-        "PULSE_WORKSPACE": "${workspaceFolder}/python/examples/git-workspace"
-      }
     }
   }
 }

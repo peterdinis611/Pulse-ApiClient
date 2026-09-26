@@ -132,10 +132,104 @@ def to_axios(payload: dict) -> str:
     return f"await axios({json.dumps(config, indent=2)})"
 
 
+def to_okhttp(payload: dict) -> str:
+    method = str(payload.get("method") or "GET").upper()
+    url = str(payload.get("url") or "")
+    headers = _enabled(payload.get("headers"))
+    body = str(payload.get("body") or "")
+    lines = ["OkHttpClient client = new OkHttpClient();", ""]
+    has_body = bool(body) and str(payload.get("bodyKind") or "none") not in {"", "none"}
+    if has_body and method not in {"GET", "HEAD"}:
+        media = "application/json" if str(payload.get("bodyKind") or "") == "json" else "text/plain"
+        lines.append(f'RequestBody body = RequestBody.create({json.dumps(body)}, MediaType.parse({json.dumps(media)}));')
+    lines.append("Request.Builder builder = new Request.Builder()")
+    lines.append(f"    .url({json.dumps(url)})")
+    body_arg = "body" if has_body and method not in {"GET", "HEAD"} else "null"
+    lines.append(f"    .method({json.dumps(method)}, {body_arg});")
+    for key, value in headers:
+        lines.append(f"builder.addHeader({json.dumps(key)}, {json.dumps(value)});")
+    lines.extend(
+        [
+            "Request request = builder.build();",
+            "try (Response response = client.newCall(request).execute()) {",
+            "    System.out.println(response.code());",
+            '    System.out.println(response.body() != null ? response.body().string() : "");',
+            "}",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def to_reqwest(payload: dict) -> str:
+    method = str(payload.get("method") or "GET").upper()
+    url = str(payload.get("url") or "")
+    headers = _enabled(payload.get("headers"))
+    body = str(payload.get("body") or "")
+    lines = [
+        "use reqwest::header::{HeaderMap, HeaderName, HeaderValue};",
+        "",
+        "#[tokio::main]",
+        "async fn main() -> Result<(), Box<dyn std::error::Error>> {",
+        "    let client = reqwest::Client::new();",
+        "    let mut headers = HeaderMap::new();",
+    ]
+    for key, value in headers:
+        lines.append(
+            f"    headers.insert(HeaderName::from_bytes({json.dumps(key)}.as_bytes())?, HeaderValue::from_str({json.dumps(value)})?);"
+        )
+    lines.append(
+        f"    let mut builder = client.request(reqwest::Method::from_bytes({json.dumps(method)}.as_bytes())?, {json.dumps(url)});"
+    )
+    lines.append("    builder = builder.headers(headers);")
+    if body and str(payload.get("bodyKind") or "none") not in {"", "none"} and method not in {"GET", "HEAD"}:
+        lines.append(f"    builder = builder.body({json.dumps(body)}.to_string());")
+    lines.extend(
+        [
+            "    let response = builder.send().await?;",
+            '    println!("{}", response.status());',
+            '    println!("{}", response.text().await?);',
+            "    Ok(())",
+            "}",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def to_swift(payload: dict) -> str:
+    method = str(payload.get("method") or "GET").upper()
+    url = str(payload.get("url") or "")
+    headers = _enabled(payload.get("headers"))
+    body = str(payload.get("body") or "")
+    lines = [
+        "import Foundation",
+        "",
+        f"var request = URLRequest(url: URL(string: {json.dumps(url)})!)",
+        f"request.httpMethod = {json.dumps(method)}",
+    ]
+    for key, value in headers:
+        lines.append(f"request.setValue({json.dumps(value)}, forHTTPHeaderField: {json.dumps(key)})")
+    if body and str(payload.get("bodyKind") or "none") not in {"", "none"} and method not in {"GET", "HEAD"}:
+        lines.append(f"request.httpBody = {json.dumps(body)}.data(using: .utf8)")
+    lines.extend(
+        [
+            "let task = URLSession.shared.dataTask(with: request) { data, response, error in",
+            "    if let error = error { print(error); return }",
+            "    if let http = response as? HTTPURLResponse { print(http.statusCode) }",
+            "    if let data = data, let text = String(data: data, encoding: .utf8) { print(text) }",
+            "}",
+            "task.resume()",
+        ]
+    )
+    return "\n".join(lines)
+
+
 SNIPPET_FORMATS = {
     "curl": to_curl,
     "fetch": to_fetch,
     "httpie": to_httpie,
     "python": to_python,
     "axios": to_axios,
+    "okhttp": to_okhttp,
+    "reqwest": to_reqwest,
+    "swift": to_swift,
 }

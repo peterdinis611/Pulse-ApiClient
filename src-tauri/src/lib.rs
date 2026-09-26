@@ -6,6 +6,7 @@ pub mod cache;
 pub mod collection_run;
 pub mod collections_folder;
 pub mod cookies;
+pub mod curl;
 pub mod custom_language;
 pub mod custom_theme;
 pub mod db;
@@ -92,6 +93,16 @@ fn clear_http_cache(state: State<'_, HttpState>) -> Result<u64, String> {
 #[tauri::command]
 fn get_http_cache_size(state: State<'_, HttpState>) -> Result<u64, String> {
     Ok(http::cache_size(state.inner()))
+}
+
+#[tauri::command]
+fn parse_curl(command: String) -> Result<HttpRequestPayload, String> {
+    curl::curl_to_payload(&command)
+}
+
+#[tauri::command]
+fn format_curl(payload: HttpRequestPayload) -> Result<String, String> {
+    Ok(curl::payload_to_curl(&payload))
 }
 
 #[tauri::command]
@@ -539,6 +550,8 @@ pub fn run() {
             get_http_engine_stats,
             clear_http_cache,
             get_http_cache_size,
+            parse_curl,
+            format_curl,
             get_theme,
             set_theme,
             get_app_settings,

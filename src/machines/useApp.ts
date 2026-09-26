@@ -18,6 +18,8 @@ import type { UserSession } from "@/lib/auth";
 import type { TestRunResult } from "@/types";
 import { exportCollectionJson, exportEnvironmentsJson, type PersistedState } from "@/lib/storage";
 import { exportPostmanCollection } from "@/lib/postman-export";
+import { exportBrunoCollection } from "@/lib/bruno-export";
+import { exportInsomniaCollection } from "@/lib/insomnia-export";
 import { exportPulseCollection } from "@/lib/pulse-collection";
 import { exportOpenApiCollection } from "@/lib/openapi-export";
 import { mergeVariableLayers } from "@/lib/env";
@@ -151,7 +153,10 @@ export function useApp() {
         collectionGroups: context.persisted.collectionGroups,
         collections: context.persisted.collections,
       }),
-    exportCollection: (collectionId: string, format: "pulse" | "postman" | "openapi") => {
+    exportCollection: (
+      collectionId: string,
+      format: "pulse" | "postman" | "openapi" | "bruno" | "insomnia",
+    ) => {
       const group = context.persisted.collectionGroups.find((item) => item.id === collectionId);
       if (!group) return null;
 
@@ -161,6 +166,12 @@ export function useApp() {
       }
       if (format === "openapi") {
         return exportOpenApiCollection(group, items);
+      }
+      if (format === "bruno") {
+        return exportBrunoCollection(group, items);
+      }
+      if (format === "insomnia") {
+        return exportInsomniaCollection(group, items);
       }
 
       return exportPulseCollection(group, items);

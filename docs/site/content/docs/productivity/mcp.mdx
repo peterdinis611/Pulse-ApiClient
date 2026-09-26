@@ -1,19 +1,20 @@
 ---
 title: "MCP"
-description: "Cursor (and other MCP clients) can call the Pulse Rust engine over stdio — send, GraphQL, cURL, collections, bench, OpenAPI, Git workspace, contract, JUnit."
+description: "Cursor (and other MCP clients) call the Pulse engine over stdio via one Python server — send, GraphQL, cURL, collections, bench, OpenAPI, Git workspace, contract, JUnit."
 ---
 
-Cursor (and other MCP clients) can call the Pulse Rust engine over stdio — send, GraphQL, cURL, collections, bench, OpenAPI, Git workspace, contract, JUnit.
+Cursor (and other MCP clients) call the Pulse engine over stdio via one Python server — send, GraphQL, cURL, collections, bench, OpenAPI, Git workspace, contract, JUnit.
 
 ## In the product
 
-- Project config: `.cursor/mcp.json` launches Python (`python/pulse_mcp.py`) for OpenAPI/HAR and `cargo run -p pulse-mcp` for the Rust YAML workspace server
+- Project config: `.cursor/mcp.json` launches **pulse** only (`python/pulse_mcp.py`) — covers OpenAPI/HAR plus YAML workspace tools
+- Optional Rust twin: `cargo run -p pulse-mcp` (workspace tools + run_tests / pre_request / run_collection / openapi_list / mock_start/stop)
 - Set `PULSE_WORKSPACE` to the same Git folder the desktop attached
 - Resources: `pulse://examples/pets.json`, `pulse://last-run`, `pulse://openapi/{file}`, `pulse://out/{file}`, `pulse://workspace/requests|environments|history|pending`, `pulse://workspace/request/{id}`
-- Tools: pulse_workspace_list/read/write/send/envs/history/pending/search/delete/status/import_openapi/export_openapi, pulse_send (mutating methods need confirm=true), pulse_run_collection, pulse_bench, pulse_write_collection, pulse_pre_request, pulse_interpolate, pulse_run_tests, pulse_openapi, pulse_har, pulse_schema, pulse_diff, pulse_export_openapi, pulse_graphql, pulse_curl, pulse_snippet (curl/fetch/httpie/python/axios), pulse_last_run, pulse_validate_run, pulse_contract, pulse_junit, pulse_help
+- Tools: pulse_workspace_*, pulse_send, pulse_run_collection, pulse_bench, pulse_write_collection, pulse_pre_request, pulse_interpolate, pulse_run_tests, pulse_openapi, pulse_har, pulse_schema, pulse_diff, pulse_export_openapi, pulse_graphql, pulse_curl, pulse_snippet (curl/fetch/httpie/python/axios/okhttp/reqwest/swift), pulse_mock_start/stop, pulse_last_run, pulse_validate_run, pulse_contract, pulse_junit, pulse_help
 - Prompts: run_and_explain, openapi_to_pulse, compare_responses, graphql_introspect, curl_import, export_openapi, explain_last_run, validate_schema, send_saved_request, workspace_status, contract_check, import_openapi_workspace
 - Long collection runs and bench emit MCP progress (request name, status, ms) after each step
-- OpenAPI/HAR write to `python/examples/.out/` and return a path — not a huge JSON blob
+- OpenAPI/HAR write to `python/examples/.out/` and return a POSIX path — not a huge JSON blob
 - Same engine as the CLI — not inside the Tauri window
 - Install once with `bun run pulse:cli:install`, then reload Cursor MCP
 

@@ -11,12 +11,15 @@ const request = createRequest({
 });
 
 describe("code-snippets", () => {
-  it("emits fetch, axios, httpie, python, and go", () => {
+  it("emits fetch, axios, httpie, python, go, okhttp, reqwest, and swift", () => {
     expect(requestToSnippet("fetch", request)).toContain("await fetch(");
     expect(requestToSnippet("axios", request)).toContain("axios({");
     expect(requestToSnippet("httpie", request)).toContain("http POST");
     expect(requestToSnippet("python", request)).toContain("import requests");
     expect(requestToSnippet("go", request)).toContain("http.NewRequest");
+    expect(requestToSnippet("okhttp", request)).toContain("OkHttpClient");
+    expect(requestToSnippet("reqwest", request)).toContain("reqwest::Client");
+    expect(requestToSnippet("swift", request)).toContain("URLSession");
   });
 
   it("includes bearer auth in generated snippets", () => {

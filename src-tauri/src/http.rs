@@ -148,14 +148,40 @@ pub async fn execute_request(
     payload: HttpRequestPayload,
 ) -> Result<HttpResponsePayload, String> {
     let cache_config = state.cache().config();
+    let key = if should_use_cache(&payload, &cache_config) {
+        Some(cache_key(&payload))
+    } else {
+        None
+    };
 
-    if should_use_cache(&payload, &cache_config) {
-        let key = cache_key(&payload);
-        if let Some(cached) = state.cache().get_response(&key) {
+    if let Some(key) = key.as_ref() {
+        if let Some(cached) = state.cache().get_response(key) {
             return Ok(HttpResponsePayload {
                 request_id: payload.request_id.clone(),
                 ..cached
             });
+        }
+    }
+
+    let mut payload = payload;
+    let mut conditional_stale = None;
+    if let Some(key) = key.as_ref() {
+        if let Some(validators) = state.cache().get_stale_validators(key) {
+            if let Some(etag) = validators.etag.clone() {
+                payload.headers.push(KeyValue {
+                    key: "If-None-Match".to_string(),
+                    value: etag,
+                    enabled: true,
+                });
+            }
+            if let Some(last_modified) = validators.last_modified.clone() {
+                payload.headers.push(KeyValue {
+                    key: "If-Modified-Since".to_string(),
+                    value: last_modified,
+                    enabled: true,
+                });
+            }
+            conditional_stale = Some(validators);
         }
     }
 
@@ -188,7 +214,7 @@ pub async fn execute_request(
         state.engine().unregister_abort(id);
     }
 
-    let response = match result {
+    let mut response = match result {
         Ok(Ok(Ok(response))) => {
             state.engine().finish_request(true);
             response
@@ -210,10 +236,53 @@ pub async fn execute_request(
         }
     };
 
-    if should_store_in_cache(&payload, &response, &state.cache().config()) {
-        state
-            .cache()
-            .insert(cache_key(&payload), response.clone());
+    if response.status == 304 {
+        if let Some(stale) = conditional_stale {
+            state.cache().record_revalidation();
+            let mut merged = stale.stale_response;
+            // Prefer fresh validators / cache headers from 304 when present.
+            for header in &response.headers {
+                if header.key.eq_ignore_ascii_case("etag")
+                    || header.key.eq_ignore_ascii_case("last-modified")
+                    || header.key.eq_ignore_ascii_case("cache-control")
+                    || header.key.eq_ignore_ascii_case("expires")
+                    || header.key.eq_ignore_ascii_case("date")
+                    || header.key.eq_ignore_ascii_case("age")
+                {
+                    if let Some(existing) = merged
+                        .headers
+                        .iter_mut()
+                        .find(|item| item.key.eq_ignore_ascii_case(&header.key))
+                    {
+                        existing.value = header.value.clone();
+                    } else {
+                        merged.headers.push(header.clone());
+                    }
+                }
+            }
+            merged.elapsed_ms = response.elapsed_ms;
+            merged.dns_ms = response.dns_ms;
+            merged.tls_ms = response.tls_ms;
+            merged.ttfb_ms = response.ttfb_ms;
+            merged.download_ms = response.download_ms;
+            merged.total_ms = response.total_ms;
+            merged.from_cache = true;
+            merged.cache_age_ms = Some(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as u64
+                    - stale.cached_at_ms,
+            );
+            response = merged;
+            if let Some(key) = key {
+                state.cache().insert(key, response.clone());
+            }
+        }
+    } else if should_store_in_cache(&payload, &response, &state.cache().config()) {
+        if let Some(key) = key {
+            state.cache().insert(key, response.clone());
+        }
     }
 
     state.record_set_cookies(

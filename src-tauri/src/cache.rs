@@ -4,12 +4,15 @@ use moka::sync::Cache;
 use sha2::{Digest, Sha256};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-const MAX_MEMORY_WEIGHT: u64 = 64 * 1024 * 1024;
+const MAX_MEMORY_WEIGHT: u64 = 96 * 1024 * 1024;
 const DEFAULT_TTL: Duration = Duration::from_secs(900);
 const MAX_TTL: Duration = Duration::from_secs(86_400);
 const DISK_MAX_ENTRIES: u64 = 2_000;
+/// Skip caching responses larger than this (body string length ≈ decoded size).
+pub const MAX_CACHE_BODY_BYTES: usize = 2 * 1024 * 1024;
 
 #[derive(Clone)]
 struct CachedEntry {
@@ -45,12 +48,21 @@ impl CacheConfig {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct CacheValidators {
+    pub etag: Option<String>,
+    pub last_modified: Option<String>,
+    pub stale_response: HttpResponsePayload,
+    pub cached_at_ms: u64,
+}
+
 pub struct ResponseCache {
     inner: Cache<String, CachedEntry>,
     disk: Mutex<Option<Arc<DbState>>>,
     config: Mutex<CacheConfig>,
     memory_hits: AtomicU64,
     disk_hits: AtomicU64,
+    revalidations: AtomicU64,
 }
 
 impl ResponseCache {
@@ -59,11 +71,13 @@ impl ResponseCache {
             inner: Cache::builder()
                 .max_capacity(MAX_MEMORY_WEIGHT)
                 .weigher(|_key, value: &CachedEntry| entry_weight(&value.response))
+                .time_to_idle(MAX_TTL)
                 .build(),
             disk: Mutex::new(None),
             config: Mutex::new(config),
             memory_hits: AtomicU64::new(0),
             disk_hits: AtomicU64::new(0),
+            revalidations: AtomicU64::new(0),
         }
     }
 
@@ -116,14 +130,53 @@ impl ResponseCache {
         Some(wrap_cached_response(response, disk_entry.cached_at_ms, true))
     }
 
+    /// Expired (or about-to-expire) entry with validators for conditional GET.
+    pub fn get_stale_validators(&self, key: &str) -> Option<CacheValidators> {
+        let config = self.config();
+        if !config.enabled {
+            return None;
+        }
+
+        let now = now_ms();
+
+        if let Some(entry) = self.inner.get(key) {
+            if entry.expires_at_ms <= now {
+                return validators_from_entry(&entry.response, entry.cached_at_ms);
+            }
+        }
+
+        if !config.disk_enabled {
+            return None;
+        }
+
+        let disk = self.disk.lock().expect("disk lock").clone()?;
+        let disk_entry = disk.cache_get_any(key).ok()??;
+        if disk_entry.expires_at_ms > now {
+            return None;
+        }
+        let response: HttpResponsePayload = serde_json::from_str(&disk_entry.response_json).ok()?;
+        validators_from_entry(&response, disk_entry.cached_at_ms)
+    }
+
+    pub fn record_revalidation(&self) {
+        self.revalidations.fetch_add(1, Ordering::Relaxed);
+    }
+
     pub fn insert(&self, key: String, response: HttpResponsePayload) {
         let config = self.config();
         if !config.enabled {
             return;
         }
 
+        if response.size_bytes > MAX_CACHE_BODY_BYTES || response.body.len() > MAX_CACHE_BODY_BYTES {
+            return;
+        }
+
         let cached_at_ms = now_ms();
         let ttl = cache_ttl_from_response(&response, config.default_ttl);
+        if ttl.is_zero() {
+            return;
+        }
         let expires_at_ms = cached_at_ms.saturating_add(ttl.as_millis() as u64);
 
         let entry = CachedEntry {
@@ -134,20 +187,29 @@ impl ResponseCache {
 
         self.inner.insert(key.clone(), entry);
 
-        if config.disk_enabled {
-            if let Some(disk) = self.disk.lock().expect("disk lock").clone() {
-                if let Ok(json) = serde_json::to_string(&response) {
-                    let _ = disk.cache_put(
-                        &key,
-                        &json,
-                        cached_at_ms,
-                        expires_at_ms,
-                        response.size_bytes,
-                        DISK_MAX_ENTRIES,
-                    );
-                }
-            }
+        if !config.disk_enabled {
+            return;
         }
+
+        let disk = match self.disk.lock().expect("disk lock").clone() {
+            Some(db) => db,
+            None => return,
+        };
+
+        // Disk I/O off the request path.
+        thread::spawn(move || {
+            if let Ok(json) = serde_json::to_string(&response) {
+                let _ = disk.cache_put(
+                    &key,
+                    &json,
+                    cached_at_ms,
+                    expires_at_ms,
+                    response.size_bytes,
+                    DISK_MAX_ENTRIES,
+                );
+                let _ = disk.cache_prune_expired(now_ms());
+            }
+        });
     }
 
     pub fn clear(&self) -> u64 {
@@ -179,7 +241,9 @@ impl ResponseCache {
     }
 
     pub fn hits(&self) -> u64 {
-        self.memory_hits.load(Ordering::Relaxed) + self.disk_hits.load(Ordering::Relaxed)
+        self.memory_hits.load(Ordering::Relaxed)
+            + self.disk_hits.load(Ordering::Relaxed)
+            + self.revalidations.load(Ordering::Relaxed)
     }
 
     pub fn memory_hits(&self) -> u64 {
@@ -188,6 +252,10 @@ impl ResponseCache {
 
     pub fn disk_hits(&self) -> u64 {
         self.disk_hits.load(Ordering::Relaxed)
+    }
+
+    pub fn revalidations(&self) -> u64 {
+        self.revalidations.load(Ordering::Relaxed)
     }
 
     pub fn prune_expired(&self) {
@@ -202,6 +270,35 @@ impl Default for ResponseCache {
     fn default() -> Self {
         Self::new(CacheConfig::default())
     }
+}
+
+fn validators_from_entry(response: &HttpResponsePayload, cached_at_ms: u64) -> Option<CacheValidators> {
+    let etag = header_value(response, "etag");
+    let last_modified = header_value(response, "last-modified");
+    if etag.is_none() && last_modified.is_none() {
+        return None;
+    }
+    Some(CacheValidators {
+        etag,
+        last_modified,
+        stale_response: response.clone(),
+        cached_at_ms,
+    })
+}
+
+fn header_value(response: &HttpResponsePayload, name: &str) -> Option<String> {
+    response.headers.iter().find_map(|header| {
+        if header.key.eq_ignore_ascii_case(name) {
+            let value = header.value.trim();
+            if value.is_empty() {
+                None
+            } else {
+                Some(value.to_string())
+            }
+        } else {
+            None
+        }
+    })
 }
 
 fn wrap_cached_response(
@@ -228,6 +325,19 @@ fn entry_weight(response: &HttpResponsePayload) -> u32 {
     bytes.min(u32::MAX as usize) as u32
 }
 
+const IGNORED_CACHE_HEADERS: &[&str] = &[
+    "accept-encoding",
+    "connection",
+    "keep-alive",
+    "proxy-connection",
+    "transfer-encoding",
+    "te",
+    "trailer",
+    "upgrade",
+    "cookie",
+    "content-length",
+];
+
 pub fn cache_key(payload: &HttpRequestPayload) -> String {
     let mut hasher = Sha256::new();
 
@@ -236,7 +346,11 @@ pub fn cache_key(payload: &HttpRequestPayload) -> String {
     hasher.update(payload.url.trim().as_bytes());
     hasher.update(b"|");
 
-    hash_sorted_pairs(&mut hasher, &enabled_sorted_pairs(&payload.headers));
+    let headers: Vec<_> = enabled_sorted_pairs(&payload.headers)
+        .into_iter()
+        .filter(|(key, _)| !IGNORED_CACHE_HEADERS.contains(&key.as_str()))
+        .collect();
+    hash_sorted_pairs(&mut hasher, &headers);
     hasher.update(b"|");
     hash_sorted_pairs(&mut hasher, &enabled_sorted_pairs(&payload.query));
     hasher.update(b"|");
@@ -355,7 +469,15 @@ pub fn should_store_in_cache(
         return false;
     }
 
+    if response.size_bytes > MAX_CACHE_BODY_BYTES || response.body.len() > MAX_CACHE_BODY_BYTES {
+        return false;
+    }
+
     if response_has_no_store(response) {
+        return false;
+    }
+
+    if cache_ttl_from_response(response, config.default_ttl).is_zero() {
         return false;
     }
 
@@ -365,26 +487,47 @@ pub fn should_store_in_cache(
 pub fn cache_ttl_from_response(response: &HttpResponsePayload, default_ttl: Duration) -> Duration {
     for header in &response.headers {
         if header.key.eq_ignore_ascii_case("cache-control") {
-            if let Some(max_age) = parse_max_age(&header.value) {
+            let value = header.value.to_ascii_lowercase();
+            if value.contains("no-store") || value.contains("no-cache") {
+                return Duration::ZERO;
+            }
+            if let Some(max_age) = parse_age_directive(&header.value, "s-maxage")
+                .or_else(|| parse_age_directive(&header.value, "max-age"))
+            {
                 return Duration::from_secs(max_age.min(MAX_TTL.as_secs()));
             }
-            let value = header.value.to_ascii_lowercase();
-            if value.contains("no-store") {
-                return Duration::ZERO;
+        }
+        if header.key.eq_ignore_ascii_case("expires") {
+            if let Some(ttl) = ttl_from_expires(&header.value) {
+                return ttl.min(MAX_TTL);
             }
         }
     }
     default_ttl
 }
 
-fn parse_max_age(value: &str) -> Option<u64> {
+fn parse_age_directive(value: &str, name: &str) -> Option<u64> {
+    let needle = format!("{name}=");
     for directive in value.split(',') {
-        let directive = directive.trim();
-        if let Some(seconds) = directive.strip_prefix("max-age=") {
-            return seconds.trim().parse().ok();
+        let lower = directive.trim().to_ascii_lowercase();
+        if let Some(seconds) = lower.strip_prefix(&needle) {
+            return seconds.trim().trim_matches('"').parse().ok();
         }
     }
     None
+}
+
+fn ttl_from_expires(value: &str) -> Option<Duration> {
+    let trimmed = value.trim();
+    if trimmed.eq_ignore_ascii_case("0") || trimmed.is_empty() {
+        return Some(Duration::ZERO);
+    }
+    let expires = httpdate::parse_http_date(trimmed).ok()?;
+    let now = SystemTime::now();
+    match expires.duration_since(now) {
+        Ok(ttl) => Some(ttl.min(MAX_TTL)),
+        Err(_) => Some(Duration::ZERO),
+    }
 }
 
 fn request_opted_out(payload: &HttpRequestPayload) -> bool {
@@ -404,7 +547,8 @@ fn response_has_no_store(response: &HttpResponsePayload) -> bool {
         if !header.key.eq_ignore_ascii_case("cache-control") {
             return false;
         }
-        header.value.to_ascii_lowercase().contains("no-store")
+        let value = header.value.to_ascii_lowercase();
+        value.contains("no-store") || value.contains("no-cache")
     })
 }
 

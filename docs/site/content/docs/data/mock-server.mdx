@@ -8,6 +8,7 @@ Lock 127.0.0.1:4010 and replay every saved response example. Only headers from t
 ## In the product
 
 - Settings → Data → Start mock binds 127.0.0.1:4010 and fails if that port is already taken
+- Optional base delay (ms) on Start; per-request `?delay=80` overrides (max 60s)
 - One route per saved example (not only the first) — same method and path, different bodies and statuses
 - `?example=name` picks a snapshot by Examples-tab name; `?status=404` picks by status
 - Without a query, Pulse serves the first 2xx example, then the first example
@@ -18,7 +19,7 @@ Lock 127.0.0.1:4010 and replay every saved response example. Only headers from t
 ## Walkthrough
 
 1. Save 200 and 404 snapshots on a request (Examples tab), then Settings → Data → Start mock.
-2. Call `http://127.0.0.1:4010/pets` for the 2xx body, or `…/pets?example=missing` / `…/pets?status=404`.
+2. Call `http://127.0.0.1:4010/pets` for the 2xx body, or `…/pets?example=missing` / `…/pets?status=404` / `…/pets?delay=120`.
 3. Stop from the same Settings row before starting again on :4010.
 
 <Callout title="Tip">

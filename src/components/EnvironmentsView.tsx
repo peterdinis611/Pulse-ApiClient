@@ -9,10 +9,27 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Panel, PanelBody, PanelHeader } from "@/components/ui/panel";
 import { Separator } from "@/components/ui/separator";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { exportEnvironmentsDotenv, exportPostmanEnvironment } from "@/lib/env-io";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 const GLOBALS_ID = "__globals__";
+
+function downloadText(content: string, filename: string, mime: string) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
 
 export function EnvironmentsView() {
   const {
@@ -39,6 +56,12 @@ export function EnvironmentsView() {
     ? null
     : (environments.find((env) => env.id === selectedId) ?? environments[0] ?? null);
 
+  const exportTarget =
+    selectedEnv ??
+    environments.find((env) => env.id === activeEnvironmentId) ??
+    environments[0] ??
+    null;
+
   return (
     <PageShell resetKey="environments">
       <PageToolbar className="justify-end">
@@ -46,24 +69,52 @@ export function EnvironmentsView() {
           <Plus />
           New
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8"
-          onClick={() => {
-            const blob = new Blob([exportEnvironments()], { type: "application/json" });
-            const url = URL.createObjectURL(blob);
-            const anchor = document.createElement("a");
-            anchor.href = url;
-            anchor.download = "pulse-environments.json";
-            anchor.click();
-            URL.revokeObjectURL(url);
-          }}
-        >
-          <Download />
-          Export
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" variant="outline" size="sm" className="h-8" disabled={!exportTarget && environments.length === 0}>
+              <Download />
+              Export
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuItem
+              onClick={() => {
+                downloadText(exportEnvironments(), "pulse-environments.json", "application/json");
+                toast.success("Environments exported", "Pulse JSON");
+              }}
+            >
+              All (Pulse JSON)
+            </DropdownMenuItem>
+            {exportTarget && (
+              <>
+                <DropdownMenuItem
+                  onClick={() => {
+                    downloadText(
+                      exportPostmanEnvironment(exportTarget),
+                      `${exportTarget.name.replace(/\s+/g, "-").toLowerCase() || "env"}.postman_environment.json`,
+                      "application/json",
+                    );
+                    toast.success("Environment exported", `${exportTarget.name} (Postman)`);
+                  }}
+                >
+                  Selected (Postman)
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    downloadText(
+                      exportEnvironmentsDotenv(exportTarget),
+                      `${exportTarget.name.replace(/\s+/g, "-").toLowerCase() || "env"}.env`,
+                      "text/plain",
+                    );
+                    toast.success("Environment exported", `${exportTarget.name} (.env)`);
+                  }}
+                >
+                  Selected (.env)
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
         <Button
           type="button"
           variant="outline"
@@ -77,12 +128,15 @@ export function EnvironmentsView() {
         <input
           ref={importRef}
           type="file"
-          accept="application/json,.json"
+          accept="application/json,.json,.env,text/plain"
           hidden
           onChange={(event) => {
             const file = event.target.files?.[0];
             if (!file) return;
-            void file.text().then(importEnvironments);
+            void file.text().then((raw) => {
+              importEnvironments(raw);
+              toast.success("Environments imported", file.name);
+            });
             event.target.value = "";
           }}
         />

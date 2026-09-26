@@ -28,6 +28,7 @@ import { importBrunoIntoState, isBrunoCollection } from "./bruno-import";
 import { importInsomniaIntoState, isInsomniaExport } from "./insomnia-import";
 import { exportPulseCollection, importPulseCollection, isPulseCollection } from "./pulse-collection";
 import { isOpenApiSpec, importOpenApiIntoState } from "./openapi-import";
+import { importDotenvAsEnvironment, isDotenvText } from "./env-io";
 import { getAppSettings } from "./http-client";
 import {
   getGitWorkspaceRoot,
@@ -328,6 +329,14 @@ export function importEnvironmentsJson(
   raw: string,
   state: PersistedState,
 ): Pick<PersistedState, "environments" | "activeEnvironmentId"> {
+  if (isDotenvText(raw)) {
+    const env = importDotenvAsEnvironment(raw);
+    return {
+      environments: [env, ...state.environments],
+      activeEnvironmentId: env.id,
+    };
+  }
+
   const parsed = JSON.parse(raw) as
     | { version?: number; environments?: Environment[] }
     | PostmanEnvironment

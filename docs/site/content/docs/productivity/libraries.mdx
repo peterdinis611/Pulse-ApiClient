@@ -13,10 +13,11 @@ Direct dependencies — desktop UI, Rust engine, Python satellite, and the docs 
 - State & effects — XState 5, @xstate/react, Effect
 - Desktop bridge — @tauri-apps/api, @tauri-apps/plugin-dialog, @tauri-apps/plugin-opener
 - Workspace UX — @tanstack/react-hotkeys, @tanstack/react-pacer, fuse.js (fuzzy search), xlsx (Excel preview / runner data)
-- Desktop crate (`src-tauri`) — Tauri 2, tauri-plugin-dialog, tauri-plugin-opener, reqwest (rustls, JSON, multipart, cookies, SOCKS, stream), tokio, tokio-tungstenite, tokio-util, futures-util, rusqlite (bundled), moka, serde / serde_json, url, base64, sha2, regex, fuzzy-matcher, notify, keyring, pulse-core
-- Engine crate (`crates/pulse-core`) — boa_engine (JS tests / pre-request), reqwest, tokio, serde, serde_yaml, regex, url, base64
-- MCP crate (`crates/pulse-mcp`) — stdio JSON-RPC on pulse-core (YAML workspace send/search/history/pending/envs/contract + HTTP)
-- Python binding (`crates/pulse-native`) — PyO3 (abi3-py310) around pulse-core
+- Desktop crate (`src-tauri`) — Tauri 2 IPC: HTTP engine (reqwest rustls, gzip/brotli, cookies, SOCKS, SSE stream, timing waterfall, mTLS, response cache + ETag revalidation, cURL parse/format), WebSocket, OAuth, SQLite history/cache, cookie jar, OS keychain secrets, Git workspace watch, fuzzy search, mock server, collection runner, custom themes / languages
+- Engine crate (`crates/pulse-core`) — shared Rust core: YAML workspace I/O, variable layers + secrets redaction, boa_engine scripts (pre-request + tests), collection runner, contract checks, OpenAPI operation flatten, path params, GraphQL-WS helpers, local mock (`:4010` + delay), simple HTTP send
+- MCP crate (`crates/pulse-mcp`) — optional Rust stdio MCP on pulse-core: workspace list/read/write/send/search/envs/history/pending/delete/status, contract, interpolate, send, run_tests, pre_request, run_collection, openapi_list (default agent entry is still Python `pulse`)
+- Python binding (`crates/pulse-native`) — PyO3 (abi3-py310) around pulse-core for CLI/MCP
+- Contract binary (`pulse-contract`) — CLI check of Git YAML examples vs responseSchema / snapshots
 - Python package (`python/pulse`) — stdlib only: openapi, har, schema, runner, bench, junit, export, envfile, report, curl, diff, graphql, snippet, workspace (PULSE_WORKSPACE YAML), MCP protocol / tools / prompts / resources
 - Optional Python — PyYAML (OpenAPI YAML), schemathesis (`python/tools/schemathesis_pulse.py`), maturin to build pulse_native
 - Docs site (`docs/site`) — Next.js, Fumadocs (core, MDX, UI), lucide-react, cnfast

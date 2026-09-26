@@ -1,6 +1,6 @@
 # Pulse API Client
 
-Desktop API client **2.0** — Git YAML is the workspace, SQLite keeps history. Built with **Tauri**, **React**, **TypeScript**, **Tailwind CSS**, **shadcn/ui**, and **Rust** (reqwest).
+Desktop API client **2.1** — Git YAML is the workspace, SQLite keeps history. Built with **Tauri**, **React**, **TypeScript**, **Tailwind CSS**, **shadcn/ui**, and **Rust** (reqwest).
 
 ![Pulse request workspace](./docs/screenshots/request.png)
 
@@ -25,7 +25,7 @@ A blank install opens a three-step wizard: **language**, **theme**, then **how t
 - Replay anytime: Settings → Appearance → **First-run setup**, or the command palette (`Cmd/Ctrl + K`)
 - Change later without the wizard: Appearance (language, theme) and Layout (start view, explorer)
 - Existing installs that already have a last-seen version skip the wizard so they are not interrupted
-- After first-run, Pulse may still show **What's new** for 2.0, then a Driver.js product tour
+- After first-run, Pulse may still show **What's new** for 2.1, then a Driver.js product tour
 
 ## Features
 
@@ -36,16 +36,16 @@ See the full guide in [docs/FEATURES.md](./docs/FEATURES.md) (in-app under **Doc
 - Auth: Inherit (collection/folder), Bearer, Basic, API key, OAuth 2.0 (client credentials + PKCE)
 - Variables: globals → collection → folder → environment; secrets via `{{secret.*}}` (never written to YAML)
 - Git workspace: attach a folder — `pulse.yaml`, `collections/*.pulse.yaml`, `environments/` are canonical
-- Local mock server locked to `127.0.0.1:4010` — every saved example is a route (`?example=` / `?status=`); no hidden headers
+- Local mock server locked to `127.0.0.1:4010` — every saved example is a route (`?example=` / `?status=` / `?delay=`); optional base latency; no hidden headers
 - Code snippets: cURL, fetch, Axios, HTTPie, Python requests, Go
 - Pre-request scripts with `pulse.environment.set` for collection chaining
 - Response panel: status, timing, size, body (JSON pretty-print), headers; preview for images, PDF, Excel/CSV + download
 - Collections: save, folders, inheritance, runner, import/export Pulse, Postman, Bruno, Insomnia & OpenAPI
-- Request history in SQLite with search and pagination
+- Request history in SQLite with search, pagination, and HAR export
 - Cookie jar editor (add / edit / delete)
 - Custom themes + optional custom CSS overlay
 - WebSocket client, collection runner, fuzzy search
-- MCP: Rust `pulse-mcp` (stdio JSON-RPC) plus the Python satellite for OpenAPI/HAR
+- MCP: Python `pulse` stdio server (OpenAPI/HAR + YAML workspace) — one entry in `.cursor/mcp.json`
 - In-app **Docs** covering every feature (How to steps included)
 - Keyboard shortcuts: **Cmd/Ctrl + Enter** send, **T** new tab, **W** close tab, **L** focus URL, **F** search, **B** explorer, **J** console
 

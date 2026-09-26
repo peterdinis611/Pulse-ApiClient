@@ -267,6 +267,7 @@ export function SettingsView() {
   const [collectionsFolderPath, setCollectionsFolderPathState] = useState("");
   const [syncingFolder, setSyncingFolder] = useState(false);
   const [mockHandle, setMockHandle] = useState<MockServerHandle | null>(null);
+  const [mockDelayMs, setMockDelayMs] = useState(0);
   const [homeView, setHomeViewState] = useState<HomeView>(() => loadLayoutPreferences().homeView);
   const [engineStats, setEngineStats] = useState<Awaited<ReturnType<typeof getHttpEngineStats>> | null>(
     null,
@@ -763,7 +764,7 @@ export function SettingsView() {
           <SettingRow
             tourId="mock-server"
             title="Local mock server"
-            description={`Locks 127.0.0.1:${LOCKED_MOCK_PORT} and serves every saved example. Pick one with ?example=name or ?status=404. Only headers from the example are sent.`}
+            description={`Locks 127.0.0.1:${LOCKED_MOCK_PORT} and serves every saved example. Pick one with ?example=name or ?status=404. Optional base delay or ?delay=ms (max 60s). Only headers from the example are sent.`}
           >
             <div className="flex min-w-0 flex-col items-end gap-2">
               {mockHandle && (
@@ -771,9 +772,23 @@ export function SettingsView() {
                   {mockHandle.url}
                   {mockHandle.locked ? " · locked" : ""}
                   {` · ${mockHandle.routeCount} routes`}
+                  {mockHandle.delayMs > 0 ? ` · ${mockHandle.delayMs}ms` : ""}
                 </p>
               )}
-              <div className="flex flex-wrap justify-end gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  Delay ms
+                  <Input
+                    type="number"
+                    min={0}
+                    max={60_000}
+                    step={50}
+                    className="h-8 w-20"
+                    value={mockDelayMs}
+                    onChange={(event) => setMockDelayMs(Number(event.target.value) || 0)}
+                    disabled={Boolean(mockHandle)}
+                  />
+                </label>
                 <Button
                   type="button"
                   variant="outline"
@@ -787,11 +802,13 @@ export function SettingsView() {
                           toast.error("No examples yet", "Save a response example on a request first.");
                           return;
                         }
-                        const handle = await startMockServer(routes);
+                        const handle = await startMockServer(routes, mockDelayMs);
                         setMockHandle(handle);
                         toast.success(
                           handle.locked ? `Mock locked on :${handle.port}` : "Mock listening",
-                          `${handle.url} · ${handle.routeCount} routes · ?example=name`,
+                          `${handle.url} · ${handle.routeCount} routes · ?example=name${
+                            handle.delayMs > 0 ? ` · ${handle.delayMs}ms` : ""
+                          }`,
                         );
                       } catch (error) {
                         toast.error(error instanceof Error ? error.message : "Mock failed");

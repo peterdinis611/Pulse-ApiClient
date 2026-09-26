@@ -31,6 +31,7 @@ import { parseRunnerDataFile, pickRunnerDataFile } from "@/lib/runner-data";
 import { formatModShortcut, PULSE_HOTKEYS } from "@/lib/hotkeys";
 import { filterSavedRequests, filterSavedRequestsAsync } from "@/lib/filters";
 import { downloadJson, collectionExportFilename } from "@/lib/download";
+import { exportHistoryAsHar } from "@/lib/har-export";
 import {
   COLLECTION_DND_MIME,
   encodeCollectionDragPayload,
@@ -774,6 +775,67 @@ export function ExplorerPanel() {
                           )}
                         </button>
                       </CollapsibleTrigger>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="size-7 shrink-0 text-muted-foreground"
+                            aria-label="Export history as HAR"
+                            disabled={historyCount === 0}
+                          >
+                            <Download className="size-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem
+                            disabled={historyEntries.length === 0}
+                            onClick={() => {
+                              const content = exportHistoryAsHar(historyEntries);
+                              downloadJson(
+                                content,
+                                collectionExportFilename("pulse-history", "har.json"),
+                              );
+                              toast.success(
+                                "History exported",
+                                `${historyEntries.length} loaded entr${historyEntries.length === 1 ? "y" : "ies"}`,
+                              );
+                            }}
+                          >
+                            Loaded page
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              void (async () => {
+                                try {
+                                  const { listAllHistoryEntries } = await import("@/lib/history-export");
+                                  const entries = await listAllHistoryEntries();
+                                  if (entries.length === 0) {
+                                    toast.error("No history yet");
+                                    return;
+                                  }
+                                  const content = exportHistoryAsHar(entries);
+                                  downloadJson(
+                                    content,
+                                    collectionExportFilename("pulse-history-all", "har.json"),
+                                  );
+                                  toast.success(
+                                    "History exported",
+                                    `${entries.length} entr${entries.length === 1 ? "y" : "ies"} as HAR`,
+                                  );
+                                } catch (error) {
+                                  toast.error(
+                                    error instanceof Error ? error.message : "HAR export failed",
+                                  );
+                                }
+                              })();
+                            }}
+                          >
+                            All history
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                       <TooltipIconButton
                         variant="ghost"
                         size="icon"
@@ -1484,21 +1546,36 @@ function CollectionActionsMenu({
 }: {
   collectionId: string;
   collectionName: string;
-  exportCollection: (collectionId: string, format: "pulse" | "postman" | "openapi") => string | null;
+  exportCollection: (
+    collectionId: string,
+    format: "pulse" | "postman" | "openapi" | "bruno" | "insomnia",
+  ) => string | null;
   onEditSettings: () => void;
 }) {
-  const exportAs = (format: "pulse" | "postman") => {
+  const exportAs = (format: "pulse" | "postman" | "bruno" | "insomnia") => {
     const content = exportCollection(collectionId, format);
     if (!content) {
       toast.error("Export failed", "Collection not found");
       return;
     }
-    const suffix = format === "postman" ? "postman_collection.json" : "pulse_collection.json";
+    const suffix =
+      format === "postman"
+        ? "postman_collection.json"
+        : format === "bruno"
+          ? "bruno_collection.json"
+          : format === "insomnia"
+            ? "insomnia_export.json"
+            : "pulse_collection.json";
+    const label =
+      format === "postman"
+        ? "Postman"
+        : format === "bruno"
+          ? "Bruno"
+          : format === "insomnia"
+            ? "Insomnia"
+            : "Pulse";
     downloadJson(content, collectionExportFilename(collectionName, suffix));
-    toast.success(
-      "Collection exported",
-      format === "postman" ? `${collectionName} (Postman)` : `${collectionName} (Pulse)`,
-    );
+    toast.success("Collection exported", `${collectionName} (${label})`);
   };
 
   return (
@@ -1515,7 +1592,7 @@ function CollectionActionsMenu({
           <MoreHorizontal className="size-3.5" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
+      <DropdownMenuContent align="end" className="w-48">
         <DropdownMenuItem onClick={onEditSettings}>
           <Settings2 className="size-3.5" />
           Edit settings
@@ -1528,6 +1605,14 @@ function CollectionActionsMenu({
         <DropdownMenuItem onClick={() => exportAs("postman")}>
           <Download className="size-3.5" />
           Export Postman
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => exportAs("bruno")}>
+          <Download className="size-3.5" />
+          Export Bruno
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => exportAs("insomnia")}>
+          <Download className="size-3.5" />
+          Export Insomnia
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
