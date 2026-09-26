@@ -38,7 +38,6 @@ impl HttpState {
             .pool_idle_timeout(Duration::from_secs(120))
             .tcp_keepalive(Duration::from_secs(60))
             .tcp_nodelay(true)
-            .http2_adaptive_window(true)
             .http2_keep_alive_interval(Duration::from_secs(30))
             .http2_keep_alive_timeout(Duration::from_secs(10))
             .connect_timeout(Duration::from_millis(config.connect_timeout_ms))

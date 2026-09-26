@@ -325,7 +325,7 @@ Native reqwest client — CORS does not apply; configure TLS, proxy, redirects, 
 - Settings → HTTP engine — concurrency, timeouts, cache (memory + disk)
 - Response cache: memory (moka) + SQLite disk; honors max-age / s-maxage / Expires; skips no-store and bodies over 2 MB
 - Stale entries with ETag / Last-Modified revalidate via conditional GET (304 keeps the cached body)
-- Transparent gzip / brotli / deflate; HTTP/2 adaptive window + TCP nodelay; larger idle connection pool
+- Transparent gzip / brotli / deflate; HTTP/2 keep-alive + TCP nodelay; larger idle connection pool
 - Native cURL import/export (`parse_curl` / `format_curl`) — `--json`, `-F`, `-G`, `-I`, `-u`, cookies, User-Agent
 - TLS verify on/off (self-signed / local HTTPS)
 - mTLS — client certificate, key, and CA PEM via file picker (like custom CSS)
