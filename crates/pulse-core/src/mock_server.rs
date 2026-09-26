@@ -2,11 +2,13 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
+use tokio::time::sleep;
 
 /// Default loopback port Pulse tries to lock for the mock server.
 pub const LOCKED_MOCK_PORT: u16 = 4010;
@@ -48,6 +50,7 @@ pub struct MockServerHandle {
     pub port: u16,
     pub locked: bool,
     pub route_count: usize,
+    pub delay_ms: u64,
 }
 
 pub struct MockServer {
@@ -70,13 +73,25 @@ impl Drop for MockServer {
 }
 
 pub async fn start_mock_server(routes: Vec<MockRoute>) -> Result<MockServer, String> {
-    start_mock_server_on(routes, Some(LOCKED_MOCK_PORT)).await
+    start_mock_server_with_delay(routes, 0).await
 }
 
-pub async fn start_mock_server_on(routes: Vec<MockRoute>, port: Option<u16>) -> Result<MockServer, String> {
+pub async fn start_mock_server_with_delay(
+    routes: Vec<MockRoute>,
+    delay_ms: u64,
+) -> Result<MockServer, String> {
+    start_mock_server_on(routes, Some(LOCKED_MOCK_PORT), delay_ms).await
+}
+
+pub async fn start_mock_server_on(
+    routes: Vec<MockRoute>,
+    port: Option<u16>,
+    delay_ms: u64,
+) -> Result<MockServer, String> {
     let wanted = port.unwrap_or(LOCKED_MOCK_PORT);
     let (listener, bound, locked) = bind_loopback(wanted).await?;
     let route_count = routes.len();
+    let base_delay = delay_ms.min(60_000);
     let (tx, mut rx) = oneshot::channel();
     let routes = Arc::new(routes);
     tokio::spawn(async move {
@@ -90,6 +105,10 @@ pub async fn start_mock_server_on(routes: Vec<MockRoute>, port: Option<u16>) -> 
                         let mut buf = vec![0u8; 16384];
                         let Ok(n) = stream.read(&mut buf).await else { return };
                         let request = String::from_utf8_lossy(&buf[..n]);
+                        let wait_ms = resolve_delay(&request, base_delay);
+                        if wait_ms > 0 {
+                            sleep(Duration::from_millis(wait_ms)).await;
+                        }
                         let response = render_response(&request, &routes);
                         let _ = stream.write_all(response.as_bytes()).await;
                     });
@@ -104,6 +123,7 @@ pub async fn start_mock_server_on(routes: Vec<MockRoute>, port: Option<u16>) -> 
             port: bound,
             locked,
             route_count,
+            delay_ms: base_delay,
         },
     })
 }
@@ -122,6 +142,22 @@ async fn bind_loopback(wanted: u16) -> Result<(TcpListener, u16, bool), String> 
             "Could not lock 127.0.0.1:{wanted} ({error}). Stop the other mock or pick a free port."
         )),
     }
+}
+
+/// Base delay from start options, overridable with `?delay=ms` (capped at 60s).
+fn resolve_delay(request: &str, base_delay: u64) -> u64 {
+    let first = request.lines().next().unwrap_or("");
+    let mut parts = first.split_whitespace();
+    let _method = parts.next();
+    let target = parts.next().unwrap_or("/");
+    let query_raw = target.split_once('?').map(|(_, q)| q).unwrap_or("");
+    let query = parse_query(query_raw);
+    let from_query = query
+        .get("delay")
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(0)
+        .min(60_000);
+    from_query.max(base_delay)
 }
 
 fn render_response(request: &str, routes: &[MockRoute]) -> String {
@@ -294,6 +330,7 @@ fn reason_phrase(status: u16) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Instant;
 
     fn route(method: &str, path: &str, status: u16, name: &str, body: &str) -> MockRoute {
         MockRoute {
@@ -315,6 +352,7 @@ mod tests {
         let server = start_mock_server_on(
             vec![route("GET", "/pets", 200, "ok", "{\"ok\":true}")],
             Some(0),
+            0,
         )
         .await
         .unwrap();
@@ -334,6 +372,7 @@ mod tests {
                 route("GET", "/pets", 404, "missing", "{\"error\":\"gone\"}"),
             ],
             Some(0),
+            0,
         )
         .await
         .unwrap();
@@ -351,7 +390,7 @@ mod tests {
         let mut blank = route("GET", "/blank", 200, "ok", "raw");
         blank.content_type = String::new();
         blank.headers.clear();
-        let server = start_mock_server_on(vec![blank], Some(0)).await.unwrap();
+        let server = start_mock_server_on(vec![blank], Some(0), 0).await.unwrap();
         let url = format!("{}/blank", server.handle.url);
         let response = reqwest::get(&url).await.unwrap();
         assert!(response.headers().get("content-type").is_none());
@@ -362,12 +401,28 @@ mod tests {
 
     #[tokio::test]
     async fn refuses_busy_lock_port() {
-        let first = start_mock_server_on(vec![], Some(0)).await.unwrap();
+        let first = start_mock_server_on(vec![], Some(0), 0).await.unwrap();
         let port = first.handle.port;
-        let error = match start_mock_server_on(vec![], Some(port)).await {
+        let error = match start_mock_server_on(vec![], Some(port), 0).await {
             Ok(_) => panic!("expected the lock to fail"),
             Err(error) => error,
         };
         assert!(error.contains("Could not lock"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn applies_query_delay() {
+        let server = start_mock_server_on(
+            vec![route("GET", "/slow", 200, "ok", "ok")],
+            Some(0),
+            0,
+        )
+        .await
+        .unwrap();
+        let url = format!("{}/slow?delay=80", server.handle.url);
+        let started = Instant::now();
+        let response = reqwest::get(&url).await.unwrap();
+        assert_eq!(response.status().as_u16(), 200);
+        assert!(started.elapsed().as_millis() >= 70, "{:?}", started.elapsed());
     }
 }

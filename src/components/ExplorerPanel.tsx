@@ -31,6 +31,7 @@ import { parseRunnerDataFile, pickRunnerDataFile } from "@/lib/runner-data";
 import { formatModShortcut, PULSE_HOTKEYS } from "@/lib/hotkeys";
 import { filterSavedRequests, filterSavedRequestsAsync } from "@/lib/filters";
 import { downloadJson, collectionExportFilename } from "@/lib/download";
+import { exportHistoryAsHar } from "@/lib/har-export";
 import {
   COLLECTION_DND_MIME,
   encodeCollectionDragPayload,
@@ -777,6 +778,23 @@ export function ExplorerPanel() {
                       <TooltipIconButton
                         variant="ghost"
                         size="icon"
+                        className="size-7 shrink-0 text-muted-foreground"
+                        label="Export history as HAR"
+                        disabled={historyEntries.length === 0}
+                        onClick={() => {
+                          const content = exportHistoryAsHar(historyEntries);
+                          downloadJson(content, collectionExportFilename("pulse-history", "har.json"));
+                          toast.success(
+                            "History exported",
+                            `${historyEntries.length} entr${historyEntries.length === 1 ? "y" : "ies"} as HAR`,
+                          );
+                        }}
+                      >
+                        <Download className="size-3.5" />
+                      </TooltipIconButton>
+                      <TooltipIconButton
+                        variant="ghost"
+                        size="icon"
                         className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
                         label="Clear history"
                         disabled={historyCount === 0}
@@ -1484,21 +1502,36 @@ function CollectionActionsMenu({
 }: {
   collectionId: string;
   collectionName: string;
-  exportCollection: (collectionId: string, format: "pulse" | "postman" | "openapi") => string | null;
+  exportCollection: (
+    collectionId: string,
+    format: "pulse" | "postman" | "openapi" | "bruno" | "insomnia",
+  ) => string | null;
   onEditSettings: () => void;
 }) {
-  const exportAs = (format: "pulse" | "postman") => {
+  const exportAs = (format: "pulse" | "postman" | "bruno" | "insomnia") => {
     const content = exportCollection(collectionId, format);
     if (!content) {
       toast.error("Export failed", "Collection not found");
       return;
     }
-    const suffix = format === "postman" ? "postman_collection.json" : "pulse_collection.json";
+    const suffix =
+      format === "postman"
+        ? "postman_collection.json"
+        : format === "bruno"
+          ? "bruno_collection.json"
+          : format === "insomnia"
+            ? "insomnia_export.json"
+            : "pulse_collection.json";
+    const label =
+      format === "postman"
+        ? "Postman"
+        : format === "bruno"
+          ? "Bruno"
+          : format === "insomnia"
+            ? "Insomnia"
+            : "Pulse";
     downloadJson(content, collectionExportFilename(collectionName, suffix));
-    toast.success(
-      "Collection exported",
-      format === "postman" ? `${collectionName} (Postman)` : `${collectionName} (Pulse)`,
-    );
+    toast.success("Collection exported", `${collectionName} (${label})`);
   };
 
   return (
@@ -1515,7 +1548,7 @@ function CollectionActionsMenu({
           <MoreHorizontal className="size-3.5" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
+      <DropdownMenuContent align="end" className="w-48">
         <DropdownMenuItem onClick={onEditSettings}>
           <Settings2 className="size-3.5" />
           Edit settings
@@ -1528,6 +1561,14 @@ function CollectionActionsMenu({
         <DropdownMenuItem onClick={() => exportAs("postman")}>
           <Download className="size-3.5" />
           Export Postman
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => exportAs("bruno")}>
+          <Download className="size-3.5" />
+          Export Bruno
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => exportAs("insomnia")}>
+          <Download className="size-3.5" />
+          Export Insomnia
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

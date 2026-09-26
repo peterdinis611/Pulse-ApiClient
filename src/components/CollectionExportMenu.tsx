@@ -10,13 +10,38 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { TooltipWrap } from "@/components/TooltipIconButton";
 
+export type CollectionExportFormat = "pulse" | "postman" | "openapi" | "bruno" | "insomnia";
+
 type CollectionExportMenuProps = {
   collectionId: string;
   collectionName: string;
-  exportCollection: (collectionId: string, format: "pulse" | "postman" | "openapi") => string | null;
+  exportCollection: (collectionId: string, format: CollectionExportFormat) => string | null;
   variant?: "icon" | "menu";
   className?: string;
 };
+
+const EXPORT_LABELS: Record<CollectionExportFormat, string> = {
+  pulse: "Pulse collection",
+  postman: "Postman collection",
+  openapi: "OpenAPI 3.0",
+  bruno: "Bruno collection",
+  insomnia: "Insomnia export",
+};
+
+function exportSuffix(format: CollectionExportFormat): string {
+  switch (format) {
+    case "postman":
+      return "postman_collection.json";
+    case "openapi":
+      return "openapi.json";
+    case "bruno":
+      return "bruno_collection.json";
+    case "insomnia":
+      return "insomnia_export.json";
+    default:
+      return "pulse_collection.json";
+  }
+}
 
 export function CollectionExportMenu({
   collectionId,
@@ -25,28 +50,15 @@ export function CollectionExportMenu({
   variant = "icon",
   className,
 }: CollectionExportMenuProps) {
-  const handleExport = (format: "pulse" | "postman" | "openapi") => {
+  const handleExport = (format: CollectionExportFormat) => {
     const content = exportCollection(collectionId, format);
     if (!content) {
       toast.error("Export failed", "Collection not found");
       return;
     }
 
-    const suffix =
-      format === "postman"
-        ? "postman_collection.json"
-        : format === "openapi"
-          ? "openapi.json"
-          : "pulse_collection.json";
-    downloadJson(content, collectionExportFilename(collectionName, suffix));
-    toast.success(
-      "Collection exported",
-      format === "postman"
-        ? `${collectionName} (Postman)`
-        : format === "openapi"
-          ? `${collectionName} (OpenAPI)`
-          : `${collectionName} (Pulse)`,
-    );
+    downloadJson(content, collectionExportFilename(collectionName, exportSuffix(format)));
+    toast.success("Collection exported", `${collectionName} (${EXPORT_LABELS[format]})`);
   };
 
   return (
@@ -67,9 +79,11 @@ export function CollectionExportMenu({
         </DropdownMenuTrigger>
       </TooltipWrap>
       <DropdownMenuContent align="end" className="w-52">
-        <DropdownMenuItem onClick={() => handleExport("pulse")}>Pulse collection</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => handleExport("postman")}>Postman collection</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => handleExport("openapi")}>OpenAPI 3.0</DropdownMenuItem>
+        {(Object.keys(EXPORT_LABELS) as CollectionExportFormat[]).map((format) => (
+          <DropdownMenuItem key={format} onClick={() => handleExport(format)}>
+            {EXPORT_LABELS[format]}
+          </DropdownMenuItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );
