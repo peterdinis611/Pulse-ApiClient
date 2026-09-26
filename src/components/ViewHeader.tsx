@@ -11,7 +11,7 @@ import { useT } from "@/hooks/useLocale";
 import type { MessageKey } from "@/lib/i18n";
 
 const VIEW_META: Record<
-  "overview" | "environments" | "docs" | "settings",
+  "overview" | "environments" | "docs" | "mcp" | "settings",
   { titleKey: MessageKey; descriptionKey: MessageKey }
 > = {
   overview: {
@@ -25,6 +25,10 @@ const VIEW_META: Record<
   docs: {
     titleKey: "view.docs.title",
     descriptionKey: "view.docs.description",
+  },
+  mcp: {
+    titleKey: "view.mcp.title",
+    descriptionKey: "view.mcp.description",
   },
   settings: {
     titleKey: "view.settings.title",

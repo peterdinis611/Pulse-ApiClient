@@ -112,8 +112,8 @@ const TOUR_STEPS: TourStepDef[] = [
     side: "bottom",
     title: { en: "Field manual", sk: "Field manual" },
     description: {
-      en: "Git workspace, MCP, privacy, and the rest of the desk live in Docs. Replay this tour anytime from Settings or Cmd/Ctrl+K.",
-      sk: "Git workspace, MCP, súkromie a zvyšok stola je v Docs. Túto prehliadku kedykoľvek spustíš z Nastavení alebo Cmd/Ctrl+K.",
+      en: "Git workspace, privacy, and the rest of the desk live in Docs. MCP has its own rail page for Cursor setup. Replay this tour anytime from Settings or Cmd/Ctrl+K.",
+      sk: "Git workspace, súkromie a zvyšok stola je v Docs. MCP má vlastnú stránku v raili pre Cursor setup. Túto prehliadku kedykoľvek spustíš z Nastavení alebo Cmd/Ctrl+K.",
     },
   },
 ];

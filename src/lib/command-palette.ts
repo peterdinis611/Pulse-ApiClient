@@ -13,7 +13,7 @@ export type CommandPaletteKind =
 
 export type CommandPaletteItem = SearchDocument & {
   kind: CommandPaletteKind;
-  view?: "overview" | "request" | "environments" | "settings" | "docs";
+  view?: "overview" | "request" | "environments" | "settings" | "docs" | "mcp";
   savedRequestId?: string;
   collectionId?: string;
   environmentId?: string;
@@ -72,6 +72,16 @@ const VIEWS: CommandPaletteItem[] = [
     meta: "Go",
     view: "docs",
     keywords: "help guide",
+  },
+  {
+    id: "view:mcp",
+    kind: "view",
+    title: "MCP",
+    subtitle: "Cursor agent bridge — setup and how-to",
+    method: "",
+    meta: "Go",
+    view: "mcp",
+    keywords: "cursor agent tools pulse_workspace",
   },
   {
     id: "view:settings",

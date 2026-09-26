@@ -539,6 +539,7 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
     group: "Productivity",
     items: [
       "Project config: `.cursor/mcp.json` launches **pulse** only (`python/pulse_mcp.py`) — covers OpenAPI/HAR plus YAML workspace tools",
+      "In-app **MCP** page (left rail) walks through setup, example prompts, tools, resources, and confirm safety",
       "Optional Rust twin: `cargo run -p pulse-mcp` (workspace tools + run_tests / pre_request / run_collection / openapi_list / mock_start/stop)",
       "Set `PULSE_WORKSPACE` to the same Git folder the desktop attached",
       "Resources: `pulse://examples/pets.json`, `pulse://last-run`, `pulse://openapi/{file}`, `pulse://out/{file}`, `pulse://workspace/requests|environments|history|pending`, `pulse://workspace/request/{id}`",
@@ -550,6 +551,7 @@ export const FEATURE_DOC_SECTIONS: FeatureDocSection[] = [
       "Install once with `bun run pulse:cli:install`, then reload Cursor MCP",
     ],
     howTo: [
+      "Open MCP from the left rail for a full how-to (setup, prompts, tools, safety).",
       "Run `bun run pulse:cli:install` so `.venv` has `pulse_native`.",
       "Reload Cursor. In Settings → MCP, enable **pulse** if it is listed as disabled.",
       "Ask the agent to send a saved YAML request (`pulse_workspace_send`), list Git workspace status, or convert OpenAPI into `*.pulse.yaml`.",

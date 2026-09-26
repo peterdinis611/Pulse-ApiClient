@@ -466,6 +466,7 @@ Satellite around the Rust engine — collection runs, Git workspace, mock, Graph
 Cursor (and other MCP clients) call the Pulse engine over stdio via one Python server — send, GraphQL, cURL, collections, bench, OpenAPI, Git workspace, contract, JUnit.
 
 - Project config: `.cursor/mcp.json` launches **pulse** only (`python/pulse_mcp.py`) — covers OpenAPI/HAR plus YAML workspace tools
+- In-app **MCP** page (left rail) walks through setup, example prompts, tools, resources, and confirm safety
 - Optional Rust twin: `cargo run -p pulse-mcp` (workspace tools + run_tests / pre_request / run_collection / openapi_list / mock_start/stop)
 - Set `PULSE_WORKSPACE` to the same Git folder the desktop attached
 - Resources: `pulse://examples/pets.json`, `pulse://last-run`, `pulse://openapi/{file}`, `pulse://out/{file}`, `pulse://workspace/requests|environments|history|pending`, `pulse://workspace/request/{id}`
@@ -478,11 +479,12 @@ Cursor (and other MCP clients) call the Pulse engine over stdio via one Python s
 
 **How to**
 
-1. Run `bun run pulse:cli:install` so `.venv` has `pulse_native`.
-2. Reload Cursor. In Settings → MCP, enable **pulse** if it is listed as disabled.
-3. Ask the agent to send a saved YAML request (`pulse_workspace_send`), list Git workspace status, or convert OpenAPI into `*.pulse.yaml`.
-4. Built-in prompts cover collection runs, OpenAPI import/export into JSON or the Git folder, GraphQL introspection, cURL import, last-run summary, schema validation, contract check, and comparing two JSON responses (`pulse_diff`).
-5. OpenAPI conversion writes `python/examples/.out/…json` or YAML under `PULSE_WORKSPACE/collections/`; read `pulse://last-run` / `pulse://workspace/*` after a run. Generated files are also `pulse://out/{file}`.
+1. Open MCP from the left rail for a full how-to (setup, prompts, tools, safety).
+2. Run `bun run pulse:cli:install` so `.venv` has `pulse_native`.
+3. Reload Cursor. In Settings → MCP, enable **pulse** if it is listed as disabled.
+4. Ask the agent to send a saved YAML request (`pulse_workspace_send`), list Git workspace status, or convert OpenAPI into `*.pulse.yaml`.
+5. Built-in prompts cover collection runs, OpenAPI import/export into JSON or the Git folder, GraphQL introspection, cURL import, last-run summary, schema validation, contract check, and comparing two JSON responses (`pulse_diff`).
+6. OpenAPI conversion writes `python/examples/.out/…json` or YAML under `PULSE_WORKSPACE/collections/`; read `pulse://last-run` / `pulse://workspace/*` after a run. Generated files are also `pulse://out/{file}`.
 
 ### Libraries & stack
 

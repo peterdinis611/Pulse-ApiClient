@@ -2,6 +2,7 @@ import {
   BookOpen,
   Globe2,
   LayoutGrid,
+  Plug,
   Send,
   Settings,
   Zap,
@@ -26,6 +27,7 @@ const NAV_ITEMS: Array<{
   { view: "request", icon: Send, labelKey: "rail.requests" },
   { view: "environments", icon: Globe2, labelKey: "rail.environments" },
   { view: "docs", icon: BookOpen, labelKey: "rail.docs" },
+  { view: "mcp", icon: Plug, labelKey: "rail.mcp" },
   { view: "settings", icon: Settings, labelKey: "rail.settings" },
 ];
 

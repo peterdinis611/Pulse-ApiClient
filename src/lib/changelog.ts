@@ -175,6 +175,14 @@ export const CHANGELOG: ChangelogRelease[] = [
         },
       },
       {
+        id: "mcp-guide-page",
+        title: { en: "MCP how-to page", sk: "MCP návod v appke" },
+        detail: {
+          en: "Left rail → MCP explains Cursor setup, tools, prompts, resources, and confirm safety — bilingual EN/SK.",
+          sk: "Ľavý rail → MCP vysvetlí Cursor setup, tools, prompty, resources a confirm bezpečnosť — dvojjazyčne EN/SK.",
+        },
+      },
+      {
         id: "mock-delay",
         title: { en: "Mock latency", sk: "Latencia mocku" },
         detail: {
