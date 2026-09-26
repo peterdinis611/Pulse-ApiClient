@@ -26,5 +26,13 @@ export function defaultWebSocketSession() {
     status: "idle" as const,
     messages: [],
     error: null,
+    lastEventId: null as string | null,
+    lastRetryMs: null as number | null,
+    subprotocol: null as string | null,
+    graphqlAcked: false,
+    graphqlSubscriptionIds: [] as string[],
   };
 }
+
+/** Methods commonly used for SSE (GET stream, POST for AI/chat streams). */
+export const SSE_METHODS = ["GET", "POST"] as const;

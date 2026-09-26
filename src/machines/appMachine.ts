@@ -67,6 +67,7 @@ import { importOpenApiIntoState } from "@/lib/openapi-import";
 import { importPulseCollectionsFromFolder } from "@/lib/pulse-collection";
 import { getGitWorkspaceRoot, saveGitRequest } from "@/lib/git-workspace";
 import { validateResponseAgainstSchema } from "@/lib/json-schema";
+import { parseGraphqlWsFrame } from "@/lib/graphql-ws";
 import { wsClose, wsConnect, sseConnect, wsPing, wsSend } from "@/lib/ws-client";
 
 export function createTabState(
@@ -123,6 +124,9 @@ function patchRequest(request: ApiRequest, patch: Partial<ApiRequest>): ApiReque
     }
     next.pathParams = syncPathParams(patch.url, patch.pathParams ?? request.pathParams);
   }
+  if (next.protocol === "sse" && next.method !== "GET" && next.method !== "POST") {
+    next.method = "GET";
+  }
   return next;
 }
 
@@ -145,12 +149,40 @@ function appendWsMessage(
   };
 }
 
+function withSseLastEventId(
+  request: ApiRequest,
+  lastEventId: string | null | undefined,
+): ApiRequest {
+  if (!isSseProtocol(request.protocol) || !lastEventId?.trim()) return request;
+  const headers = request.headers.filter(
+    (item) => !item.key.trim().toLowerCase().startsWith("last-event-id"),
+  );
+  return {
+    ...request,
+    headers: [
+      ...headers,
+      {
+        id: createId("hdr"),
+        key: "Last-Event-ID",
+        value: lastEventId.trim(),
+        enabled: true,
+      },
+    ],
+  };
+}
+
 function startTabWebSocketConnect(
   self: { send: (event: AppMachineEvent) => void },
-  input: { tabId: string; request: ApiRequest; environment: Environment | null },
+  input: {
+    tabId: string;
+    request: ApiRequest;
+    environment: Environment | null;
+    lastEventId?: string | null;
+  },
 ) {
-  const connect = isSseProtocol(input.request.protocol) ? sseConnect : wsConnect;
-  void connect(input.tabId, input.request, input.environment)
+  const request = withSseLastEventId(input.request, input.lastEventId);
+  const connect = isSseProtocol(request.protocol) ? sseConnect : wsConnect;
+  void connect(input.tabId, request, input.environment)
     .then((result) => {
       self.send({
         type: "WS_CONNECT_COMPLETE",
@@ -158,6 +190,7 @@ function startTabWebSocketConnect(
         connectionId: result.connectionId,
         status: result.status,
         headers: result.headers,
+        subprotocol: result.subprotocol ?? null,
       });
     })
     .catch((error) => {
@@ -262,6 +295,7 @@ export type AppMachineEvent =
       connectionId: string;
       status: number;
       headers: HttpResponse["headers"];
+      subprotocol?: string | null;
     }
   | { type: "WS_CONNECT_FAILED"; tabId: string; error: string }
   | { type: "WS_DISCONNECT"; tabId?: string }
@@ -274,6 +308,9 @@ export type AppMachineEvent =
       data: string;
       binary: boolean;
       timestamp: number;
+      event?: string;
+      eventId?: string;
+      retryMs?: number;
     }
   | {
       type: "WS_CLOSED";
@@ -609,6 +646,7 @@ export const appMachine = setup({
         tabId: tab.id,
         request: prepared.request,
         environment: prepared.environment,
+        lastEventId: tab.ws.lastEventId,
       });
     },
   },
@@ -1559,6 +1597,9 @@ export const appMachine = setup({
               ws: {
                 ...defaultWebSocketSession(),
                 status: "connecting",
+                // Keep Last-Event-ID / retry across reconnect for SSE resume.
+                lastEventId: tab.ws.lastEventId ?? null,
+                lastRetryMs: tab.ws.lastRetryMs ?? null,
               },
             })),
           })),
@@ -1574,12 +1615,24 @@ export const appMachine = setup({
                   status: "open",
                   handshakeStatus: event.status,
                   handshakeHeaders: event.headers,
+                  subprotocol: event.subprotocol ?? null,
                   error: null,
+                  graphqlAcked: false,
+                  graphqlSubscriptionIds: [],
                 },
               })),
             })),
-            () => {
-              toast.success("WebSocket connected", "Connection established");
+            ({ context, event }) => {
+              const tab = context.tabs.find((item) => item.id === event.tabId);
+              const label = isSseProtocol(tab?.request.protocol ?? "http")
+                ? "SSE connected"
+                : tab?.request.bodyKind === "graphql"
+                  ? "GraphQL WS connected"
+                  : "WebSocket connected";
+              const detail = event.subprotocol
+                ? `Protocol: ${event.subprotocol}`
+                : "Connection established";
+              toast.success(label, detail);
             },
           ],
         },
@@ -1592,11 +1645,17 @@ export const appMachine = setup({
                   ...defaultWebSocketSession(),
                   status: "error",
                   error: event.error,
+                  lastEventId: tab.ws.lastEventId ?? null,
+                  lastRetryMs: tab.ws.lastRetryMs ?? null,
                 },
               })),
             })),
-            ({ event }) => {
-              toast.error("WebSocket connection failed", event.error);
+            ({ context, event }) => {
+              const tab = context.tabs.find((item) => item.id === event.tabId);
+              const label = isSseProtocol(tab?.request.protocol ?? "http")
+                ? "SSE connection failed"
+                : "WebSocket connection failed";
+              toast.error(label, event.error);
             },
           ],
         },
@@ -1630,16 +1689,34 @@ export const appMachine = setup({
             const tab = getActiveTab(context);
             if (!tab?.ws.connectionId || tab.ws.status !== "open") return {};
             void wsSend(tab.ws.connectionId, event.data, event.binary ?? false);
+            const frame = event.binary ? null : parseGraphqlWsFrame(event.data);
             return {
-              tabs: mapActiveTab(context, (current) =>
-                appendWsMessage(current, {
+              tabs: mapActiveTab(context, (current) => {
+                let next = appendWsMessage(current, {
                   id: createId("ws"),
                   direction: "outgoing",
                   data: event.data,
                   binary: event.binary ?? false,
                   timestamp: Date.now(),
-                }),
-              ),
+                  event: frame?.type,
+                  eventId: frame?.id,
+                });
+                if (!frame) return next;
+                let ids = next.ws.graphqlSubscriptionIds ?? [];
+                if (frame.type === "subscribe" && frame.id && !ids.includes(frame.id)) {
+                  ids = [...ids, frame.id];
+                }
+                if (frame.type === "complete" && frame.id) {
+                  ids = ids.filter((id) => id !== frame.id);
+                }
+                return {
+                  ...next,
+                  ws: {
+                    ...next.ws,
+                    graphqlSubscriptionIds: ids,
+                  },
+                };
+              }),
             };
           }),
         },
@@ -1656,13 +1733,42 @@ export const appMachine = setup({
               if (tab.id !== event.tabId || tab.ws.connectionId !== event.connectionId) {
                 return tab;
               }
-              return appendWsMessage(tab, {
+              const frame =
+                event.event || event.binary
+                  ? null
+                  : parseGraphqlWsFrame(event.data);
+              const frameType = event.event ?? frame?.type;
+              const frameId = event.eventId ?? frame?.id;
+              const next = appendWsMessage(tab, {
                 id: createId("ws"),
                 direction: "incoming",
                 data: event.data,
                 binary: event.binary,
                 timestamp: event.timestamp,
+                event: frameType,
+                eventId: frameId,
+                retryMs: event.retryMs,
               });
+
+              let graphqlAcked = next.ws.graphqlAcked ?? false;
+              let ids = next.ws.graphqlSubscriptionIds ?? [];
+              if (frameType === "connection_ack") {
+                graphqlAcked = true;
+              }
+              if (frameType === "complete" && frameId) {
+                ids = ids.filter((id) => id !== frameId);
+              }
+
+              return {
+                ...next,
+                ws: {
+                  ...next.ws,
+                  lastEventId: event.eventId ?? next.ws.lastEventId,
+                  lastRetryMs: event.retryMs ?? next.ws.lastRetryMs,
+                  graphqlAcked,
+                  graphqlSubscriptionIds: ids,
+                },
+              };
             }),
           })),
         },
@@ -1703,8 +1809,12 @@ export const appMachine = setup({
                 };
               }),
             })),
-            ({ event }) => {
-              toast.error("WebSocket error", event.message);
+            ({ context, event }) => {
+              const tab = context.tabs.find((item) => item.id === event.tabId);
+              const label = isSseProtocol(tab?.request.protocol ?? "http")
+                ? "SSE error"
+                : "WebSocket error";
+              toast.error(label, event.message);
             },
           ],
         },

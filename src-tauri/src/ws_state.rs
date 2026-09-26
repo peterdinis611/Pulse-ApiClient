@@ -10,6 +10,7 @@ pub enum WsWriteMessage {
     Text(String),
     Binary(Vec<u8>),
     Ping,
+    Pong(Vec<u8>),
     Close,
 }
 

@@ -104,6 +104,7 @@ export const GRAPHQL_INTROSPECTION_QUERY = `query PulseIntrospection {
   __schema {
     queryType { name }
     mutationType { name }
+    subscriptionType { name }
     types {
       kind
       name
@@ -141,6 +142,7 @@ export type GraphqlType = {
 export type GraphqlSchema = {
   queryType?: { name?: string } | null;
   mutationType?: { name?: string } | null;
+  subscriptionType?: { name?: string } | null;
   types: GraphqlType[];
 };
 
@@ -163,4 +165,25 @@ export function visibleGraphqlTypes(schema: GraphqlSchema): GraphqlType[] {
     .filter((type) => type.name && !type.name.startsWith("__") && (type.fields?.length ?? 0) > 0)
     .sort((left, right) => (left.name ?? "").localeCompare(right.name ?? ""));
 }
+
+export type GraphqlOperationKind = "query" | "mutation" | "subscription";
+
+export function graphqlOperationKindForType(
+  schema: GraphqlSchema,
+  typeName: string | null | undefined,
+): GraphqlOperationKind {
+  if (!typeName) return "query";
+  if (schema.subscriptionType?.name === typeName) return "subscription";
+  if (schema.mutationType?.name === typeName) return "mutation";
+  return "query";
+}
+
+export function buildGraphqlFieldStub(
+  operation: GraphqlOperationKind,
+  operationName: string,
+  fieldName: string,
+): string {
+  return `${operation} ${operationName} {\n  ${fieldName}\n}`;
+}
+
 

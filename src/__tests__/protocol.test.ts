@@ -4,6 +4,7 @@ import {
   isSseProtocol,
   isStreamProtocol,
   isWebSocketProtocol,
+  SSE_METHODS,
 } from "@/lib/protocol";
 
 describe("protocol", () => {
@@ -18,5 +19,9 @@ describe("protocol", () => {
     expect(isStreamProtocol("sse")).toBe(true);
     expect(isWebSocketProtocol("sse")).toBe(false);
     expect(isStreamProtocol("http")).toBe(false);
+  });
+
+  it("exposes SSE_METHODS for GET/POST streams", () => {
+    expect(SSE_METHODS).toEqual(["GET", "POST"]);
   });
 });

@@ -152,16 +152,6 @@ fn next_event_boundary(buffer: &str) -> Option<usize> {
     }
 }
 
-fn content_type_looks_like_sse(headers: &[ResponseHeader]) -> bool {
-    headers.iter().any(|header| {
-        header.key.eq_ignore_ascii_case("content-type")
-            && header
-                .value
-                .to_ascii_lowercase()
-                .contains("text/event-stream")
-    })
-}
-
 pub async fn connect(
     app: AppHandle,
     http: &HttpState,
@@ -264,7 +254,6 @@ pub async fn connect(
     }
 
     let connection_id = format!("sse_{:x}", now_ms());
-    let _content_type_ok = content_type_looks_like_sse(&response_headers);
     let cancel = CancellationToken::new();
     let (write_tx, _write_rx) = mpsc::unbounded_channel::<WsWriteMessage>();
     let mut stream = response.bytes_stream();

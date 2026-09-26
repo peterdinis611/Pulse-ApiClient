@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   buildGraphqlBody,
+  buildGraphqlFieldStub,
   formatGraphqlResponse,
+  graphqlOperationKindForType,
   parseGraphqlResponse,
   parseGraphqlSchema,
   validateGraphqlRequest,
@@ -68,5 +70,18 @@ describe("graphql", () => {
     const schema = parseGraphqlSchema(raw);
     expect(schema?.queryType?.name).toBe("Query");
     expect(visibleGraphqlTypes(schema!).map((type) => type.name)).toEqual(["Query"]);
+  });
+
+  it("builds subscription stubs and detects operation kinds", () => {
+    const schema = {
+      queryType: { name: "Query" },
+      mutationType: { name: "Mutation" },
+      subscriptionType: { name: "Subscription" },
+      types: [],
+    };
+    expect(graphqlOperationKindForType(schema, "Subscription")).toBe("subscription");
+    expect(buildGraphqlFieldStub("subscription", "Subscription", "messageAdded")).toContain(
+      "subscription Subscription",
+    );
   });
 });

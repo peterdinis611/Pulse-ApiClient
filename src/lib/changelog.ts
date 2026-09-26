@@ -254,6 +254,22 @@ export const CHANGELOG: ChangelogRelease[] = [
           sk: "pulse_mock_start / pulse_mock_stop zamknú 127.0.0.1:4010 z examples workspace (Python + Rust MCP).",
         },
       },
+      {
+        id: "sse-rich",
+        title: { en: "Richer SSE streams", sk: "Bohatšie SSE streamy" },
+        detail: {
+          en: "SSE parses event/id/retry and multi-line data, supports GET/POST with body, shows event badges + filter, and resumes with Last-Event-ID.",
+          sk: "SSE parsuje event/id/retry a viacriadkové data, podporuje GET/POST s body, ukazuje badge + filter a renewuje cez Last-Event-ID.",
+        },
+      },
+      {
+        id: "ws-graphql-rich",
+        title: { en: "Richer WebSocket & GraphQL", sk: "Bohatší WebSocket a GraphQL" },
+        detail: {
+          en: "WS shows ping/pong, GraphQL-WS offers both subprotocols, auth in connection_init, ack tracking, Subscribe/Complete, and schema explorer subscription stubs.",
+          sk: "WS ukazuje ping/pong, GraphQL-WS ponúka oba subprotokoly, auth v connection_init, ack tracking, Subscribe/Complete a subscription stuby v schema exploreri.",
+        },
+      },
     ],
   },
 ];

@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useApp } from "@/machines";
 import { validateGraphqlRequest } from "@/lib/graphql";
-import { isStreamProtocol, isWebSocketProtocol } from "@/lib/protocol";
+import { isStreamProtocol, isWebSocketProtocol, isSseProtocol, SSE_METHODS } from "@/lib/protocol";
 import { containsVariables } from "@/lib/env";
 import { prepareRequest } from "@/lib/http-client";
 import { CODE_SNIPPETS, requestToSnippet, type CodeSnippetId } from "@/lib/code-snippets";
@@ -71,6 +71,7 @@ export function RequestBar() {
   const curlImportRef = useRef<HTMLInputElement>(null);
 
   const isWebSocket = isWebSocketProtocol(request.protocol);
+  const isSse = isSseProtocol(request.protocol);
   const isStream = isStreamProtocol(request.protocol);
 
   const canSend = useMemo(() => {
@@ -141,9 +142,13 @@ export function RequestBar() {
               <SelectItem value="sse">SSE</SelectItem>
             </SelectContent>
           </Select>
-          {isStream ? null : (
+          {isWebSocket ? null : (
             <Select
-              value={request.method}
+              value={
+                isSse && !SSE_METHODS.includes(request.method as (typeof SSE_METHODS)[number])
+                  ? "GET"
+                  : request.method
+              }
               onValueChange={(value) =>
                 updateRequest({ method: value as typeof request.method })
               }
@@ -157,7 +162,7 @@ export function RequestBar() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="method-select-content" align="start">
-                {HTTP_METHODS.map((method) => (
+                {(isSse ? SSE_METHODS : HTTP_METHODS).map((method) => (
                   <SelectItem
                     key={method}
                     value={method}
