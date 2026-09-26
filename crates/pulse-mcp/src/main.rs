@@ -2,15 +2,23 @@ use std::io::{self, BufRead, Write};
 
 use pulse_core::check_workspace;
 use pulse_core::interpolate_request;
+use pulse_core::openapi_ops::list_operations;
+use pulse_core::run_collection;
+use pulse_core::run_http_tests;
+use pulse_core::run_pre_request_script_with_env;
 use pulse_core::secrets::redact_json;
 use pulse_core::simple_http::send_once;
 use pulse_core::substitute_variables;
 use pulse_core::to_http_payload;
-use pulse_core::types::{AuthConfig, EnvVariable, HttpRequestPayload, KeyValue, SavedRequestDto};
+use pulse_core::types::{
+    AuthConfig, EnvVariable, HttpRequestPayload, HttpResponsePayload, KeyValue, ResponseHeader,
+    SavedRequestDto,
+};
 use pulse_core::workspace_fs::{
     append_agent_history, delete_request, is_mutating_method, list_pending, load_workspace, read_agent_history,
     save_request, write_pending,
 };
+use pulse_core::CollectionRunInput;
 use serde_json::{json, Map, Value};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -149,6 +157,146 @@ fn http_from_args(args: &Value) -> HttpRequestPayload {
     }
 }
 
+fn response_from_args(args: &Value) -> Result<HttpResponsePayload, String> {
+    if let Some(raw) = args.get("response") {
+        if let Ok(parsed) = serde_json::from_value::<HttpResponsePayload>(raw.clone()) {
+            return Ok(parsed);
+        }
+        if let Some(obj) = raw.as_object() {
+            let body = obj
+                .get("body")
+                .map(value_to_string)
+                .unwrap_or_default();
+            let status = obj
+                .get("status")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(200) as u16;
+            return Ok(HttpResponsePayload {
+                status,
+                status_text: obj
+                    .get("statusText")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("OK")
+                    .to_string(),
+                headers: Vec::new(),
+                body: body.clone(),
+                body_encoding: "utf8".into(),
+                elapsed_ms: obj.get("elapsedMs").and_then(|v| v.as_u64()).unwrap_or(0),
+                dns_ms: None,
+                tls_ms: None,
+                ttfb_ms: None,
+                download_ms: None,
+                total_ms: None,
+                size_bytes: body.len(),
+                content_type: obj
+                    .get("contentType")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string),
+                from_cache: false,
+                cache_age_ms: None,
+                request_id: None,
+            });
+        }
+    }
+    let body = arg_str(args, "body");
+    if body.is_empty() && args.get("response").is_none() {
+        return Err("response or body is required".into());
+    }
+    let status = args.get("status").and_then(|v| v.as_u64()).unwrap_or(200) as u16;
+    Ok(HttpResponsePayload {
+        status,
+        status_text: "OK".into(),
+        headers: vec![ResponseHeader {
+            key: "Content-Type".into(),
+            value: "application/json".into(),
+        }],
+        body: body.clone(),
+        body_encoding: "utf8".into(),
+        elapsed_ms: 0,
+        dns_ms: None,
+        tls_ms: None,
+        ttfb_ms: None,
+        download_ms: None,
+        total_ms: None,
+        size_bytes: body.len(),
+        content_type: Some("application/json".into()),
+        from_cache: false,
+        cache_age_ms: None,
+        request_id: None,
+    })
+}
+
+fn collection_run_from_workspace(args: &Value) -> Result<CollectionRunInput, String> {
+    if let Some(raw) = args.get("input") {
+        return serde_json::from_value(raw.clone()).map_err(|error| error.to_string());
+    }
+    let root = workspace_root()?;
+    let payload = load_workspace(&root)?;
+    let collection_id = arg_str(args, "collectionId");
+    let collection_id = if collection_id.is_empty() {
+        payload
+            .collection_groups
+            .first()
+            .map(|group| group.id.clone())
+            .unwrap_or_default()
+    } else {
+        collection_id
+    };
+    if collection_id.is_empty() {
+        return Err("collectionId is required (or pass a full input object)".into());
+    }
+    let group = payload
+        .collection_groups
+        .iter()
+        .find(|item| item.id == collection_id || item.name == collection_id)
+        .ok_or_else(|| format!("Collection not found: {collection_id}"))?;
+    let folder_path = {
+        let value = arg_str(args, "folderPath");
+        if value.is_empty() {
+            None
+        } else {
+            Some(value)
+        }
+    };
+    let requests: Vec<_> = payload
+        .collections
+        .iter()
+        .filter(|item| item.collection_id == group.id)
+        .filter(|item| match &folder_path {
+            None => true,
+            Some(path) => {
+                let folder = item.folder.as_deref().unwrap_or("");
+                folder == path || folder.starts_with(&format!("{path}/"))
+            }
+        })
+        .cloned()
+        .collect();
+    if requests.is_empty() {
+        return Err("No requests in that collection".into());
+    }
+    let env_name = arg_str(args, "envName");
+    let environment = if env_name.is_empty() {
+        payload.environments.first().cloned()
+    } else {
+        payload
+            .environments
+            .iter()
+            .find(|item| item.name == env_name || item.id == env_name)
+            .cloned()
+    };
+    Ok(CollectionRunInput {
+        collection_id: group.id.clone(),
+        collection_name: group.name.clone(),
+        requests,
+        environment,
+        globals: Vec::new(),
+        collection: Some(group.clone()),
+        data_rows: Vec::new(),
+        data_file_name: None,
+        folder_path,
+    })
+}
+
 fn tools() -> Value {
     json!([
         {
@@ -256,6 +404,57 @@ fn tools() -> Value {
                     "bodyKind": { "type": "string" },
                     "bearerToken": { "type": "string" },
                     "confirm": { "type": "boolean" }
+                }
+            }
+        },
+        {
+            "name": "pulse_run_tests",
+            "description": "Run a Pulse/Postman test script against a saved response (boa JS engine)",
+            "inputSchema": {
+                "type": "object",
+                "required": ["script"],
+                "properties": {
+                    "script": { "type": "string" },
+                    "response": { "type": "object" },
+                    "body": { "type": "string" },
+                    "status": { "type": "integer" }
+                }
+            }
+        },
+        {
+            "name": "pulse_pre_request",
+            "description": "Run a pre-request script and return environment mutations",
+            "inputSchema": {
+                "type": "object",
+                "required": ["script"],
+                "properties": {
+                    "script": { "type": "string" },
+                    "env": { "type": "object", "additionalProperties": { "type": "string" } }
+                }
+            }
+        },
+        {
+            "name": "pulse_run_collection",
+            "description": "Run a collection from PULSE_WORKSPACE (or a full CollectionRunInput). Mutating requests need confirm=true.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "collectionId": { "type": "string" },
+                    "folderPath": { "type": "string" },
+                    "envName": { "type": "string" },
+                    "input": { "type": "object" },
+                    "confirm": { "type": "boolean" }
+                }
+            }
+        },
+        {
+            "name": "pulse_openapi_list",
+            "description": "List OpenAPI 3 operations (method, path, summary, url, example body, response schema)",
+            "inputSchema": {
+                "type": "object",
+                "required": ["spec"],
+                "properties": {
+                    "spec": { "description": "OpenAPI document as a JSON object or string" }
                 }
             }
         },
@@ -573,6 +772,78 @@ async fn dispatch_tool(name: &str, arguments: &Value) -> Value {
             }
             let payload = http_from_args(arguments);
             send_and_record(payload, json!({ "method": method, "url": url })).await
+        }
+        "pulse_run_tests" => {
+            let script = arg_str(arguments, "script");
+            if script.is_empty() {
+                return text("script is required", true);
+            }
+            match response_from_args(arguments) {
+                Ok(response) => {
+                    let result = run_http_tests(&script, &response);
+                    json_text(&serde_json::to_value(result).unwrap_or(Value::Null), false)
+                }
+                Err(error) => text(error, true),
+            }
+        }
+        "pulse_pre_request" => {
+            let script = arg_str(arguments, "script");
+            if script.is_empty() {
+                return text("script is required", true);
+            }
+            let env = {
+                let mut map = serde_json::Map::new();
+                for item in extra_vars(arguments) {
+                    map.insert(item.key, Value::String(item.value));
+                }
+                Value::Object(map)
+            };
+            let result = run_pre_request_script_with_env(&script, &env);
+            json_text(&serde_json::to_value(result).unwrap_or(Value::Null), false)
+        }
+        "pulse_run_collection" => {
+            let input = match collection_run_from_workspace(arguments) {
+                Ok(input) => input,
+                Err(error) => return text(error, true),
+            };
+            let mutating = input
+                .requests
+                .iter()
+                .any(|item| is_mutating_method(&item.request.method));
+            if mutating && !confirmed(arguments) {
+                return text(
+                    "Collection includes mutating methods — pass confirm=true to run.",
+                    true,
+                );
+            }
+            let result = run_collection(
+                input,
+                |payload| async move { send_once(payload).await },
+                Some(|payloads: Vec<HttpRequestPayload>| async move {
+                    let mut results = Vec::with_capacity(payloads.len());
+                    for payload in payloads {
+                        results.push(match send_once(payload).await {
+                            Ok(response) => (Some(response), None),
+                            Err(error) => (None, Some(error)),
+                        });
+                    }
+                    results
+                }),
+            )
+            .await;
+            json_text(&serde_json::to_value(result).unwrap_or(Value::Null), false)
+        }
+        "pulse_openapi_list" => {
+            let spec = match arguments.get("spec") {
+                Some(Value::String(raw)) => match serde_json::from_str::<Value>(raw) {
+                    Ok(value) => value,
+                    Err(error) => return text(error.to_string(), true),
+                },
+                Some(value) => value.clone(),
+                None => return text("spec is required", true),
+            };
+            let ops = list_operations(&spec);
+            json_text(&serde_json::to_value(ops).unwrap_or(Value::Null), false)
         }
         _ => json!({
             "content": [{ "type": "text", "text": format!("Unknown tool: {name}") }],

@@ -18,6 +18,9 @@ bun run pulse:cli run python/examples/pets.json --env-file python/examples/stagi
 bun run pulse:cli bench python/examples/pets.json --env-file python/examples/staging.env --repeat 3 --budget-p95 5000
 bun run pulse:cli openapi python/examples/openapi.json --out python/examples/.out/from-openapi.json
 bun run pulse:cli har python/examples/capture.har --out python/examples/.out/from-har.json
+bun run pulse:cli curl 'curl -X GET https://api.example.com/health'
+bun run pulse:cli snippet --url https://api.example.com/health --format python
+bun run pulse:cli diff '{"a":1}' '{"a":2}'
 bun run pulse:cli schema python/examples/body.json python/examples/schema.json
 bun run pulse:cli send --method GET --url https://jsonplaceholder.typicode.com/posts/1
 ```
@@ -26,13 +29,13 @@ bun run pulse:cli send --method GET --url https://jsonplaceholder.typicode.com/p
 
 ## MCP (Cursor)
 
-Pulse exposes the same engine as an MCP stdio server. Project config is `.cursor/mcp.json`.
+Pulse exposes the same engine as an MCP stdio server. Project config is `.cursor/mcp.json` — **one** server named **pulse** (`python/pulse_mcp.py`).
 
 1. `bun run pulse:cli:install` (venv + `pulse_native`)
 2. Reload Cursor (**Settings → MCP** or restart)
 3. Enable the **pulse** server if Cursor asks
 
-Tools: `pulse_send`, `pulse_run_collection`, `pulse_bench`, `pulse_write_collection`, `pulse_pre_request`, `pulse_interpolate`, `pulse_run_tests`, `pulse_openapi`, `pulse_har`, `pulse_schema`, `pulse_diff`, `pulse_export_openapi`, `pulse_graphql`, `pulse_curl`, `pulse_snippet`, `pulse_last_run`, `pulse_validate_run`, `pulse_help`.
+Tools: `pulse_send`, `pulse_run_collection`, `pulse_bench`, `pulse_write_collection`, `pulse_pre_request`, `pulse_interpolate`, `pulse_run_tests`, `pulse_openapi`, `pulse_har`, `pulse_schema`, `pulse_diff`, `pulse_export_openapi`, `pulse_graphql`, `pulse_curl`, `pulse_snippet`, `pulse_last_run`, `pulse_validate_run`, `pulse_help`, plus workspace tools when `PULSE_WORKSPACE` is set.
 
 Prompts (Cursor can pick these without knowing tool names): `run_and_explain`, `openapi_to_pulse`, `compare_responses`, `graphql_introspect`, `curl_import`, `export_openapi`, `explain_last_run`, `validate_schema`.
 

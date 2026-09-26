@@ -25,7 +25,7 @@ A blank install opens a three-step wizard: **language**, **theme**, then **how t
 - Replay anytime: Settings → Appearance → **First-run setup**, or the command palette (`Cmd/Ctrl + K`)
 - Change later without the wizard: Appearance (language, theme) and Layout (start view, explorer)
 - Existing installs that already have a last-seen version skip the wizard so they are not interrupted
-- After first-run, Pulse may still show **What's new** for 2.0, then a Driver.js product tour
+- After first-run, Pulse may still show **What's new** for 2.1, then a Driver.js product tour
 
 ## Features
 

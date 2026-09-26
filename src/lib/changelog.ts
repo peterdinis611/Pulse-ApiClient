@@ -198,6 +198,14 @@ export const CHANGELOG: ChangelogRelease[] = [
           sk: "Explorer História → download exportuje načítané záznamy ako HAR 1.2 (status/čas; telo v histórii nie je).",
         },
       },
+      {
+        id: "rust-mcp-tools",
+        title: { en: "Richer Rust MCP", sk: "Bohatší Rust MCP" },
+        detail: {
+          en: "pulse-mcp adds run_tests, pre_request, run_collection, and openapi_list on the same pulse-core engine.",
+          sk: "pulse-mcp pridáva run_tests, pre_request, run_collection a openapi_list na tom istom pulse-core engine.",
+        },
+      },
     ],
   },
 ];
