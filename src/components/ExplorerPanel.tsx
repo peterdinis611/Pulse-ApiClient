@@ -775,23 +775,67 @@ export function ExplorerPanel() {
                           )}
                         </button>
                       </CollapsibleTrigger>
-                      <TooltipIconButton
-                        variant="ghost"
-                        size="icon"
-                        className="size-7 shrink-0 text-muted-foreground"
-                        label="Export history as HAR"
-                        disabled={historyEntries.length === 0}
-                        onClick={() => {
-                          const content = exportHistoryAsHar(historyEntries);
-                          downloadJson(content, collectionExportFilename("pulse-history", "har.json"));
-                          toast.success(
-                            "History exported",
-                            `${historyEntries.length} entr${historyEntries.length === 1 ? "y" : "ies"} as HAR`,
-                          );
-                        }}
-                      >
-                        <Download className="size-3.5" />
-                      </TooltipIconButton>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="size-7 shrink-0 text-muted-foreground"
+                            aria-label="Export history as HAR"
+                            disabled={historyCount === 0}
+                          >
+                            <Download className="size-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem
+                            disabled={historyEntries.length === 0}
+                            onClick={() => {
+                              const content = exportHistoryAsHar(historyEntries);
+                              downloadJson(
+                                content,
+                                collectionExportFilename("pulse-history", "har.json"),
+                              );
+                              toast.success(
+                                "History exported",
+                                `${historyEntries.length} loaded entr${historyEntries.length === 1 ? "y" : "ies"}`,
+                              );
+                            }}
+                          >
+                            Loaded page
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              void (async () => {
+                                try {
+                                  const { listAllHistoryEntries } = await import("@/lib/history-export");
+                                  const entries = await listAllHistoryEntries();
+                                  if (entries.length === 0) {
+                                    toast.error("No history yet");
+                                    return;
+                                  }
+                                  const content = exportHistoryAsHar(entries);
+                                  downloadJson(
+                                    content,
+                                    collectionExportFilename("pulse-history-all", "har.json"),
+                                  );
+                                  toast.success(
+                                    "History exported",
+                                    `${entries.length} entr${entries.length === 1 ? "y" : "ies"} as HAR`,
+                                  );
+                                } catch (error) {
+                                  toast.error(
+                                    error instanceof Error ? error.message : "HAR export failed",
+                                  );
+                                }
+                              })();
+                            }}
+                          >
+                            All history
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                       <TooltipIconButton
                         variant="ghost"
                         size="icon"

@@ -2,7 +2,16 @@ import { requestToCurl } from "./curl";
 import { prepareRequest } from "./http-client";
 import type { ApiRequest, Environment } from "@/types";
 
-export type CodeSnippetId = "curl" | "fetch" | "axios" | "httpie" | "python" | "go";
+export type CodeSnippetId =
+  | "curl"
+  | "fetch"
+  | "axios"
+  | "httpie"
+  | "python"
+  | "go"
+  | "okhttp"
+  | "reqwest"
+  | "swift";
 
 export type CodeSnippet = {
   id: CodeSnippetId;
@@ -17,6 +26,9 @@ export const CODE_SNIPPETS: CodeSnippet[] = [
   { id: "httpie", label: "HTTPie", language: "bash" },
   { id: "python", label: "Python (requests)", language: "python" },
   { id: "go", label: "Go (net/http)", language: "go" },
+  { id: "okhttp", label: "Java (OkHttp)", language: "java" },
+  { id: "reqwest", label: "Rust (reqwest)", language: "rust" },
+  { id: "swift", label: "Swift (URLSession)", language: "swift" },
 ];
 
 function enabledHeaders(request: ApiRequest): Array<{ key: string; value: string }> {
@@ -207,6 +219,103 @@ function toGo(request: ApiRequest): string {
   return lines.join("\n");
 }
 
+function javaString(value: string): string {
+  return JSON.stringify(value);
+}
+
+function toOkHttp(request: ApiRequest): string {
+  const headers = withAuthHeaders(request);
+  const body = requestBody(request);
+  const lines = [
+    "OkHttpClient client = new OkHttpClient();",
+    "",
+  ];
+  if (body && request.method !== "GET" && request.method !== "HEAD") {
+    const media =
+      request.bodyKind === "json" || request.bodyKind === "graphql"
+        ? "application/json"
+        : "text/plain";
+    lines.push(
+      `RequestBody body = RequestBody.create(${javaString(body)}, MediaType.parse(${javaString(media)}));`,
+    );
+  }
+  lines.push("Request.Builder builder = new Request.Builder()");
+  lines.push(`    .url(${javaString(request.url)})`);
+  lines.push(`    .method(${javaString(request.method)}, ${body && request.method !== "GET" && request.method !== "HEAD" ? "body" : "null"});`);
+  for (const header of headers) {
+    lines.push(`builder.addHeader(${javaString(header.key)}, ${javaString(header.value)});`);
+  }
+  lines.push(
+    "Request request = builder.build();",
+    "try (Response response = client.newCall(request).execute()) {",
+    "    System.out.println(response.code());",
+    "    System.out.println(response.body() != null ? response.body().string() : \"\");",
+    "}",
+  );
+  return lines.join("\n");
+}
+
+function toReqwest(request: ApiRequest): string {
+  const headers = withAuthHeaders(request);
+  const body = requestBody(request);
+  const lines = [
+    "use reqwest::header::{HeaderMap, HeaderName, HeaderValue};",
+    "",
+    "#[tokio::main]",
+    "async fn main() -> Result<(), Box<dyn std::error::Error>> {",
+    "    let client = reqwest::Client::new();",
+    "    let mut headers = HeaderMap::new();",
+  ];
+  for (const header of headers) {
+    lines.push(
+      `    headers.insert(HeaderName::from_bytes(${JSON.stringify(header.key)}.as_bytes())?, HeaderValue::from_str(${JSON.stringify(header.value)})?);`,
+    );
+  }
+  lines.push(
+    `    let mut builder = client.request(reqwest::Method::from_bytes(${JSON.stringify(request.method)}.as_bytes())?, ${JSON.stringify(request.url)});`,
+    "    builder = builder.headers(headers);",
+  );
+  if (body && request.method !== "GET" && request.method !== "HEAD") {
+    lines.push(`    builder = builder.body(${JSON.stringify(body)}.to_string());`);
+  }
+  lines.push(
+    "    let response = builder.send().await?;",
+    "    println!(\"{}\", response.status());",
+    "    println!(\"{}\", response.text().await?);",
+    "    Ok(())",
+    "}",
+  );
+  return lines.join("\n");
+}
+
+function toSwift(request: ApiRequest): string {
+  const headers = withAuthHeaders(request);
+  const body = requestBody(request);
+  const lines = [
+    "import Foundation",
+    "",
+    `var request = URLRequest(url: URL(string: ${JSON.stringify(request.url)})!)`,
+    `request.httpMethod = ${JSON.stringify(request.method)}`,
+  ];
+  for (const header of headers) {
+    lines.push(
+      `request.setValue(${JSON.stringify(header.value)}, forHTTPHeaderField: ${JSON.stringify(header.key)})`,
+    );
+  }
+  if (body && request.method !== "GET" && request.method !== "HEAD") {
+    lines.push(`request.httpBody = ${JSON.stringify(body)}.data(using: .utf8)`);
+  }
+  lines.push(
+    "let task = URLSession.shared.dataTask(with: request) { data, response, error in",
+    "    if let error = error { print(error); return }",
+    "    if let http = response as? HTTPURLResponse { print(http.statusCode) }",
+    "    if let data = data, let text = String(data: data, encoding: .utf8) { print(text) }",
+    "}",
+    "task.resume()",
+  );
+  return lines.join("\n");
+}
+
 export function requestToSnippet(
   id: CodeSnippetId,
   request: ApiRequest,
@@ -225,5 +334,11 @@ export function requestToSnippet(
       return toPython(prepared);
     case "go":
       return toGo(prepared);
+    case "okhttp":
+      return toOkHttp(prepared);
+    case "reqwest":
+      return toReqwest(prepared);
+    case "swift":
+      return toSwift(prepared);
   }
 }

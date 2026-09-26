@@ -267,6 +267,69 @@ fn paths_equal(left: &str, right: &str) -> bool {
     left.trim_end_matches('/') == right.trim_end_matches('/')
 }
 
+fn request_path(url: &str) -> String {
+    let cleaned = url.replace("{{", "").replace("}}", "");
+    if let Ok(parsed) = url::Url::parse(&cleaned) {
+        return parsed.path().to_string();
+    }
+    if let Some(idx) = cleaned.find("://") {
+        let rest = &cleaned[idx + 3..];
+        if let Some(slash) = rest.find('/') {
+            return rest[slash..].split('?').next().unwrap_or("/").to_string();
+        }
+    }
+    "/".into()
+}
+
+/// Build mock routes from saved request examples (Git workspace / collections).
+pub fn routes_from_saved_requests<'a, I>(requests: I) -> Vec<MockRoute>
+where
+    I: IntoIterator<Item = &'a crate::types::SavedRequestDto>,
+{
+    let mut routes = Vec::new();
+    for saved in requests {
+        let path = request_path(&saved.request.url);
+        for example in &saved.request.examples {
+            let content_type = example
+                .response
+                .content_type
+                .clone()
+                .unwrap_or_default();
+            let headers = example
+                .response
+                .headers
+                .iter()
+                .filter(|header| !header.key.trim().is_empty() && !is_hidden_header(&header.key))
+                .map(|header| MockHeader {
+                    key: header.key.clone(),
+                    value: header.value.clone(),
+                })
+                .collect();
+            routes.push(MockRoute {
+                method: saved.request.method.clone(),
+                path: path.clone(),
+                status: if example.response.status == 0 {
+                    200
+                } else {
+                    example.response.status
+                },
+                body: example.response.body.clone(),
+                content_type,
+                headers,
+                example_name: {
+                    let name = example.name.trim();
+                    if name.is_empty() {
+                        "example".into()
+                    } else {
+                        name.to_string()
+                    }
+                },
+            });
+        }
+    }
+    routes
+}
+
 fn parse_query(raw: &str) -> HashMap<String, String> {
     let mut out = HashMap::new();
     for pair in raw.split('&') {
