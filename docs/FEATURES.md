@@ -113,7 +113,7 @@ Auth, variables, pre-request, and tests on a parent apply to every child that In
 
 Copy the current request as client code for an app, a terminal, or a ticket.
 
-- Languages: cURL, JavaScript fetch, Axios, HTTPie, Python requests, Go net/http
+- Languages: cURL, JavaScript fetch, Axios, HTTPie, Python requests, Go net/http, Java OkHttp, Rust reqwest, Swift URLSession
 - Snippets use the resolved URL (variables + path params) and inherited auth
 - Code tab on the request — pick a language and Copy
 - Request bar ⋯ → Copy as — same languages without leaving the URL bar
@@ -122,7 +122,7 @@ Copy the current request as client code for an app, a terminal, or a ticket.
 **How to**
 
 1. Send or just fill the request, then open the Code tab.
-2. Select fetch / Axios / Python / … and Copy. Paste into the app.
+2. Select fetch / Axios / Python / OkHttp / … and Copy. Paste into the app.
 3. Or use ⋯ → Copy as when you only need a one-shot snippet.
 
 ### Response panel
@@ -244,6 +244,8 @@ Layered values: globals → collection → folder → environment. Later layers 
 - Autocomplete and the `{ }` picker list the merged enabled variables
 - pulse.environment.set updates the real environment (current value), not globals
 - Click a JSON key in the response body to upsert that value as {{key}} on the active environment
+- Export: all environments as Pulse JSON, or the selected one as Postman environment / `.env`
+- Import: Pulse JSON, Postman environment, or a `.env` file
 
 **How to**
 
@@ -251,6 +253,7 @@ Layered values: globals → collection → folder → environment. Later layers 
 2. Mark tokens and passwords as secret. Fill Initial once, then change Current per session.
 3. Put `baseUrl` on the environment and `{{baseUrl}}/users/:id` on the request.
 4. After Send, click `token` in the JSON tree — Pulse writes it to the environment and copies `{{token}}`.
+5. Toolbar Export → Postman / .env for the selected environment; Import accepts `.env` too.
 
 > Do not type secrets into collection YAML you plan to commit — use `{{secret.*}}`, `.env`, or the keychain.
 
@@ -303,7 +306,7 @@ Past sends stored in SQLite with search.
 - Fuzzy search across method, URL, and name
 - Reload a past request into a tab; preview without opening
 - Clear history from the explorer or Settings → Data
-- Export loaded history as HAR 1.2 from the explorer (request + status/timing; body not stored)
+- Export loaded history or all stored entries as HAR 1.2 from the explorer (request + status/timing; body not stored)
 - Source badge: desktop, agent (MCP), or cli
 
 ### Cookie jar
@@ -320,6 +323,10 @@ Inspect and edit cookies used by the HTTP engine.
 Native reqwest client — CORS does not apply; configure TLS, proxy, redirects, and default Origin/Referer.
 
 - Settings → HTTP engine — concurrency, timeouts, cache (memory + disk)
+- Response cache: memory (moka) + SQLite disk; honors max-age / s-maxage / Expires; skips no-store and bodies over 2 MB
+- Stale entries with ETag / Last-Modified revalidate via conditional GET (304 keeps the cached body)
+- Transparent gzip / brotli / deflate; HTTP/2 adaptive window + TCP nodelay; larger idle connection pool
+- Native cURL import/export (`parse_curl` / `format_curl`) — `--json`, `-F`, `-G`, `-I`, `-u`, cookies, User-Agent
 - TLS verify on/off (self-signed / local HTTPS)
 - mTLS — client certificate, key, and CA PEM via file picker (like custom CSS)
 - HTTP(S) or SOCKS proxy URL
@@ -433,33 +440,36 @@ Pulse does not operate a cloud. Your workspace stays on this device unless you s
 
 ### Python CLI & CI
 
-Satellite around the Rust engine — collection runs, benches, OpenAPI/HAR import. Not inside the desktop app.
+Satellite around the Rust engine — collection runs, Git workspace, mock, GraphQL, OpenAPI/HAR. Not inside the desktop app.
 
-- `bun run pulse:cli run collection.json` — Pulse export or CollectionRunInput, optional `.env` / CSV iterations
-- `bun run pulse:cli contract path/to/workspace` — validate Git YAML examples vs responseSchema and `*.previous.json` snapshots
-- JUnit XML and a p50/p95 timing summary for GitHub Actions
-- `bench` repeats a collection and fails if p95 exceeds a budget or a previous baseline
+- `bun run pulse:cli run collection.json` — Pulse export or CollectionRunInput, optional `.env` / CSV iterations; stores last-run for `last-run` / `validate-run`
+- `workspace status|list|search|envs|history|pending|read|write|delete|send|import-openapi|export-openapi` — MCP parity for a Git YAML folder (`PULSE_WORKSPACE`)
+- `contract` — validate YAML examples vs responseSchema / `*.previous.json` (path or `PULSE_WORKSPACE`)
+- `mock start|stop` — local mock on `127.0.0.1:4010` with optional `--delay-ms`
+- `pre-request`, `graphql` (incl. `--introspect`), `send` with `--header` / `--bearer` / `--user` / `--graphql`
+- `openapi --list` / `--export`, `har --export`, `env --format json|dotenv`, `version` / `doctor` / `help`
+- JUnit XML and a p50/p95 timing summary for GitHub Actions; `bench` fails on p95 budget or baseline drift
 - OpenAPI import fills path params, query, JSON examples, tag folders, and a 2xx status test
-- HAR capture → Pulse collection; Pulse dump / history → HAR (`har --export`); JSON Schema subset for response bodies
-- `curl`, `diff`, and `snippet` subcommands (same helpers MCP already uses)
+- `curl`, `diff`, and `snippet` (curl/fetch/httpie/python/axios/okhttp/reqwest/swift)
 - HTTP still goes through Rust (`pulse_native`); Python only prepares inputs and reports
 
 **How to**
 
 1. First `bun run tauri dev` (or `bun run pulse:cli:install`) builds the PyO3 module into `.venv`.
 2. Export a collection from Pulse, then `bun run pulse:cli run pets.json --env-file staging.env --summary --junit junit.xml`.
-3. `bun run pulse:cli curl 'curl -X POST https://api.test -d {"a":1}'` or `snippet --url https://api.test --format python`.
-4. Keep a `bench.json` from a good run and compare with `--baseline bench.json --factor 1.2`.
+3. `bun run pulse:cli workspace --workspace python/examples/git-workspace status` (or set `PULSE_WORKSPACE`).
+4. `bun run pulse:cli curl 'curl -X POST https://api.test -d {"a":1}'` or `snippet --url https://api.test --format python`.
+5. Keep a `bench.json` from a good run and compare with `--baseline bench.json --factor 1.2`.
 
 ### MCP
 
 Cursor (and other MCP clients) call the Pulse engine over stdio via one Python server — send, GraphQL, cURL, collections, bench, OpenAPI, Git workspace, contract, JUnit.
 
 - Project config: `.cursor/mcp.json` launches **pulse** only (`python/pulse_mcp.py`) — covers OpenAPI/HAR plus YAML workspace tools
-- Optional Rust twin: `cargo run -p pulse-mcp` (same workspace tools + run_tests / pre_request / run_collection / openapi_list on pulse-core)
+- Optional Rust twin: `cargo run -p pulse-mcp` (workspace tools + run_tests / pre_request / run_collection / openapi_list / mock_start/stop)
 - Set `PULSE_WORKSPACE` to the same Git folder the desktop attached
 - Resources: `pulse://examples/pets.json`, `pulse://last-run`, `pulse://openapi/{file}`, `pulse://out/{file}`, `pulse://workspace/requests|environments|history|pending`, `pulse://workspace/request/{id}`
-- Tools: pulse_workspace_list/read/write/send/envs/history/pending/search/delete/status/import_openapi/export_openapi, pulse_send (mutating methods need confirm=true), pulse_run_collection, pulse_bench, pulse_write_collection, pulse_pre_request, pulse_interpolate, pulse_run_tests, pulse_openapi, pulse_har, pulse_schema, pulse_diff, pulse_export_openapi, pulse_graphql, pulse_curl, pulse_snippet (curl/fetch/httpie/python/axios), pulse_last_run, pulse_validate_run, pulse_contract, pulse_junit, pulse_help
+- Tools: pulse_workspace_*, pulse_send, pulse_run_collection, pulse_bench, pulse_write_collection, pulse_pre_request, pulse_interpolate, pulse_run_tests, pulse_openapi, pulse_har, pulse_schema, pulse_diff, pulse_export_openapi, pulse_graphql, pulse_curl, pulse_snippet (curl/fetch/httpie/python/axios/okhttp/reqwest/swift), pulse_mock_start/stop, pulse_last_run, pulse_validate_run, pulse_contract, pulse_junit, pulse_help
 - Prompts: run_and_explain, openapi_to_pulse, compare_responses, graphql_introspect, curl_import, export_openapi, explain_last_run, validate_schema, send_saved_request, workspace_status, contract_check, import_openapi_workspace
 - Long collection runs and bench emit MCP progress (request name, status, ms) after each step
 - OpenAPI/HAR write to `python/examples/.out/` and return a POSIX path — not a huge JSON blob
@@ -484,7 +494,7 @@ Direct dependencies — desktop UI, Rust engine, Python satellite, and the docs 
 - State & effects — XState 5, @xstate/react, Effect
 - Desktop bridge — @tauri-apps/api, @tauri-apps/plugin-dialog, @tauri-apps/plugin-opener
 - Workspace UX — @tanstack/react-hotkeys, @tanstack/react-pacer, fuse.js (fuzzy search), xlsx (Excel preview / runner data)
-- Desktop crate (`src-tauri`) — Tauri 2 IPC: HTTP engine (reqwest rustls, cookies, SOCKS, SSE stream, timing waterfall, mTLS), WebSocket, OAuth, SQLite history/cache, cookie jar, OS keychain secrets, Git workspace watch, fuzzy search, mock server, collection runner, custom themes / languages
+- Desktop crate (`src-tauri`) — Tauri 2 IPC: HTTP engine (reqwest rustls, gzip/brotli, cookies, SOCKS, SSE stream, timing waterfall, mTLS, response cache + ETag revalidation, cURL parse/format), WebSocket, OAuth, SQLite history/cache, cookie jar, OS keychain secrets, Git workspace watch, fuzzy search, mock server, collection runner, custom themes / languages
 - Engine crate (`crates/pulse-core`) — shared Rust core: YAML workspace I/O, variable layers + secrets redaction, boa_engine scripts (pre-request + tests), collection runner, contract checks, OpenAPI operation flatten, path params, GraphQL-WS helpers, local mock (`:4010` + delay), simple HTTP send
 - MCP crate (`crates/pulse-mcp`) — optional Rust stdio MCP on pulse-core: workspace list/read/write/send/search/envs/history/pending/delete/status, contract, interpolate, send, run_tests, pre_request, run_collection, openapi_list (default agent entry is still Python `pulse`)
 - Python binding (`crates/pulse-native`) — PyO3 (abi3-py310) around pulse-core for CLI/MCP

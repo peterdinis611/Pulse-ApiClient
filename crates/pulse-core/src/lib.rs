@@ -19,6 +19,10 @@ pub mod workspace_fs;
 pub use collection_run::{
     run_collection, run_collection_with_progress, CollectionRunInput, CollectionRunResult, CollectionRunStep,
 };
+pub use mock_server::{
+    routes_from_saved_requests, start_mock_server, start_mock_server_with_delay, MockRoute, MockServer,
+    MockServerHandle, LOCKED_MOCK_PORT,
+};
 pub use test_runner::{
     read_json_path, run_http_tests, run_pre_request_script, run_pre_request_script_with_env, EnvMutation,
     PreRequestResult, TestCaseResult, TestRunResult,

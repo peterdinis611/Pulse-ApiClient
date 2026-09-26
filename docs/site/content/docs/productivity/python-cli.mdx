@@ -1,24 +1,27 @@
 ---
 title: "Python CLI & CI"
-description: "Satellite around the Rust engine — collection runs, benches, OpenAPI/HAR import. Not inside the desktop app."
+description: "Satellite around the Rust engine — collection runs, Git workspace, mock, GraphQL, OpenAPI/HAR. Not inside the desktop app."
 ---
 
-Satellite around the Rust engine — collection runs, benches, OpenAPI/HAR import. Not inside the desktop app.
+Satellite around the Rust engine — collection runs, Git workspace, mock, GraphQL, OpenAPI/HAR. Not inside the desktop app.
 
 ## In the product
 
-- `bun run pulse:cli run collection.json` — Pulse export or CollectionRunInput, optional `.env` / CSV iterations
-- `bun run pulse:cli contract path/to/workspace` — validate Git YAML examples vs responseSchema and `*.previous.json` snapshots
-- JUnit XML and a p50/p95 timing summary for GitHub Actions
-- `bench` repeats a collection and fails if p95 exceeds a budget or a previous baseline
+- `bun run pulse:cli run collection.json` — Pulse export or CollectionRunInput, optional `.env` / CSV iterations; stores last-run for `last-run` / `validate-run`
+- `workspace status|list|search|envs|history|pending|read|write|delete|send|import-openapi|export-openapi` — MCP parity for a Git YAML folder (`PULSE_WORKSPACE`)
+- `contract` — validate YAML examples vs responseSchema / `*.previous.json` (path or `PULSE_WORKSPACE`)
+- `mock start|stop` — local mock on `127.0.0.1:4010` with optional `--delay-ms`
+- `pre-request`, `graphql` (incl. `--introspect`), `send` with `--header` / `--bearer` / `--user` / `--graphql`
+- `openapi --list` / `--export`, `har --export`, `env --format json|dotenv`, `version` / `doctor` / `help`
+- JUnit XML and a p50/p95 timing summary for GitHub Actions; `bench` fails on p95 budget or baseline drift
 - OpenAPI import fills path params, query, JSON examples, tag folders, and a 2xx status test
-- HAR capture → Pulse collection; Pulse dump / history → HAR (`har --export`); JSON Schema subset for response bodies
-- `curl`, `diff`, and `snippet` subcommands (same helpers MCP already uses)
+- `curl`, `diff`, and `snippet` (curl/fetch/httpie/python/axios/okhttp/reqwest/swift)
 - HTTP still goes through Rust (`pulse_native`); Python only prepares inputs and reports
 
 ## Walkthrough
 
 1. First `bun run tauri dev` (or `bun run pulse:cli:install`) builds the PyO3 module into `.venv`.
 2. Export a collection from Pulse, then `bun run pulse:cli run pets.json --env-file staging.env --summary --junit junit.xml`.
-3. `bun run pulse:cli curl 'curl -X POST https://api.test -d {"a":1}'` or `snippet --url https://api.test --format python`.
-4. Keep a `bench.json` from a good run and compare with `--baseline bench.json --factor 1.2`.
+3. `bun run pulse:cli workspace --workspace python/examples/git-workspace status` (or set `PULSE_WORKSPACE`).
+4. `bun run pulse:cli curl 'curl -X POST https://api.test -d {"a":1}'` or `snippet --url https://api.test --format python`.
+5. Keep a `bench.json` from a good run and compare with `--baseline bench.json --factor 1.2`.

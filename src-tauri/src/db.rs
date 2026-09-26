@@ -117,6 +117,31 @@ impl DbState {
         Ok(None)
     }
 
+    /// Fresh or stale entry — used for conditional revalidation (ETag / Last-Modified).
+    pub fn cache_get_any(&self, key: &str) -> Result<Option<DiskCacheEntry>, String> {
+        validate_cache_key(key)?;
+        let conn = self.user_conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT response_json, cached_at_ms, expires_at_ms
+                 FROM http_response_cache
+                 WHERE cache_key = ?1",
+            )
+            .map_err(|e| e.to_string())?;
+
+        let mut rows = stmt.query(params![key]).map_err(|e| e.to_string())?;
+
+        if let Some(row) = rows.next().map_err(|e| e.to_string())? {
+            return Ok(Some(DiskCacheEntry {
+                response_json: row.get(0).map_err(|e| e.to_string())?,
+                cached_at_ms: row.get::<_, i64>(1).map_err(|e| e.to_string())? as u64,
+                expires_at_ms: row.get::<_, i64>(2).map_err(|e| e.to_string())? as u64,
+            }));
+        }
+
+        Ok(None)
+    }
+
     pub fn cache_put(
         &self,
         key: &str,

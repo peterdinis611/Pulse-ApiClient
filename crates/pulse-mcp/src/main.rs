@@ -3,11 +3,13 @@ use std::io::{self, BufRead, Write};
 use pulse_core::check_workspace;
 use pulse_core::interpolate_request;
 use pulse_core::openapi_ops::list_operations;
+use pulse_core::routes_from_saved_requests;
 use pulse_core::run_collection;
 use pulse_core::run_http_tests;
 use pulse_core::run_pre_request_script_with_env;
 use pulse_core::secrets::redact_json;
 use pulse_core::simple_http::send_once;
+use pulse_core::start_mock_server_with_delay;
 use pulse_core::substitute_variables;
 use pulse_core::to_http_payload;
 use pulse_core::types::{
@@ -18,10 +20,13 @@ use pulse_core::workspace_fs::{
     append_agent_history, delete_request, is_mutating_method, list_pending, load_workspace, read_agent_history,
     save_request, write_pending,
 };
-use pulse_core::CollectionRunInput;
+use pulse_core::{CollectionRunInput, MockRoute, MockServer};
 use serde_json::{json, Map, Value};
+use std::sync::Mutex;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+static MOCK_STATE: Mutex<Option<MockServer>> = Mutex::new(None);
 
 fn workspace_root() -> Result<String, String> {
     std::env::var("PULSE_WORKSPACE").map_err(|_| "PULSE_WORKSPACE is not set".into())
@@ -459,6 +464,22 @@ fn tools() -> Value {
             }
         },
         {
+            "name": "pulse_mock_start",
+            "description": "Start the local mock on 127.0.0.1:4010 from workspace examples or explicit routes",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "delayMs": { "type": "integer", "default": 0 },
+                    "routes": { "type": "array", "description": "Optional MockRoute[] JSON; otherwise load PULSE_WORKSPACE examples" }
+                }
+            }
+        },
+        {
+            "name": "pulse_mock_stop",
+            "description": "Stop the local mock server started by pulse_mock_start",
+            "inputSchema": { "type": "object", "properties": {} }
+        },
+        {
             "name": "pulse_help",
             "description": "List Pulse MCP tools and workspace resources",
             "inputSchema": { "type": "object", "properties": {} }
@@ -844,6 +865,42 @@ async fn dispatch_tool(name: &str, arguments: &Value) -> Value {
             };
             let ops = list_operations(&spec);
             json_text(&serde_json::to_value(ops).unwrap_or(Value::Null), false)
+        }
+        "pulse_mock_start" => {
+            let delay_ms = arguments
+                .get("delayMs")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let routes: Result<Vec<MockRoute>, String> = if let Some(raw) = arguments.get("routes") {
+                serde_json::from_value(raw.clone()).map_err(|error| error.to_string())
+            } else {
+                workspace_root().and_then(|root| {
+                    load_workspace(&root).map(|payload| routes_from_saved_requests(&payload.collections))
+                })
+            };
+            let routes = match routes {
+                Ok(routes) if !routes.is_empty() => routes,
+                Ok(_) => return text("No mock routes (save response examples first)", true),
+                Err(error) => return text(error, true),
+            };
+            match start_mock_server_with_delay(routes, delay_ms).await {
+                Ok(server) => {
+                    let handle = server.handle.clone();
+                    if let Ok(mut guard) = MOCK_STATE.lock() {
+                        *guard = Some(server);
+                    }
+                    json_text(&serde_json::to_value(handle).unwrap_or(Value::Null), false)
+                }
+                Err(error) => text(error, true),
+            }
+        }
+        "pulse_mock_stop" => {
+            if let Ok(mut guard) = MOCK_STATE.lock() {
+                if let Some(mut server) = guard.take() {
+                    server.stop();
+                }
+            }
+            text("ok", false)
         }
         _ => json!({
             "content": [{ "type": "text", "text": format!("Unknown tool: {name}") }],

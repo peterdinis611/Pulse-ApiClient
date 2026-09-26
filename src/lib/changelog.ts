@@ -154,8 +154,8 @@ export const CHANGELOG: ChangelogRelease[] = [
       sk: "Round-trip a agent CI",
     },
     summary: {
-      en: "Bruno and Insomnia export, mock latency, one MCP entrypoint, CLI curl/diff/snippet, and HAR from history.",
-      sk: "Bruno a Insomnia export, latencia mocku, jeden MCP vstup, CLI curl/diff/snippet a HAR z histórie.",
+      en: "Bruno/Insomnia export, mock latency + MCP mock, env .env/Postman I/O, more snippets, full HAR dump, richer CLI/MCP, faster HTTP cache + cURL.",
+      sk: "Bruno/Insomnia export, latencia mocku + MCP mock, env .env/Postman, viac snippetov, plný HAR dump, bohatšie CLI/MCP, rýchlejší HTTP cache + cURL.",
     },
     changes: [
       {
@@ -164,6 +164,14 @@ export const CHANGELOG: ChangelogRelease[] = [
         detail: {
           en: "Collection ⋯ and the export menu write Bruno and Insomnia JSON — round-trip with the existing importers.",
           sk: "Menu kolekcie a export zapíšu Bruno a Insomnia JSON — round-trip s existujúcimi importérmi.",
+        },
+      },
+      {
+        id: "http-cache-curl",
+        title: { en: "Faster cache & richer cURL", sk: "Rýchlejší cache a bohatší cURL" },
+        detail: {
+          en: "HTTP engine: gzip/brotli, HTTP/2 keep-alive, s-maxage/Expires, ETag revalidation, async disk cache. Native parse_curl/format_curl plus --json/-F/-G/-I in the UI importer.",
+          sk: "HTTP engine: gzip/brotli, HTTP/2 keep-alive, s-maxage/Expires, ETag revalidácia, async disk cache. Native parse_curl/format_curl plus --json/-F/-G/-I v UI importéri.",
         },
       },
       {
@@ -183,27 +191,59 @@ export const CHANGELOG: ChangelogRelease[] = [
         },
       },
       {
+        id: "cli-workspace-parity",
+        title: { en: "CLI workspace parity", sk: "CLI workspace parita" },
+        detail: {
+          en: "pulse workspace covers status/list/search/envs/history/pending/read/write/delete/send/import-openapi/export-openapi. Also pre-request, graphql, mock, env, last-run, validate-run, doctor, help.",
+          sk: "pulse workspace pokrýva status/list/search/envs/history/pending/read/write/delete/send/import-openapi/export-openapi. Plus pre-request, graphql, mock, env, last-run, validate-run, doctor, help.",
+        },
+      },
+      {
         id: "cli-curl-diff-snippet",
         title: { en: "CLI curl / diff / snippet", sk: "CLI curl / diff / snippet" },
         detail: {
-          en: "pulse curl, pulse diff, and pulse snippet are first-class subcommands. har accepts --export for Pulse → HAR.",
-          sk: "pulse curl, pulse diff a pulse snippet sú riadne subcommands. har berie --export pre Pulse → HAR.",
+          en: "pulse curl, pulse diff, and pulse snippet are first-class subcommands. har accepts --export for Pulse → HAR. openapi supports --list and --export.",
+          sk: "pulse curl, pulse diff a pulse snippet sú riadne subcommands. har berie --export pre Pulse → HAR. openapi podporuje --list a --export.",
         },
       },
       {
         id: "har-history",
         title: { en: "HAR from history", sk: "HAR z histórie" },
         detail: {
-          en: "Explorer History → download exports the loaded entries as HAR 1.2 (status/timing; body not stored in history).",
-          sk: "Explorer História → download exportuje načítané záznamy ako HAR 1.2 (status/čas; telo v histórii nie je).",
+          en: "Explorer History exports loaded page or all stored entries as HAR 1.2 (status/timing; body not stored).",
+          sk: "Explorer História exportuje načítanú stránku alebo celú históriu ako HAR 1.2 (status/čas; telo nie je uložené).",
         },
       },
       {
         id: "rust-mcp-tools",
         title: { en: "Richer Rust MCP", sk: "Bohatší Rust MCP" },
         detail: {
-          en: "pulse-mcp adds run_tests, pre_request, run_collection, and openapi_list on the same pulse-core engine.",
-          sk: "pulse-mcp pridáva run_tests, pre_request, run_collection a openapi_list na tom istom pulse-core engine.",
+          en: "pulse-mcp adds run_tests, pre_request, run_collection, openapi_list, and mock_start/stop on pulse-core.",
+          sk: "pulse-mcp pridáva run_tests, pre_request, run_collection, openapi_list a mock_start/stop na pulse-core.",
+        },
+      },
+      {
+        id: "env-io",
+        title: { en: "Env .env & Postman export", sk: "Env .env a Postman export" },
+        detail: {
+          en: "Environments view exports Pulse JSON, Postman environment, or .env — and imports .env / Postman / Pulse.",
+          sk: "Environments exportuje Pulse JSON, Postman environment alebo .env — a importuje .env / Postman / Pulse.",
+        },
+      },
+      {
+        id: "snippets-extra",
+        title: { en: "OkHttp, reqwest, Swift snippets", sk: "OkHttp, reqwest, Swift snippety" },
+        detail: {
+          en: "Code tab and CLI snippet formats include Java OkHttp, Rust reqwest, and Swift URLSession.",
+          sk: "Tab Code a CLI snippet formáty zahŕňajú Java OkHttp, Rust reqwest a Swift URLSession.",
+        },
+      },
+      {
+        id: "mcp-mock",
+        title: { en: "Mock from MCP", sk: "Mock z MCP" },
+        detail: {
+          en: "pulse_mock_start / pulse_mock_stop lock 127.0.0.1:4010 from workspace examples (Python + Rust MCP).",
+          sk: "pulse_mock_start / pulse_mock_stop zamknú 127.0.0.1:4010 z examples workspace (Python + Rust MCP).",
         },
       },
     ],

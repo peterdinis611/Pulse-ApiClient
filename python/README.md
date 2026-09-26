@@ -12,20 +12,33 @@ On macOS use `python3` — there is no `python` or `pip` command.
 
 ```bash
 bun run pulse:cli:install
+bun run pulse:cli help
+bun run pulse:cli doctor
 bun run pulse:cli interpolate '{{baseUrl}}/{{id}}' --env-file python/examples/staging.env --var id=1
 bun run pulse:cli test python/examples/script.js python/examples/response.json
+bun run pulse:cli pre-request 'pm.environment.set("ts", Date.now().toString())' --env '{}'
 bun run pulse:cli run python/examples/pets.json --env-file python/examples/staging.env --data python/examples/users.csv --summary --junit python/examples/.out/junit.xml
+bun run pulse:cli last-run
 bun run pulse:cli bench python/examples/pets.json --env-file python/examples/staging.env --repeat 3 --budget-p95 5000
+bun run pulse:cli openapi python/examples/openapi.json --list
 bun run pulse:cli openapi python/examples/openapi.json --out python/examples/.out/from-openapi.json
 bun run pulse:cli har python/examples/capture.har --out python/examples/.out/from-har.json
 bun run pulse:cli curl 'curl -X GET https://api.example.com/health'
 bun run pulse:cli snippet --url https://api.example.com/health --format python
 bun run pulse:cli diff '{"a":1}' '{"a":2}'
 bun run pulse:cli schema python/examples/body.json python/examples/schema.json
-bun run pulse:cli send --method GET --url https://jsonplaceholder.typicode.com/posts/1
+bun run pulse:cli send --method GET --url https://jsonplaceholder.typicode.com/posts/1 --header 'Accept: application/json'
+bun run pulse:cli graphql --url https://api.example.com/graphql --introspect
+bun run pulse:cli workspace --workspace python/examples/git-workspace status
+bun run pulse:cli workspace --workspace python/examples/git-workspace list
+bun run pulse:cli contract python/examples/git-workspace
+bun run pulse:cli env --env-file python/examples/staging.env --format dotenv
+bun run pulse:cli mock start --workspace python/examples/git-workspace --delay-ms 50
 ```
 
 `pets.json`, `staging.env`, `users.csv` and the rest live in `python/examples/`. Those names in the repo root do not exist.
+
+Set `PULSE_WORKSPACE` to skip `--workspace` on workspace / contract / mock commands.
 
 ## MCP (Cursor)
 

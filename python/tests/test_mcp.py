@@ -46,6 +46,8 @@ class McpProtocolTests(unittest.TestCase):
         self.assertIn("pulse_workspace_status", names)
         self.assertIn("pulse_contract", names)
         self.assertIn("pulse_junit", names)
+        self.assertIn("pulse_mock_start", names)
+        self.assertIn("pulse_mock_stop", names)
 
     def test_mcp_paths_are_posix(self) -> None:
         self.assertEqual(

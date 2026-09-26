@@ -34,9 +34,13 @@ impl HttpState {
     ) -> Result<Client, String> {
         let mut builder = Client::builder()
             .referer(false)
-            .pool_max_idle_per_host(32)
-            .pool_idle_timeout(Duration::from_secs(90))
+            .pool_max_idle_per_host(64)
+            .pool_idle_timeout(Duration::from_secs(120))
             .tcp_keepalive(Duration::from_secs(60))
+            .tcp_nodelay(true)
+            .http2_adaptive_window(true)
+            .http2_keep_alive_interval(Duration::from_secs(30))
+            .http2_keep_alive_timeout(Duration::from_secs(10))
             .connect_timeout(Duration::from_millis(config.connect_timeout_ms))
             .danger_accept_invalid_certs(!config.ssl_verify)
             .dns_resolver(Arc::new(dns));

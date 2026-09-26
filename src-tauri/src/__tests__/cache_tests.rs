@@ -172,3 +172,75 @@ fn private_responses_can_be_cached() {
         &CacheConfig::default()
     ));
 }
+
+#[test]
+fn parses_s_maxage_and_no_cache() {
+    let s_max = HttpResponsePayload {
+        status: 200,
+        status_text: "OK".to_string(),
+        headers: vec![ResponseHeader {
+            key: "Cache-Control".to_string(),
+            value: "public, s-maxage=30, max-age=120".to_string(),
+        }],
+        body: String::new(),
+        body_encoding: "utf8".to_string(),
+        elapsed_ms: 1,
+        dns_ms: None,
+        tls_ms: None,
+        ttfb_ms: None,
+        download_ms: None,
+        total_ms: None,
+        size_bytes: 0,
+        content_type: None,
+        from_cache: false,
+        cache_age_ms: None,
+        request_id: None,
+    };
+    assert_eq!(
+        cache_ttl_from_response(&s_max, DEFAULT_TTL),
+        Duration::from_secs(30)
+    );
+
+    let no_cache = HttpResponsePayload {
+        headers: vec![ResponseHeader {
+            key: "Cache-Control".to_string(),
+            value: "no-cache".to_string(),
+        }],
+        ..s_max
+    };
+    assert_eq!(
+        cache_ttl_from_response(&no_cache, DEFAULT_TTL),
+        Duration::ZERO
+    );
+}
+
+#[test]
+fn ignores_accept_encoding_in_cache_key() {
+    let mut left = sample_payload("GET");
+    left.headers.push(KeyValue {
+        key: "Accept-Encoding".to_string(),
+        value: "gzip".to_string(),
+        enabled: true,
+    });
+    let mut right = sample_payload("GET");
+    right.headers.push(KeyValue {
+        key: "Accept-Encoding".to_string(),
+        value: "br".to_string(),
+        enabled: true,
+    });
+    assert_eq!(cache_key(&left), cache_key(&right));
+}
+
+#[test]
+fn skips_oversized_bodies() {
+    let mut response = sample_response(200);
+    response.headers.clear();
+    response.body = "x".repeat(MAX_CACHE_BODY_BYTES + 1);
+    response.size_bytes = response.body.len();
+    assert!(!should_store_in_cache(
+        &sample_payload("GET"),
+        &response,
+        &CacheConfig::default()
+    ));
+}
+
