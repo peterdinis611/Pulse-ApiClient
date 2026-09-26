@@ -77,6 +77,11 @@ def _json(value: object, *, error: bool = False) -> dict:
     return _text(json.dumps(value, indent=2), error=error)
 
 
+def _mcp_path(path: Path) -> str:
+    """Repo-relative paths in MCP JSON stay POSIX on Windows."""
+    return path.as_posix()
+
+
 def _headers(value: object) -> list[dict]:
     if not value:
         return []
@@ -376,7 +381,7 @@ def _written(payload: dict, name: str | None) -> dict:
     groups = payload.get("collectionGroups") or []
     return _json(
         {
-            "path": str(path),
+            "path": _mcp_path(path),
             "name": (groups[0] or {}).get("name") if groups else Path(path).stem,
             "requests": len(payload.get("collections") or []),
         }
@@ -463,7 +468,7 @@ def tool_export_openapi(arguments: dict) -> dict:
         return _json(spec)
     title = (spec.get("info") or {}).get("title") or "openapi"
     written = write_out_json(spec, arguments.get("name") or title)
-    return _json({"path": str(written), "title": title, "paths": len(spec.get("paths") or {})})
+    return _json({"path": _mcp_path(written), "title": title, "paths": len(spec.get("paths") or {})})
 
 
 def tool_graphql(arguments: dict) -> dict:
@@ -631,7 +636,7 @@ def tool_workspace_write(arguments: dict) -> dict:
         path = write_workspace_request(root, saved, str(arguments.get("groupName") or "collection"))
     except Exception as error:
         return _text(str(error), error=True)
-    return _text(str(path))
+    return _text(_mcp_path(path))
 
 
 def tool_workspace_send(arguments: dict) -> dict:
@@ -760,7 +765,7 @@ def tool_workspace_export_openapi(arguments: dict) -> dict:
     if arguments.get("inline"):
         return _json(spec)
     written = write_out_json(spec, str(arguments.get("name") or "workspace-openapi"))
-    return _json({"path": str(written), "paths": len(spec.get("paths") or {})})
+    return _json({"path": _mcp_path(written), "paths": len(spec.get("paths") or {})})
 
 
 def tool_contract(_arguments: dict) -> dict:
@@ -790,7 +795,7 @@ def tool_junit(arguments: dict) -> dict:
         return _text(xml)
     written = write_out_text(xml, str(arguments.get("name") or "junit"), ".xml")
     failures = xml.count("<failure")
-    return _json({"path": str(written), "failures": failures})
+    return _json({"path": _mcp_path(written), "failures": failures})
 
 
 def tool_help(_arguments: dict) -> dict:

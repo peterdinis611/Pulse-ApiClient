@@ -1,11 +1,11 @@
 import json
 import sys
 import unittest
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from pulse.mcp_protocol import TOOL_DEFS, handle_message
+from pulse.mcp_protocol import TOOL_DEFS, _mcp_path, handle_message
 
 
 class McpProtocolTests(unittest.TestCase):
@@ -46,6 +46,12 @@ class McpProtocolTests(unittest.TestCase):
         self.assertIn("pulse_workspace_status", names)
         self.assertIn("pulse_contract", names)
         self.assertIn("pulse_junit", names)
+
+    def test_mcp_paths_are_posix(self) -> None:
+        self.assertEqual(
+            _mcp_path(PureWindowsPath(r"python\examples\.out\mcp-test-col.json")),
+            "python/examples/.out/mcp-test-col.json",
+        )
 
     def test_schema_tool(self) -> None:
         result = handle_message(
