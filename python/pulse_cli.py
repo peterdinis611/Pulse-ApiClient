@@ -301,7 +301,7 @@ def cmd_send(args: argparse.Namespace) -> int:
     return 0
 
 
-def _workspace_path(args: argparse.Namespace) -> Path:
+def _workspace_path(args: argparse.Namespace, *, allow_missing: bool = False) -> Path:
     import os
 
     from pulse.workspace import workspace_root
@@ -309,7 +309,7 @@ def _workspace_path(args: argparse.Namespace) -> Path:
     raw = getattr(args, "workspace", None) or os.environ.get("PULSE_WORKSPACE")
     if raw:
         path = Path(raw).expanduser().resolve()
-        if not path.is_dir():
+        if not path.is_dir() and not allow_missing:
             raise SystemExit(f"No such workspace directory: {path}")
         return path
     env_root = workspace_root()
@@ -319,7 +319,30 @@ def _workspace_path(args: argparse.Namespace) -> Path:
 
 
 def cmd_contract(args: argparse.Namespace) -> int:
+    from pulse.contract import breaking_diff, compare_to_schema
     from pulse.workspace import check_workspace_files
+
+    if getattr(args, "schema", None) and getattr(args, "body", None):
+        body = Path(args.body).read_text() if Path(args.body).is_file() else args.body
+        schema = _load_json(args.schema)
+        if not isinstance(schema, dict):
+            raise SystemExit("--schema must be a JSON object")
+        report = compare_to_schema(body, schema)
+        if not report.get("ok"):
+            print("\n".join(report.get("errors") or []), file=sys.stderr)
+            return 1
+        print("ok")
+        return 0
+
+    if getattr(args, "previous", None) and getattr(args, "current", None):
+        previous = _load_json(args.previous)
+        current = _load_json(args.current)
+        report = breaking_diff(previous, current)
+        if not report.get("ok"):
+            print("\n".join(report.get("errors") or []), file=sys.stderr)
+            return 1
+        print("ok")
+        return 0
 
     root = _workspace_path(args)
     native = None
@@ -344,6 +367,71 @@ def cmd_contract(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_sse(args: argparse.Namespace) -> int:
+    from pulse.sse import collect, parse_text
+
+    if getattr(args, "parse", None):
+        text = Path(args.parse).read_text() if Path(args.parse).is_file() else args.parse
+        print(json.dumps(parse_text(text), indent=2))
+        return 0
+    if not args.url:
+        raise SystemExit("pulse sse requires URL or --parse <text|file>")
+    headers = {}
+    for item in args.header or []:
+        if ":" not in item:
+            raise SystemExit(f"Invalid --header (expected Key: Value): {item}")
+        key, value = item.split(":", 1)
+        headers[key.strip()] = value.strip()
+    events = collect(
+        args.url,
+        method=args.method or "GET",
+        headers=headers or None,
+        body=args.body,
+        max_events=int(args.max_events or 50),
+        timeout_s=float(args.timeout or 30),
+        last_event_id=args.last_event_id,
+    )
+    print(json.dumps(events, indent=2))
+    return 0
+
+
+def cmd_graphql_ws(args: argparse.Namespace) -> int:
+    from pulse import graphql_ws as gws
+
+    action = args.graphql_ws_command
+    if action == "protocols":
+        print(gws.protocols())
+        return 0
+    if action == "init":
+        auth = None
+        if args.bearer:
+            auth = {"authType": "bearer", "bearerToken": args.bearer}
+        payload = _load_json(args.payload) if args.payload else None
+        if payload is not None and not isinstance(payload, dict):
+            raise SystemExit("--payload must be a JSON object")
+        print(gws.connection_init(payload=payload, auth=auth))
+        return 0
+    if action == "subscribe":
+        variables = _load_json(args.variables) if args.variables else None
+        print(
+            gws.subscribe(
+                args.id or "1",
+                args.query,
+                variables=variables,
+                operation_name=args.operation_name,
+            )
+        )
+        return 0
+    if action == "complete":
+        print(gws.complete(args.id or "1"))
+        return 0
+    if action == "parse":
+        text = Path(args.text).read_text() if Path(args.text).is_file() else args.text
+        print(json.dumps(gws.parse_frame(text), indent=2))
+        return 0
+    raise SystemExit(f"Unknown graphql-ws command: {action}")
+
+
 def _cli_now() -> str:
     from datetime import datetime, timezone
 
@@ -355,12 +443,14 @@ def cmd_workspace(args: argparse.Namespace) -> int:
         append_history,
         delete_request,
         import_openapi_requests,
+        init_workspace,
         interpolate_value,
         is_mutating_method,
         list_environments,
         list_pending,
         list_requests,
         merge_variables,
+        migrate_workspace,
         read_history,
         read_request,
         request_to_http_payload,
@@ -371,8 +461,16 @@ def cmd_workspace(args: argparse.Namespace) -> int:
         write_request,
     )
 
-    root = _workspace_path(args)
+    root = _workspace_path(args, allow_missing=args.workspace_command == "init")
     action = args.workspace_command
+    if action == "init":
+        path = init_workspace(root, args.name or root.name or "Pulse")
+        print(json.dumps({"path": str(path)}, indent=2))
+        return 0
+    if action == "migrate":
+        migrated = migrate_workspace(root)
+        print(json.dumps({"migrated": migrated}, indent=2))
+        return 0
     if action == "status":
         print(json.dumps(workspace_status(root), indent=2))
         return 0
@@ -625,9 +723,10 @@ def cmd_help(_args: argparse.Namespace) -> int:
         "pulse CLI — same engine as MCP (pulse_native)",
         "",
         "Core:        interpolate · test · pre-request · run · bench · send · graphql",
+        "Streams:     sse · graphql-ws",
         "Convert:     openapi [--list|--export] · har [--export] · curl · snippet · diff · schema",
         "CI:          junit · report · validate-run · last-run · contract · env",
-        "Workspace:   workspace status|list|search|envs|history|pending|read|write|delete|send|import-openapi|export-openapi",
+        "Workspace:   workspace status|init|migrate|list|search|envs|history|pending|read|write|delete|send|import-openapi|export-openapi",
         "Local mock:  mock start|stop",
         "Meta:        version · doctor · help",
         "",
@@ -654,6 +753,12 @@ def cmd_version(_args: argparse.Namespace) -> int:
                 "interpolate",
                 "load_workspace_json",
                 "check_workspace_json",
+                "init_workspace_json",
+                "migrate_workspace_json",
+                "parse_sse_json",
+                "compare_schema_json",
+                "breaking_diff_json",
+                "graphql_ws_frame_json",
                 "mock_start_json",
                 "mock_stop",
             )
@@ -803,14 +908,53 @@ def main(argv: list[str] | None = None) -> int:
     graphql.add_argument("--introspect", action="store_true", help="Run built-in introspection and summarize")
     graphql.set_defaults(func=cmd_graphql)
 
-    contract = sub.add_parser("contract", help="Validate YAML workspace examples against responseSchema / snapshots")
+    contract = sub.add_parser(
+        "contract",
+        help="Validate workspace contracts, or --schema/--body, or --previous/--current breaking diff",
+    )
     contract.add_argument(
         "workspace",
         nargs="?",
         default=None,
         help="Git workspace root (default: PULSE_WORKSPACE)",
     )
+    contract.add_argument("--schema", help="JSON Schema (inline or file) for --body")
+    contract.add_argument("--body", help="JSON body (inline or file) to validate against --schema")
+    contract.add_argument("--previous", help="Previous JSON snapshot (inline or file)")
+    contract.add_argument("--current", help="Current JSON snapshot (inline or file)")
     contract.set_defaults(func=cmd_contract)
+
+    sse = sub.add_parser("sse", help="Parse SSE text or collect events from a URL")
+    sse.add_argument("url", nargs="?", help="SSE endpoint URL")
+    sse.add_argument("--parse", help="Parse SSE document text or file (no network)")
+    sse.add_argument("--method", default="GET")
+    sse.add_argument("--header", action="append", default=[], help="Header: value")
+    sse.add_argument("--body", help="Request body for POST streams")
+    sse.add_argument("--max-events", type=int, default=50)
+    sse.add_argument("--timeout", type=float, default=30.0)
+    sse.add_argument("--last-event-id", help="Last-Event-ID header")
+    sse.set_defaults(func=cmd_sse)
+
+    gqlws = sub.add_parser("graphql-ws", help="Build/parse graphql-ws frames")
+    gqlws_sub = gqlws.add_subparsers(dest="graphql_ws_command", required=True)
+    gqlws_protocols = gqlws_sub.add_parser("protocols", help="Print Sec-WebSocket-Protocol offer")
+    gqlws_protocols.set_defaults(func=cmd_graphql_ws)
+    gqlws_init = gqlws_sub.add_parser("init", help="Build connection_init frame")
+    gqlws_init.add_argument("--payload", help="JSON payload object")
+    gqlws_init.add_argument("--bearer", help="Map bearer token into Authorization payload")
+    gqlws_init.set_defaults(func=cmd_graphql_ws)
+    gqlws_sub_cmd = gqlws_sub.add_parser("subscribe", help="Build subscribe frame")
+    gqlws_sub_cmd.add_argument("--id", default="1")
+    gqlws_sub_cmd.add_argument("--query", required=True)
+    gqlws_sub_cmd.add_argument("--variables", help="Variables JSON")
+    gqlws_sub_cmd.add_argument("--operation-name")
+    gqlws_sub_cmd.set_defaults(func=cmd_graphql_ws)
+    gqlws_complete = gqlws_sub.add_parser("complete", help="Build complete frame")
+    gqlws_complete.add_argument("--id", default="1")
+    gqlws_complete.set_defaults(func=cmd_graphql_ws)
+    gqlws_parse = gqlws_sub.add_parser("parse", help="Parse a frame JSON string or file")
+    gqlws_parse.add_argument("text")
+    gqlws_parse.set_defaults(func=cmd_graphql_ws)
 
     workspace = sub.add_parser("workspace", help="Inspect or send from a Git YAML workspace")
     workspace.add_argument(
@@ -824,9 +968,14 @@ def main(argv: list[str] | None = None) -> int:
         ("list", "List saved requests"),
         ("envs", "List environments"),
         ("pending", "List mutating calls waiting in .pulse/pending"),
+        ("migrate", "Migrate Pulse JSON dumps into YAML"),
     ):
         p = ws_sub.add_parser(name, help=help_text)
         p.set_defaults(func=cmd_workspace)
+
+    ws_init = ws_sub.add_parser("init", help="Create pulse.yaml + collections/ + environments/")
+    ws_init.add_argument("--name", help="Workspace display name")
+    ws_init.set_defaults(func=cmd_workspace)
 
     ws_search = ws_sub.add_parser("search", help="Search requests by id/name/method/url")
     ws_search.add_argument("query", nargs="?", default="")

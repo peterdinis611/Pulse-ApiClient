@@ -595,6 +595,46 @@ def check_workspace_files(root: Path) -> dict[str, Any]:
     return {"ok": not errors, "errors": errors}
 
 
+def init_workspace(root: Path, name: str = "Pulse") -> Path:
+    """Create pulse.yaml + collections/ + environments/ (Rust when available)."""
+    try:
+        from pulse.native import load_native
+
+        native = load_native()
+        if hasattr(native, "init_workspace_json"):
+            result = json.loads(native.init_workspace_json(str(root), name))
+            return Path(result.get("path") or root)
+    except SystemExit:
+        pass
+    root.mkdir(parents=True, exist_ok=True)
+    pulse = root / "pulse.yaml"
+    if not pulse.is_file():
+        pulse.write_text(f'version: "1"\nname: {json.dumps(name or "Pulse")}\n')
+    (root / "collections").mkdir(exist_ok=True)
+    (root / "environments").mkdir(exist_ok=True)
+    gitignore = root / ".gitignore"
+    if not gitignore.is_file():
+        gitignore.write_text(".env\n.pulse/\n")
+    return root
+
+
+def migrate_workspace(root: Path) -> list[str]:
+    """Migrate Pulse JSON dumps under root into YAML (Rust when available)."""
+    try:
+        from pulse.native import load_native
+
+        native = load_native()
+        if hasattr(native, "migrate_workspace_json"):
+            result = json.loads(native.migrate_workspace_json(str(root)))
+            migrated = result.get("migrated") or []
+            return [str(item) for item in migrated]
+    except SystemExit:
+        pass
+    raise RuntimeError(
+        "migrate_workspace requires pulse_native. Rebuild with: bun run pulse:cli:install"
+    )
+
+
 def write_pending(root: Path, payload: dict[str, Any]) -> Path:
     pending = root / ".pulse" / "pending"
     pending.mkdir(parents=True, exist_ok=True)

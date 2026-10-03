@@ -11,6 +11,7 @@ pub mod prepare;
 pub mod script_engine;
 pub mod secrets;
 pub mod simple_http;
+pub mod sse;
 pub mod test_runner;
 pub mod types;
 pub mod vars;
@@ -27,13 +28,14 @@ pub use test_runner::{
     read_json_path, run_http_tests, run_pre_request_script, run_pre_request_script_with_env, EnvMutation,
     PreRequestResult, TestCaseResult, TestRunResult,
 };
-pub use contract::check_workspace;
+pub use contract::{breaking_diff, check_workspace, compare_to_schema};
 pub use prepare::{interpolate_request, to_http_payload};
+pub use sse::{next_event_boundary, parse_sse_block, parse_sse_text, ParsedSseEvent, SseBuffer};
 pub use types::{AuthConfig, EnvVariable, HttpRequestPayload, HttpResponsePayload, KeyValue};
 pub use vars::substitute_variables;
 pub use workspace_fs::{
-    append_agent_history, delete_request, is_mutating_method, list_pending, load_workspace, read_agent_history,
-    save_workspace, write_pending, GitWorkspacePayload,
+    append_agent_history, delete_request, init_workspace, is_mutating_method, list_pending, load_workspace,
+    migrate_pulse_json_dumps, read_agent_history, save_workspace, write_pending, GitWorkspacePayload,
 };
 
 #[cfg(test)]
