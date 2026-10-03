@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from pulse.contract import breaking_diff, compare_to_schema
-from pulse.graphql_ws import complete, connection_init, parse_frame, subscribe
+from pulse.graphql_ws import complete, connection_init, parse_frame, ping, start, stop, subscribe
 from pulse.sse import parse_block, parse_text
 
 
@@ -31,6 +31,9 @@ class SseGraphqlWsTests(unittest.TestCase):
         self.assertEqual(sub["id"], "1")
         self.assertEqual(json.loads(complete("1")), {"type": "complete", "id": "1"})
         self.assertEqual(parse_frame('{"type":"connection_ack"}')["type"], "connection_ack")
+        self.assertEqual(json.loads(start("3", "subscription { z }"))["type"], "start")
+        self.assertEqual(json.loads(stop("3"))["type"], "stop")
+        self.assertEqual(json.loads(ping())["type"], "ping")
 
     def test_contract_helpers(self) -> None:
         ok = compare_to_schema({"id": 1}, {"type": "object", "required": ["id"], "properties": {"id": {"type": "integer"}}})

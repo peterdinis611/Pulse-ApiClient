@@ -190,4 +190,53 @@ mod tests {
         assert_eq!(normalize_frame_kind("start"), "subscribe");
         assert_eq!(normalize_frame_kind("data"), "next");
     }
+
+    #[test]
+    fn legacy_start_and_stop_frames() {
+        let started = start("9", "subscription { x }", Some(json!({"a": 1})), Some("X"));
+        let parsed = parse_message(&started).unwrap();
+        assert_eq!(parsed.kind, "start");
+        assert_eq!(parsed.id.as_deref(), Some("9"));
+        assert_eq!(
+            parsed.payload.as_ref().and_then(|p| p.get("operationName")).and_then(Value::as_str),
+            Some("X")
+        );
+        assert_eq!(parse_message(&stop("9")).unwrap().kind, "stop");
+        assert_eq!(normalize_frame_kind("stop"), "complete");
+        assert_eq!(normalize_frame_kind("ka"), "pong");
+        assert_eq!(normalize_frame_kind("connection_error"), "error");
+    }
+
+    #[test]
+    fn connection_init_maps_api_key_header() {
+        let payload = connection_init_payload_from_auth(
+            "apiKey",
+            None,
+            Some("X-Api-Key"),
+            Some("secret"),
+            Some("header"),
+        )
+        .unwrap();
+        assert_eq!(
+            payload.get("X-Api-Key").and_then(Value::as_str),
+            Some("secret")
+        );
+        assert!(connection_init_payload_from_auth(
+            "apiKey",
+            None,
+            Some("token"),
+            Some("x"),
+            Some("query"),
+        )
+        .is_none());
+        assert!(connection_init_payload_from_auth("none", None, None, None, None).is_none());
+    }
+
+    #[test]
+    fn ping_can_carry_payload() {
+        let raw = ping(Some(json!({"n": 1})));
+        let parsed = parse_message(&raw).unwrap();
+        assert_eq!(parsed.kind, "ping");
+        assert_eq!(parsed.payload.unwrap()["n"], 1);
+    }
 }

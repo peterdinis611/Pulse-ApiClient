@@ -20,5 +20,17 @@ mod tests {
     fn catalog_lists_new_tools() {
         assert!(STREAM_AND_CONTRACT_TOOLS.contains(&"pulse_sse"));
         assert!(STREAM_AND_CONTRACT_TOOLS.contains(&"pulse_graphql_ws"));
+        assert!(STREAM_AND_CONTRACT_TOOLS.contains(&"pulse_graphql"));
+        assert!(STREAM_AND_CONTRACT_TOOLS.contains(&"pulse_curl"));
+        assert!(STREAM_AND_CONTRACT_TOOLS.contains(&"pulse_diff"));
+        assert!(STREAM_AND_CONTRACT_TOOLS.contains(&"pulse_schema"));
+    }
+
+    #[test]
+    fn catalog_has_no_duplicates() {
+        let mut seen = std::collections::HashSet::new();
+        for name in STREAM_AND_CONTRACT_TOOLS {
+            assert!(seen.insert(*name), "duplicate tool {name}");
+        }
     }
 }

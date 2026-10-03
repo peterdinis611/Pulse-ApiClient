@@ -18,6 +18,10 @@ describe("command palette", () => {
   it("includes views, settings, collections, and requests", () => {
     expect(items.some((item) => item.kind === "view" && item.view === "settings")).toBe(true);
     expect(items.some((item) => item.kind === "view" && item.view === "mcp")).toBe(true);
+    expect(items.some((item) => item.kind === "view" && item.view === "agent")).toBe(true);
+    expect(items.some((item) => item.kind === "settings" && item.settingsSection === "agent")).toBe(
+      true,
+    );
     expect(items.some((item) => item.kind === "settings" && item.settingsSection === "http")).toBe(
       true,
     );

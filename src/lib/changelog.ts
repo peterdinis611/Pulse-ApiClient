@@ -310,6 +310,14 @@ export const CHANGELOG: ChangelogRelease[] = [
           sk: "pulse-mcp pridáva workspace init/migrate, schema, JSON diff, cURL parse/send, SSE parse, GraphQL HTTP + graphql-ws frames a bohatší contract — bližšie k Python MCP.",
         },
       },
+      {
+        id: "in-app-agent",
+        title: { en: "In-app Pulse Agent", sk: "Pulse Agent v appke" },
+        detail: {
+          en: "New Agent rail view: local intents (no LLM yet) for cURL import, response/test explain, workspace status/history, SSE parse, GraphQL schema summarize, and confirmed collection runs. Settings stubs LLM provider + API key for later.",
+          sk: "Nový Agent v raili: lokálne intentty (zatiaľ bez LLM) na import cURL, vysvetlenie odpovede/testov, stav/históriu workspace, SSE parse, GraphQL schema summarize a potvrdené behy kolekcií. Settings majú stub LLM providera + API kľúča.",
+        },
+      },
     ],
   },
 ];

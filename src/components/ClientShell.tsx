@@ -25,6 +25,9 @@ const DocsView = lazy(() =>
 const McpView = lazy(() =>
   import("./McpView").then((module) => ({ default: module.McpView })),
 );
+const AgentView = lazy(() =>
+  import("./AgentView").then((module) => ({ default: module.AgentView })),
+);
 const EnvironmentsView = lazy(() =>
   import("./EnvironmentsView").then((module) => ({ default: module.EnvironmentsView })),
 );
@@ -62,7 +65,9 @@ export function ClientShell() {
                   ? `${t("window.docs")} · ${APP_NAME}`
                   : mainView === "mcp"
                     ? `${t("window.mcp")} · ${APP_NAME}`
-                    : APP_NAME;
+                    : mainView === "agent"
+                      ? `${t("window.agent")} · ${APP_NAME}`
+                      : APP_NAME;
 
       try {
         await setWindowTitle(label, title);
@@ -90,6 +95,7 @@ export function ClientShell() {
             {mainView === "environments" && <EnvironmentsView />}
             {mainView === "settings" && <SettingsView />}
             {mainView === "docs" && <DocsView />}
+            {mainView === "agent" && <AgentView />}
             {mainView === "mcp" && <McpView />}
             {mainView === "request" && <RequestWorkspace />}
           </Suspense>

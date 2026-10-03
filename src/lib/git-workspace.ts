@@ -122,6 +122,14 @@ export async function listGitAgentHistory(root: string): Promise<unknown[]> {
   return runEffect(invokeEffect<unknown[]>("git_workspace_agent_history", { root }));
 }
 
+export async function appendGitAgentHistory(
+  root: string,
+  entry: Record<string, unknown>,
+): Promise<void> {
+  if (!canUseTauriIpc()) return;
+  await runEffect(invokeEffect<void>("git_workspace_append_agent_history", { root, entry }));
+}
+
 export function collectionsFolderAvailable(): boolean {
   return canUseTauriIpc();
 }

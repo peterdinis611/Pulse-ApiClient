@@ -3,6 +3,7 @@ import {
   connectionInit,
   connectionInitPayloadFromAuth,
   graphqlComplete,
+  graphqlPong,
   graphqlSubscribe,
   parseGraphqlWsFrame,
 } from "@/lib/graphql-ws";
@@ -17,6 +18,7 @@ describe("graphql-ws frames", () => {
     });
     expect(JSON.parse(graphqlComplete("1"))).toEqual({ type: "complete", id: "1" });
     expect(JSON.parse(connectionInit()).type).toBe("connection_init");
+    expect(JSON.parse(graphqlPong({ n: 1 }))).toEqual({ type: "pong", payload: { n: 1 } });
   });
 
   it("maps bearer auth into connection_init payload", () => {
@@ -28,12 +30,37 @@ describe("graphql-ws frames", () => {
     ).toEqual({ Authorization: "Bearer secret" });
   });
 
+  it("maps api key header auth and ignores query api keys", () => {
+    expect(
+      connectionInitPayloadFromAuth({
+        authType: "apiKey",
+        apiKeyKey: "X-Api-Key",
+        apiKeyValue: "abc",
+        apiKeyIn: "header",
+      }),
+    ).toEqual({ "X-Api-Key": "abc" });
+    expect(
+      connectionInitPayloadFromAuth({
+        authType: "apiKey",
+        apiKeyKey: "token",
+        apiKeyValue: "abc",
+        apiKeyIn: "query",
+      }),
+    ).toBeUndefined();
+  });
+
   it("parses graphql-ws frames", () => {
     expect(parseGraphqlWsFrame('{"type":"connection_ack"}')).toEqual({
       type: "connection_ack",
       id: undefined,
       payload: undefined,
     });
+    expect(parseGraphqlWsFrame('{"type":"next","id":"1","payload":{"data":{"x":1}}}')).toEqual({
+      type: "next",
+      id: "1",
+      payload: { data: { x: 1 } },
+    });
     expect(parseGraphqlWsFrame("not-json")).toBeNull();
+    expect(parseGraphqlWsFrame('{"noType":true}')).toBeNull();
   });
 });

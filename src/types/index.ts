@@ -14,7 +14,14 @@ export type OAuth2GrantType = "client_credentials" | "authorization_code";
 export type ApiKeyLocation = "header" | "query";
 export type MultipartFieldType = "text" | "file";
 export type SidebarTab = "collections" | "history" | "environments";
-export type MainView = "overview" | "request" | "environments" | "settings" | "docs" | "mcp";
+export type MainView =
+  | "overview"
+  | "request"
+  | "environments"
+  | "settings"
+  | "docs"
+  | "mcp"
+  | "agent";
 
 export type RequestProtocol = "http" | "websocket" | "sse";
 

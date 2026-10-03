@@ -34,9 +34,10 @@ use cache::CacheConfig;
 use db::{DbState, DbUserSession};
 use engine::HttpEngineStats;
 use git_workspace::{
-    git_workspace_agent_history, git_workspace_load, git_workspace_migrate, git_workspace_open,
-    git_workspace_pending, git_workspace_read_file, git_workspace_save, git_workspace_save_request,
-    git_workspace_unwatch, git_workspace_watch, GitWatchState,
+    git_workspace_agent_history, git_workspace_append_agent_history, git_workspace_load,
+    git_workspace_migrate, git_workspace_open, git_workspace_pending, git_workspace_read_file,
+    git_workspace_save, git_workspace_save_request, git_workspace_unwatch, git_workspace_watch,
+    GitWatchState,
 };
 use mock_server::{mock_server_start, mock_server_stop, MockServerState};
 use history::HistoryEntryPayload;
@@ -574,6 +575,7 @@ pub fn run() {
             git_workspace_read_file,
             git_workspace_pending,
             git_workspace_agent_history,
+            git_workspace_append_agent_history,
             mock_server_start,
             mock_server_stop,
             secret_set,

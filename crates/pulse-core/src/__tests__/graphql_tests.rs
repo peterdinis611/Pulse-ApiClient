@@ -121,3 +121,32 @@ fn lists_document_operations() {
     let shorthand = list_operations("{ ping }");
     assert_eq!(shorthand[0].kind, "query");
 }
+
+#[test]
+fn summarize_accepts_bare_schema_object() {
+    let raw = r#"{
+      "queryType": { "name": "Query" },
+      "mutationType": { "name": "Mutation" },
+      "types": [
+        { "kind": "OBJECT", "name": "Query", "fields": [{ "name": "ping" }] },
+        { "kind": "OBJECT", "name": "Mutation", "fields": [{ "name": "update" }] }
+      ]
+    }"#;
+    let summary = summarize_schema(raw).expect("summary");
+    assert_eq!(summary.query_type.as_deref(), Some("Query"));
+    assert_eq!(summary.mutation_type.as_deref(), Some("Mutation"));
+    assert_eq!(summary.types.len(), 2);
+}
+
+#[test]
+fn empty_variables_string_becomes_object() {
+    let body = build_body_raw("query { ping }", "   ", None).expect("body");
+    let value: Value = serde_json::from_str(&body).expect("json");
+    assert_eq!(value["variables"], json!({}));
+}
+
+#[test]
+fn format_response_without_graphql_shape_returns_raw() {
+    assert_eq!(format_response("plain text"), "plain text");
+    assert_eq!(format_response("{\"ok\":true}"), "{\"ok\":true}");
+}

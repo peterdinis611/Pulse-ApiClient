@@ -3,6 +3,7 @@ import {
   buildGraphqlBody,
   buildGraphqlFieldStub,
   formatGraphqlResponse,
+  formatGraphqlTypeRef,
   graphqlOperationKindForType,
   parseGraphqlResponse,
   parseGraphqlSchema,
@@ -80,8 +81,22 @@ describe("graphql", () => {
       types: [],
     };
     expect(graphqlOperationKindForType(schema, "Subscription")).toBe("subscription");
+    expect(graphqlOperationKindForType(schema, "Mutation")).toBe("mutation");
+    expect(graphqlOperationKindForType(schema, "Query")).toBe("query");
     expect(buildGraphqlFieldStub("subscription", "Subscription", "messageAdded")).toContain(
       "subscription Subscription",
     );
+  });
+
+  it("formats nested NON_NULL list type refs", () => {
+    expect(
+      formatGraphqlTypeRef({
+        kind: "NON_NULL",
+        ofType: {
+          kind: "LIST",
+          ofType: { kind: "SCALAR", name: "String" },
+        },
+      }),
+    ).toBe("[String]!");
   });
 });

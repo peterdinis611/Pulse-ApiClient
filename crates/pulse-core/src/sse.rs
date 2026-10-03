@@ -379,5 +379,46 @@ mod tests {
     fn close_code_labels() {
         assert_eq!(ws_close_code_label(1000), "normal closure");
         assert_eq!(ws_close_code_label(1006), "abnormal closure");
+        assert_eq!(ws_close_code_label(1011), "internal error");
+        assert_eq!(ws_close_code_label(42), "close");
+    }
+
+    #[test]
+    fn filters_named_events_case_insensitively() {
+        let events = parse_sse_text(
+            "event: Delta\ndata: 1\n\nevent: ping\ndata: 2\n\ndata: 3\n\n",
+        )
+        .unwrap();
+        let deltas = filter_events(&events, Some("delta"));
+        assert_eq!(deltas.len(), 1);
+        assert_eq!(deltas[0].data, "1");
+        let messages = filter_events(&events, Some("message"));
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].data, "3");
+    }
+
+    #[test]
+    fn id_only_and_retry_only_blocks_surface_without_data() {
+        let id_only = parse_sse_block("id: resume-1").unwrap();
+        assert_eq!(id_only.id.as_deref(), Some("resume-1"));
+        assert!(id_only.data.is_empty());
+        let retry_only = parse_sse_block("retry: 2500").unwrap();
+        assert_eq!(retry_only.retry_ms, Some(2500));
+        assert!(parse_sse_block(": comment only").is_none());
+    }
+
+    #[test]
+    fn buffer_rejects_oversized_incomplete_stream() {
+        let mut buf = SseBuffer::new(2048);
+        let chunk = format!("data: {}", "x".repeat(3000));
+        let err = buf.push(&chunk).unwrap_err();
+        assert!(err.contains("exceeded"));
+    }
+
+    #[test]
+    fn parse_text_keeps_trailing_undelimited_block() {
+        let events = parse_sse_text("data: trailing").unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].data, "trailing");
     }
 }
