@@ -7,6 +7,7 @@ Satellite around the Rust engine — collection runs, Git workspace, mock, Graph
 
 ## In the product
 
+- `bun run pulse:cli agent "workspace status"` — local intent router (cURL/SSE/workspace/GraphQL summarize; same engine as MCP `pulse_agent`)
 - `bun run pulse:cli run collection.json` — Pulse export or CollectionRunInput, optional `.env` / CSV iterations; stores last-run for `last-run` / `validate-run`
 - `workspace status|list|search|envs|history|pending|read|write|delete|send|import-openapi|export-openapi` — MCP parity for a Git YAML folder (`PULSE_WORKSPACE`)
 - `contract` — validate YAML examples vs responseSchema / `*.previous.json` (path or `PULSE_WORKSPACE`)

@@ -235,3 +235,11 @@ pub fn git_workspace_pending(root: String) -> Result<Vec<String>, String> {
 pub fn git_workspace_agent_history(root: String) -> Result<Vec<serde_json::Value>, String> {
     pulse_core::workspace_fs::read_agent_history(&root)
 }
+
+#[tauri::command]
+pub fn git_workspace_append_agent_history(
+    root: String,
+    entry: serde_json::Value,
+) -> Result<(), String> {
+    pulse_core::workspace_fs::append_agent_history(&root, &entry)
+}

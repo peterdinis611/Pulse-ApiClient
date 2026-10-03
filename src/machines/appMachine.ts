@@ -57,7 +57,13 @@ import {
   saveLayoutPreferences,
 } from "@/lib/layout-preferences";
 import { loadThemeMode, saveThemeMode, type ThemeMode } from "@/lib/theme";
-import { defaultWebSocketSession, inferProtocolFromUrl, isSseProtocol } from "@/lib/protocol";
+import {
+  defaultWebSocketSession,
+  inferProtocolFromUrl,
+  isSseProtocol,
+  SSE_DEFAULT_RETRY_MS,
+  SSE_MAX_RECONNECT_ATTEMPTS,
+} from "@/lib/protocol";
 import { snapshotResponseExample } from "@/lib/request-examples";
 import { toast } from "@/lib/toast";
 import { syncPathParams } from "@/lib/path-params";
@@ -67,7 +73,18 @@ import { importOpenApiIntoState } from "@/lib/openapi-import";
 import { importPulseCollectionsFromFolder } from "@/lib/pulse-collection";
 import { getGitWorkspaceRoot, saveGitRequest } from "@/lib/git-workspace";
 import { validateResponseAgainstSchema } from "@/lib/json-schema";
+import { parseGraphqlWsFrame } from "@/lib/graphql-ws";
 import { wsClose, wsConnect, sseConnect, wsPing, wsSend } from "@/lib/ws-client";
+
+const sseReconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function clearSseReconnectTimer(tabId: string) {
+  const handle = sseReconnectTimers.get(tabId);
+  if (handle != null) {
+    clearTimeout(handle);
+    sseReconnectTimers.delete(tabId);
+  }
+}
 
 export function createTabState(
   request = createRequest(),
@@ -123,6 +140,9 @@ function patchRequest(request: ApiRequest, patch: Partial<ApiRequest>): ApiReque
     }
     next.pathParams = syncPathParams(patch.url, patch.pathParams ?? request.pathParams);
   }
+  if (next.protocol === "sse" && next.method !== "GET" && next.method !== "POST") {
+    next.method = "GET";
+  }
   return next;
 }
 
@@ -145,12 +165,40 @@ function appendWsMessage(
   };
 }
 
+function withSseLastEventId(
+  request: ApiRequest,
+  lastEventId: string | null | undefined,
+): ApiRequest {
+  if (!isSseProtocol(request.protocol) || !lastEventId?.trim()) return request;
+  const headers = request.headers.filter(
+    (item) => !item.key.trim().toLowerCase().startsWith("last-event-id"),
+  );
+  return {
+    ...request,
+    headers: [
+      ...headers,
+      {
+        id: createId("hdr"),
+        key: "Last-Event-ID",
+        value: lastEventId.trim(),
+        enabled: true,
+      },
+    ],
+  };
+}
+
 function startTabWebSocketConnect(
   self: { send: (event: AppMachineEvent) => void },
-  input: { tabId: string; request: ApiRequest; environment: Environment | null },
+  input: {
+    tabId: string;
+    request: ApiRequest;
+    environment: Environment | null;
+    lastEventId?: string | null;
+  },
 ) {
-  const connect = isSseProtocol(input.request.protocol) ? sseConnect : wsConnect;
-  void connect(input.tabId, input.request, input.environment)
+  const request = withSseLastEventId(input.request, input.lastEventId);
+  const connect = isSseProtocol(request.protocol) ? sseConnect : wsConnect;
+  void connect(input.tabId, request, input.environment)
     .then((result) => {
       self.send({
         type: "WS_CONNECT_COMPLETE",
@@ -158,6 +206,7 @@ function startTabWebSocketConnect(
         connectionId: result.connectionId,
         status: result.status,
         headers: result.headers,
+        subprotocol: result.subprotocol ?? null,
       });
     })
     .catch((error) => {
@@ -254,7 +303,8 @@ export type AppMachineEvent =
     }
   | { type: "SEND_FAILED"; tabId: string; requestId: string; error: string }
   | { type: "CANCEL_SEND"; tabId?: string }
-  | { type: "WS_CONNECT" }
+  | { type: "WS_CONNECT"; tabId?: string }
+  | { type: "WS_SET_AUTO_RECONNECT"; enabled: boolean }
   | { type: "WS_CONNECT_STARTED"; tabId: string }
   | {
       type: "WS_CONNECT_COMPLETE";
@@ -262,6 +312,7 @@ export type AppMachineEvent =
       connectionId: string;
       status: number;
       headers: HttpResponse["headers"];
+      subprotocol?: string | null;
     }
   | { type: "WS_CONNECT_FAILED"; tabId: string; error: string }
   | { type: "WS_DISCONNECT"; tabId?: string }
@@ -274,6 +325,9 @@ export type AppMachineEvent =
       data: string;
       binary: boolean;
       timestamp: number;
+      event?: string;
+      eventId?: string;
+      retryMs?: number;
     }
   | {
       type: "WS_CLOSED";
@@ -591,10 +645,13 @@ export const appMachine = setup({
         });
       })();
     },
-    startActiveTabWebSocket: ({ context, self }) => {
-      const tab = getActiveTab(context);
+    startActiveTabWebSocket: ({ context, self, event }) => {
+      const tabId =
+        event.type === "WS_CONNECT" && event.tabId ? event.tabId : context.activeTabId;
+      const tab = context.tabs.find((item) => item.id === tabId) ?? getActiveTab(context);
       if (!tab || tab.ws.status === "connecting" || tab.ws.status === "open") return;
       if (!tab.request.url.trim()) return;
+      clearSseReconnectTimer(tab.id);
 
       const prepared = resolveRequestForSend({
         request: tab.request,
@@ -609,6 +666,7 @@ export const appMachine = setup({
         tabId: tab.id,
         request: prepared.request,
         environment: prepared.environment,
+        lastEventId: tab.ws.lastEventId,
       });
     },
   },
@@ -1552,15 +1610,35 @@ export const appMachine = setup({
         WS_CONNECT: {
           actions: "startActiveTabWebSocket",
         },
-        WS_CONNECT_STARTED: {
+        WS_SET_AUTO_RECONNECT: {
           actions: assign(({ context, event }) => ({
-            tabs: mapTabById(context, event.tabId, (tab) => ({
+            tabs: mapActiveTab(context, (tab) => ({
               ...tab,
               ws: {
-                ...defaultWebSocketSession(),
-                status: "connecting",
+                ...tab.ws,
+                autoReconnect: event.enabled,
               },
             })),
+          })),
+        },
+        WS_CONNECT_STARTED: {
+          actions: assign(({ context, event }) => ({
+            tabs: mapTabById(context, event.tabId, (tab) => {
+              const reconnecting = (tab.ws.reconnectAttempts ?? 0) > 0 || Boolean(tab.ws.lastEventId);
+              return {
+                ...tab,
+                ws: {
+                  ...defaultWebSocketSession(),
+                  status: "connecting",
+                  messages: reconnecting ? tab.ws.messages : [],
+                  lastEventId: tab.ws.lastEventId ?? null,
+                  lastRetryMs: tab.ws.lastRetryMs ?? null,
+                  autoReconnect: tab.ws.autoReconnect ?? true,
+                  reconnectAttempts: tab.ws.reconnectAttempts ?? 0,
+                  userClosed: false,
+                },
+              };
+            }),
           })),
         },
         WS_CONNECT_COMPLETE: {
@@ -1574,12 +1652,26 @@ export const appMachine = setup({
                   status: "open",
                   handshakeStatus: event.status,
                   handshakeHeaders: event.headers,
+                  subprotocol: event.subprotocol ?? null,
                   error: null,
+                  userClosed: false,
+                  reconnectAttempts: 0,
+                  graphqlAcked: false,
+                  graphqlSubscriptionIds: [],
                 },
               })),
             })),
-            () => {
-              toast.success("WebSocket connected", "Connection established");
+            ({ context, event }) => {
+              const tab = context.tabs.find((item) => item.id === event.tabId);
+              const label = isSseProtocol(tab?.request.protocol ?? "http")
+                ? "SSE connected"
+                : tab?.request.bodyKind === "graphql"
+                  ? "GraphQL WS connected"
+                  : "WebSocket connected";
+              const detail = event.subprotocol
+                ? `Protocol: ${event.subprotocol}`
+                : "Connection established";
+              toast.success(label, detail);
             },
           ],
         },
@@ -1592,11 +1684,20 @@ export const appMachine = setup({
                   ...defaultWebSocketSession(),
                   status: "error",
                   error: event.error,
+                  messages: tab.ws.messages,
+                  lastEventId: tab.ws.lastEventId ?? null,
+                  lastRetryMs: tab.ws.lastRetryMs ?? null,
+                  autoReconnect: tab.ws.autoReconnect ?? true,
+                  reconnectAttempts: tab.ws.reconnectAttempts ?? 0,
                 },
               })),
             })),
-            ({ event }) => {
-              toast.error("WebSocket connection failed", event.error);
+            ({ context, event }) => {
+              const tab = context.tabs.find((item) => item.id === event.tabId);
+              const label = isSseProtocol(tab?.request.protocol ?? "http")
+                ? "SSE connection failed"
+                : "WebSocket connection failed";
+              toast.error(label, event.error);
             },
           ],
         },
@@ -1604,6 +1705,7 @@ export const appMachine = setup({
           actions: [
             ({ context, event }) => {
               const tabId = event.tabId ?? context.activeTabId;
+              clearSseReconnectTimer(tabId);
               const tab = context.tabs.find((item) => item.id === tabId);
               if (tab) disconnectTabWebSocket(tab);
             },
@@ -1616,12 +1718,20 @@ export const appMachine = setup({
                     ...tab.ws,
                     connectionId: null,
                     status: "closed",
+                    userClosed: true,
+                    reconnectAttempts: 0,
                   },
                 })),
               };
             }),
-            () => {
-              toast.info("WebSocket disconnected");
+            ({ context, event }) => {
+              const tabId = event.tabId ?? context.activeTabId;
+              const tab = context.tabs.find((item) => item.id === tabId);
+              toast.info(
+                isSseProtocol(tab?.request.protocol ?? "http")
+                  ? "SSE disconnected"
+                  : "WebSocket disconnected",
+              );
             },
           ],
         },
@@ -1630,16 +1740,34 @@ export const appMachine = setup({
             const tab = getActiveTab(context);
             if (!tab?.ws.connectionId || tab.ws.status !== "open") return {};
             void wsSend(tab.ws.connectionId, event.data, event.binary ?? false);
+            const frame = event.binary ? null : parseGraphqlWsFrame(event.data);
             return {
-              tabs: mapActiveTab(context, (current) =>
-                appendWsMessage(current, {
+              tabs: mapActiveTab(context, (current) => {
+                let next = appendWsMessage(current, {
                   id: createId("ws"),
                   direction: "outgoing",
                   data: event.data,
                   binary: event.binary ?? false,
                   timestamp: Date.now(),
-                }),
-              ),
+                  event: frame?.type,
+                  eventId: frame?.id,
+                });
+                if (!frame) return next;
+                let ids = next.ws.graphqlSubscriptionIds ?? [];
+                if (frame.type === "subscribe" && frame.id && !ids.includes(frame.id)) {
+                  ids = [...ids, frame.id];
+                }
+                if (frame.type === "complete" && frame.id) {
+                  ids = ids.filter((id) => id !== frame.id);
+                }
+                return {
+                  ...next,
+                  ws: {
+                    ...next.ws,
+                    graphqlSubscriptionIds: ids,
+                  },
+                };
+              }),
             };
           }),
         },
@@ -1656,34 +1784,95 @@ export const appMachine = setup({
               if (tab.id !== event.tabId || tab.ws.connectionId !== event.connectionId) {
                 return tab;
               }
-              return appendWsMessage(tab, {
+              const frame =
+                event.event || event.binary
+                  ? null
+                  : parseGraphqlWsFrame(event.data);
+              const frameType = event.event ?? frame?.type;
+              const frameId = event.eventId ?? frame?.id;
+              const next = appendWsMessage(tab, {
                 id: createId("ws"),
                 direction: "incoming",
                 data: event.data,
                 binary: event.binary,
                 timestamp: event.timestamp,
+                event: frameType,
+                eventId: frameId,
+                retryMs: event.retryMs,
               });
-            }),
-          })),
-        },
-        WS_CLOSED: {
-          actions: assign(({ context, event }) => ({
-            tabs: context.tabs.map((tab) => {
-              if (tab.id !== event.tabId || tab.ws.connectionId !== event.connectionId) {
-                return tab;
+
+              let graphqlAcked = next.ws.graphqlAcked ?? false;
+              let ids = next.ws.graphqlSubscriptionIds ?? [];
+              if (frameType === "connection_ack") {
+                graphqlAcked = true;
               }
+              if (frameType === "complete" && frameId) {
+                ids = ids.filter((id) => id !== frameId);
+              }
+
               return {
-                ...tab,
+                ...next,
                 ws: {
-                  ...tab.ws,
-                  connectionId: null,
-                  status: "closed",
-                  closeCode: event.code,
-                  closeReason: event.reason,
+                  ...next.ws,
+                  lastEventId: event.eventId ?? next.ws.lastEventId,
+                  lastRetryMs: event.retryMs ?? next.ws.lastRetryMs,
+                  graphqlAcked,
+                  graphqlSubscriptionIds: ids,
                 },
               };
             }),
           })),
+        },
+        WS_CLOSED: {
+          actions: [
+            assign(({ context, event }) => ({
+              tabs: context.tabs.map((tab) => {
+                if (tab.id !== event.tabId || tab.ws.connectionId !== event.connectionId) {
+                  return tab;
+                }
+                const shouldReconnect =
+                  isSseProtocol(tab.request.protocol) &&
+                  !tab.ws.userClosed &&
+                  tab.ws.autoReconnect !== false;
+                const attempts = shouldReconnect ? (tab.ws.reconnectAttempts ?? 0) + 1 : 0;
+                return {
+                  ...tab,
+                  ws: {
+                    ...tab.ws,
+                    connectionId: null,
+                    status: "closed",
+                    closeCode: event.code,
+                    closeReason: event.reason,
+                    reconnectAttempts: attempts,
+                  },
+                };
+              }),
+            })),
+            ({ context, event, self }) => {
+              const tab = context.tabs.find((item) => item.id === event.tabId);
+              if (!tab || !isSseProtocol(tab.request.protocol)) return;
+              if (tab.ws.userClosed || tab.ws.autoReconnect === false) return;
+              const attempts = tab.ws.reconnectAttempts ?? 0;
+              if (attempts > SSE_MAX_RECONNECT_ATTEMPTS) {
+                toast.error(
+                  "SSE reconnect stopped",
+                  `Exceeded ${SSE_MAX_RECONNECT_ATTEMPTS} attempts`,
+                );
+                return;
+              }
+              const delay =
+                tab.ws.lastRetryMs && tab.ws.lastRetryMs > 0
+                  ? tab.ws.lastRetryMs
+                  : SSE_DEFAULT_RETRY_MS;
+              clearSseReconnectTimer(tab.id);
+              const handle = setTimeout(() => {
+                sseReconnectTimers.delete(tab.id);
+                self.send({ type: "WS_CONNECT", tabId: tab.id });
+              }, delay);
+              sseReconnectTimers.set(tab.id, handle);
+              toast.info("SSE reconnecting", `Retry in ${delay}ms (attempt ${attempts})`);
+            },
+          ],
         },
         WS_ERROR: {
           actions: [
@@ -1703,8 +1892,12 @@ export const appMachine = setup({
                 };
               }),
             })),
-            ({ event }) => {
-              toast.error("WebSocket error", event.message);
+            ({ context, event }) => {
+              const tab = context.tabs.find((item) => item.id === event.tabId);
+              const label = isSseProtocol(tab?.request.protocol ?? "http")
+                ? "SSE error"
+                : "WebSocket error";
+              toast.error(label, event.message);
             },
           ],
         },

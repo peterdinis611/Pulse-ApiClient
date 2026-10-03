@@ -63,4 +63,20 @@ describe("curl", () => {
     expect(basic.auth.basicUsername).toBe("ada");
     expect(basic.auth.basicPassword).toBe("secret");
   });
+
+  it("imports cookie user-agent and referer flags", () => {
+    const request = curlToRequest(
+      `curl -A 'Pulse/1' -e 'https://ref.test' -b 'sid=1' https://api.example.com`,
+    );
+    const byKey = Object.fromEntries(
+      request.headers.filter((item) => item.key).map((item) => [item.key.toLowerCase(), item.value]),
+    );
+    expect(byKey["user-agent"]).toBe("Pulse/1");
+    expect(byKey.referer).toBe("https://ref.test");
+    expect(byKey.cookie).toBe("sid=1");
+  });
+
+  it("rejects non-curl input", () => {
+    expect(() => curlToRequest("wget https://example.com")).toThrow(/cURL/i);
+  });
 });

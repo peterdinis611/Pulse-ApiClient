@@ -175,6 +175,14 @@ export const CHANGELOG: ChangelogRelease[] = [
         },
       },
       {
+        id: "mcp-guide-page",
+        title: { en: "MCP how-to page", sk: "MCP návod v appke" },
+        detail: {
+          en: "Left rail → MCP explains Cursor setup, tools, prompts, resources, and confirm safety — bilingual EN/SK.",
+          sk: "Ľavý rail → MCP vysvetlí Cursor setup, tools, prompty, resources a confirm bezpečnosť — dvojjazyčne EN/SK.",
+        },
+      },
+      {
         id: "mock-delay",
         title: { en: "Mock latency", sk: "Latencia mocku" },
         detail: {
@@ -244,6 +252,78 @@ export const CHANGELOG: ChangelogRelease[] = [
         detail: {
           en: "pulse_mock_start / pulse_mock_stop lock 127.0.0.1:4010 from workspace examples (Python + Rust MCP).",
           sk: "pulse_mock_start / pulse_mock_stop zamknú 127.0.0.1:4010 z examples workspace (Python + Rust MCP).",
+        },
+      },
+      {
+        id: "sse-rich",
+        title: { en: "Richer SSE streams", sk: "Bohatšie SSE streamy" },
+        detail: {
+          en: "SSE parses event/id/retry and multi-line data, supports GET/POST with body, shows event badges + filter, and resumes with Last-Event-ID.",
+          sk: "SSE parsuje event/id/retry a viacriadkové data, podporuje GET/POST s body, ukazuje badge + filter a renewuje cez Last-Event-ID.",
+        },
+      },
+      {
+        id: "sse-ws-reconnect",
+        title: { en: "SSE auto-reconnect & shared collect", sk: "SSE auto-reconnect a zdieľaný collect" },
+        detail: {
+          en: "Desktop can auto-reconnect SSE using retry + Last-Event-ID. pulse-core owns collect/filter/BOM handling; Tauri uses SseBuffer; CLI/MCP/native collect from URL with event filters. WS close codes are labeled; GraphQL-WS adds ping/start/stop + legacy frame normalization.",
+          sk: "Desktop vie auto-reconnect SSE cez retry + Last-Event-ID. pulse-core vlastní collect/filter/BOM; Tauri používa SseBuffer; CLI/MCP/native collect z URL s event filtrom. WS close kódy majú label; GraphQL-WS pridáva ping/start/stop + normalizáciu legacy framov.",
+        },
+      },
+      {
+        id: "ws-graphql-rich",
+        title: { en: "Richer WebSocket & GraphQL", sk: "Bohatší WebSocket a GraphQL" },
+        detail: {
+          en: "WS shows ping/pong, GraphQL-WS offers both subprotocols, auth in connection_init, ack tracking, Subscribe/Complete, and schema explorer subscription stubs.",
+          sk: "WS ukazuje ping/pong, GraphQL-WS ponúka oba subprotokoly, auth v connection_init, ack tracking, Subscribe/Complete a subscription stuby v schema exploreri.",
+        },
+      },
+      {
+        id: "rust-python-modules",
+        title: { en: "Shared SSE + stream CLI/MCP", sk: "Zdieľané SSE + stream CLI/MCP" },
+        detail: {
+          en: "pulse-core owns the SSE parser; pulse-native + Python expose sse, graphql-ws frames, workspace init/migrate, and richer contract schema/breaking tools.",
+          sk: "pulse-core vlastní SSE parser; pulse-native + Python sprístupnia sse, graphql-ws frames, workspace init/migrate a bohatší contract schema/breaking.",
+        },
+      },
+      {
+        id: "curl-shared-core",
+        title: { en: "Shared cURL in pulse-core", sk: "Zdieľaný cURL v pulse-core" },
+        detail: {
+          en: "cURL parse/format lives in pulse-core; Tauri, pulse-native, Python, and the desktop importer prefer the same engine (JS/Python fallbacks remain).",
+          sk: "cURL parse/format je v pulse-core; Tauri, pulse-native, Python a desktop importér preferujú rovnaký engine (JS/Python fallback ostáva).",
+        },
+      },
+      {
+        id: "graphql-shared-core",
+        title: { en: "Shared GraphQL in pulse-core", sk: "Zdieľaný GraphQL v pulse-core" },
+        detail: {
+          en: "pulse-core owns GraphQL body build, response format, schema summarize, and operation listing; Python/CLI/MCP + pulse-native prefer it (with fallbacks). MCP pulse_graphql supports offline kinds.",
+          sk: "pulse-core vlastní GraphQL body build, format odpovede, schema summarize a listing operácií; Python/CLI/MCP + pulse-native to preferujú (s fallbackom). MCP pulse_graphql má offline kindy.",
+        },
+      },
+      {
+        id: "rust-mcp-parity",
+        title: { en: "Richer Rust MCP", sk: "Bohatší Rust MCP" },
+        detail: {
+          en: "pulse-mcp adds workspace init/migrate, schema, JSON diff, cURL parse/send, SSE parse, GraphQL HTTP + graphql-ws frames, and richer contract modes — closer to the Python MCP surface.",
+          sk: "pulse-mcp pridáva workspace init/migrate, schema, JSON diff, cURL parse/send, SSE parse, GraphQL HTTP + graphql-ws frames a bohatší contract — bližšie k Python MCP.",
+        },
+      },
+      {
+        id: "in-app-agent",
+        title: { en: "In-app Pulse Agent", sk: "Pulse Agent v appke" },
+        detail: {
+          en: "New Agent rail view: local intents (no LLM yet) for cURL import, response/test explain, workspace status/history, SSE parse, GraphQL schema summarize, and confirmed collection runs. Settings stubs LLM provider + API key for later.",
+          sk: "Nový Agent v raili: lokálne intentty (zatiaľ bez LLM) na import cURL, vysvetlenie odpovede/testov, stav/históriu workspace, SSE parse, GraphQL schema summarize a potvrdené behy kolekcií. Settings majú stub LLM providera + API kľúča.",
+        },
+      },
+      {
+        id: "agent-rust-python",
+        title: { en: "Agent on Rust + Python", sk: "Agent v Ruste a Pythone" },
+        detail: {
+          en: "Shared agent router lives in pulse-core; pulse-native, `pulse agent \"…\"`, and MCP `pulse_agent` (Python + Rust) run the same offline intents (cURL, SSE, workspace, GraphQL summarize).",
+          sk: "Zdieľaný agent router je v pulse-core; pulse-native, `pulse agent \"…\"` a MCP `pulse_agent` (Python + Rust) spúšťajú rovnaké offline intenzity (cURL, SSE, workspace, GraphQL summarize).",
         },
       },
     ],

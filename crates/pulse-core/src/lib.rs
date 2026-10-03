@@ -1,8 +1,12 @@
+pub mod agent;
 pub mod collection_run;
 pub mod contract;
+pub mod curl;
+pub mod graphql;
 pub mod graphql_ws;
 pub mod inherit;
 pub mod json_assertions;
+pub mod json_diff;
 pub mod json_path;
 pub mod mock_server;
 pub mod openapi_ops;
@@ -11,13 +15,24 @@ pub mod prepare;
 pub mod script_engine;
 pub mod secrets;
 pub mod simple_http;
+pub mod sse;
 pub mod test_runner;
 pub mod types;
 pub mod vars;
 pub mod workspace_fs;
 
+pub use agent::{
+    execute_agent_intent, route_agent_input, run_agent, AgentExecuteOptions, AgentIntent, AgentResult,
+    AGENT_HELP_TEXT,
+};
 pub use collection_run::{
     run_collection, run_collection_with_progress, CollectionRunInput, CollectionRunResult, CollectionRunStep,
+};
+pub use curl::{curl_to_payload, payload_to_curl};
+pub use graphql::{
+    build_body as build_graphql_body, build_body_raw as build_graphql_body_raw,
+    format_response as format_graphql_response, list_operations as list_graphql_operations,
+    summarize_schema as summarize_graphql_schema, validate as validate_graphql, INTROSPECTION_QUERY,
 };
 pub use mock_server::{
     routes_from_saved_requests, start_mock_server, start_mock_server_with_delay, MockRoute, MockServer,
@@ -27,13 +42,19 @@ pub use test_runner::{
     read_json_path, run_http_tests, run_pre_request_script, run_pre_request_script_with_env, EnvMutation,
     PreRequestResult, TestCaseResult, TestRunResult,
 };
-pub use contract::check_workspace;
+pub use contract::{breaking_diff, check_workspace, compare_to_schema};
+pub use json_diff::{compare as diff_compare, compare_raw as diff_compare_raw, pretty_any, unified_lines};
 pub use prepare::{interpolate_request, to_http_payload};
+pub use sse::{
+    collect_sse, filter_events as filter_sse_events, latest_event_id as latest_sse_event_id,
+    latest_retry_ms as latest_sse_retry_ms, next_event_boundary, parse_sse_block, parse_sse_text,
+    ws_close_code_label, ParsedSseEvent, SseBuffer, SseCollectOptions,
+};
 pub use types::{AuthConfig, EnvVariable, HttpRequestPayload, HttpResponsePayload, KeyValue};
 pub use vars::substitute_variables;
 pub use workspace_fs::{
-    append_agent_history, delete_request, is_mutating_method, list_pending, load_workspace, read_agent_history,
-    save_workspace, write_pending, GitWorkspacePayload,
+    append_agent_history, delete_request, init_workspace, is_mutating_method, list_pending, load_workspace,
+    migrate_pulse_json_dumps, read_agent_history, save_workspace, write_pending, GitWorkspacePayload,
 };
 
 #[cfg(test)]

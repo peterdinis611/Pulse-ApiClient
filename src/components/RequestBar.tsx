@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useApp } from "@/machines";
 import { validateGraphqlRequest } from "@/lib/graphql";
-import { isStreamProtocol, isWebSocketProtocol } from "@/lib/protocol";
+import { isStreamProtocol, isWebSocketProtocol, isSseProtocol, SSE_METHODS } from "@/lib/protocol";
 import { containsVariables } from "@/lib/env";
 import { prepareRequest } from "@/lib/http-client";
 import { CODE_SNIPPETS, requestToSnippet, type CodeSnippetId } from "@/lib/code-snippets";
@@ -31,7 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FolderSelect } from "@/components/FolderSelect";
-import { curlToRequest } from "@/lib/curl";
+import { curlToRequestAsync } from "@/lib/curl";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { formatModShortcut, PULSE_HOTKEYS } from "@/lib/hotkeys";
 import { toast } from "@/lib/toast";
@@ -71,6 +71,7 @@ export function RequestBar() {
   const curlImportRef = useRef<HTMLInputElement>(null);
 
   const isWebSocket = isWebSocketProtocol(request.protocol);
+  const isSse = isSseProtocol(request.protocol);
   const isStream = isStreamProtocol(request.protocol);
 
   const canSend = useMemo(() => {
@@ -141,9 +142,13 @@ export function RequestBar() {
               <SelectItem value="sse">SSE</SelectItem>
             </SelectContent>
           </Select>
-          {isStream ? null : (
+          {isWebSocket ? null : (
             <Select
-              value={request.method}
+              value={
+                isSse && !SSE_METHODS.includes(request.method as (typeof SSE_METHODS)[number])
+                  ? "GET"
+                  : request.method
+              }
               onValueChange={(value) =>
                 updateRequest({ method: value as typeof request.method })
               }
@@ -157,7 +162,7 @@ export function RequestBar() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="method-select-content" align="start">
-                {HTTP_METHODS.map((method) => (
+                {(isSse ? SSE_METHODS : HTTP_METHODS).map((method) => (
                   <SelectItem
                     key={method}
                     value={method}
@@ -336,9 +341,9 @@ export function RequestBar() {
           onChange={(event) => {
             const file = event.target.files?.[0];
             if (!file) return;
-            void file.text().then((raw) => {
+            void file.text().then(async (raw) => {
               try {
-                openRequestTab(curlToRequest(raw));
+                openRequestTab(await curlToRequestAsync(raw));
                 toast.success("Imported request from cURL");
               } catch (error) {
                 toast.error(error instanceof Error ? error.message : "Invalid cURL command");

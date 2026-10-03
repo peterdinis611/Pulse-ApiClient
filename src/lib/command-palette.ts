@@ -13,7 +13,7 @@ export type CommandPaletteKind =
 
 export type CommandPaletteItem = SearchDocument & {
   kind: CommandPaletteKind;
-  view?: "overview" | "request" | "environments" | "settings" | "docs";
+  view?: "overview" | "request" | "environments" | "settings" | "docs" | "mcp" | "agent";
   savedRequestId?: string;
   collectionId?: string;
   environmentId?: string;
@@ -26,6 +26,7 @@ const SETTINGS_SECTIONS: Array<{ id: string; title: string; subtitle: string }> 
   { id: "appearance", title: "Appearance", subtitle: "Theme, language, custom CSS" },
   { id: "data", title: "Data & storage", subtitle: "Git workspace, database, cache" },
   { id: "http", title: "HTTP engine", subtitle: "TLS, proxy, mTLS, timeouts" },
+  { id: "agent", title: "Agent / LLM", subtitle: "Local assistant, future API key" },
   { id: "layout", title: "Layout", subtitle: "Explorer, shortcuts" },
   { id: "cookies", title: "Cookie jar", subtitle: "Stored cookies" },
   { id: "collections", title: "Collections", subtitle: "Import and export" },
@@ -72,6 +73,26 @@ const VIEWS: CommandPaletteItem[] = [
     meta: "Go",
     view: "docs",
     keywords: "help guide",
+  },
+  {
+    id: "view:agent",
+    kind: "view",
+    title: "Agent",
+    subtitle: "Local assistant — cURL, explain, workspace, collections",
+    method: "",
+    meta: "Go",
+    view: "agent",
+    keywords: "assistant chat curl explain run collection",
+  },
+  {
+    id: "view:mcp",
+    kind: "view",
+    title: "MCP",
+    subtitle: "Cursor agent bridge — setup and how-to",
+    method: "",
+    meta: "Go",
+    view: "mcp",
+    keywords: "cursor agent tools pulse_workspace",
   },
   {
     id: "view:settings",

@@ -2,8 +2,10 @@ import { useMemo, useState } from "react";
 import { BookOpen, LoaderCircle } from "lucide-react";
 import { useApp } from "@/machines";
 import {
+  buildGraphqlFieldStub,
   formatGraphqlTypeRef,
   GRAPHQL_INTROSPECTION_QUERY,
+  graphqlOperationKindForType,
   parseGraphqlSchema,
   visibleGraphqlTypes,
   type GraphqlSchema,
@@ -30,9 +32,12 @@ export function GraphqlExplorer() {
     }
     setLoading(true);
     try {
+      // Introspection always uses HTTP — even when the tab is on WebSocket for subscriptions.
+      const httpUrl = request.url.replace(/^ws(s?):\/\//i, "http$1://");
       const response = await sendRequest(
         {
           ...request,
+          url: httpUrl,
           method: "POST",
           protocol: "http",
           bodyKind: "graphql",
@@ -58,8 +63,27 @@ export function GraphqlExplorer() {
   };
 
   const insertField = (typeName: string, fieldName: string) => {
-    const stub = `query ${typeName} {\n  ${fieldName}\n}`;
-    updateRequest({ graphqlQuery: stub, graphqlOperationName: typeName });
+    if (!schema) return;
+    const operation = graphqlOperationKindForType(schema, typeName);
+    const stub = buildGraphqlFieldStub(operation, typeName, fieldName);
+    if (operation === "subscription") {
+      const wsUrl = request.url.replace(/^http(s?):\/\//i, "ws$1://");
+      updateRequest({
+        graphqlQuery: stub,
+        graphqlOperationName: typeName,
+        protocol: "websocket",
+        bodyKind: "graphql",
+        url: wsUrl.startsWith("ws") ? wsUrl : request.url,
+      });
+      toast.info("Subscription stub", "Switched to WebSocket — Connect, then Subscribe");
+    } else {
+      updateRequest({
+        graphqlQuery: stub,
+        graphqlOperationName: typeName,
+        protocol: "http",
+        bodyKind: "graphql",
+      });
+    }
   };
 
   return (
@@ -68,7 +92,7 @@ export function GraphqlExplorer() {
         <div>
           <p className="text-sm font-medium">Schema explorer</p>
           <p className="text-xs text-muted-foreground">
-            Introspect the current URL (auth and headers apply).
+            Introspect over HTTP (auth and headers apply). Subscription fields open a WebSocket stub.
           </p>
         </div>
         <Button type="button" size="sm" variant="outline" disabled={loading} onClick={() => void introspect()}>
@@ -79,7 +103,9 @@ export function GraphqlExplorer() {
       {schema && (
         <div className="grid gap-3 md:grid-cols-[160px_1fr]">
           <div className="max-h-56 space-y-0.5 overflow-auto">
-            {types.map((type) => (
+            {types.map((type) => {
+              const kind = graphqlOperationKindForType(schema, type.name);
+              return (
               <button
                 key={type.name ?? ""}
                 type="button"
@@ -92,8 +118,12 @@ export function GraphqlExplorer() {
                 onClick={() => setActiveName(type.name ?? null)}
               >
                 {type.name}
+                {(kind === "subscription" || kind === "mutation") && (
+                  <span className="ml-1 text-[10px] opacity-60">{kind.slice(0, 3)}</span>
+                )}
               </button>
-            ))}
+              );
+            })}
           </div>
           <div className="max-h-56 space-y-2 overflow-auto">
             {active?.description && (

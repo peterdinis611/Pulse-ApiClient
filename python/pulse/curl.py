@@ -1,8 +1,10 @@
-"""Parse a cURL command into a Pulse HTTP payload (stdlib only)."""
+"""Parse / format cURL (Rust via pulse_native when available, else stdlib parser)."""
 
 from __future__ import annotations
 
+import json
 import re
+from typing import Any
 
 _FLAG = re.compile(
     r"(?:(?P<flag>--data-urlencode|--data-binary|--data-raw|--data|--json|--request|--header|--user|--url|"
@@ -20,6 +22,28 @@ def _unquote(groups: tuple[str | None, ...]) -> str:
 
 
 def curl_to_payload(raw: str) -> dict:
+    try:
+        import pulse_native
+
+        if hasattr(pulse_native, "parse_curl_json"):
+            return json.loads(pulse_native.parse_curl_json(raw))
+    except ImportError:
+        pass
+    return _curl_to_payload_py(raw)
+
+
+def payload_to_curl(payload: dict[str, Any]) -> str:
+    try:
+        import pulse_native
+
+        if hasattr(pulse_native, "format_curl_json"):
+            return pulse_native.format_curl_json(json.dumps(payload))
+    except ImportError:
+        pass
+    return _payload_to_curl_py(payload)
+
+
+def _curl_to_payload_py(raw: str) -> dict:
     normalized = re.sub(r"\\\s*\n", " ", raw).strip()
     if "curl" not in normalized.lower():
         raise ValueError("Input does not look like a cURL command")
@@ -148,3 +172,26 @@ def curl_to_payload(raw: str) -> dict:
         "multipart": multipart,
         "auth": auth,
     }
+
+
+def _payload_to_curl_py(payload: dict[str, Any]) -> str:
+    """Minimal fallback when pulse_native is unavailable."""
+    method = str(payload.get("method") or "GET").upper()
+    url = str(payload.get("url") or "")
+    parts = ["curl"]
+    if method != "GET":
+        parts.extend(["-X", method])
+    for header in payload.get("headers") or []:
+        if not header.get("enabled", True):
+            continue
+        key = str(header.get("key") or "").strip()
+        if not key:
+            continue
+        parts.extend(["-H", f"{key}: {header.get('value') or ''}"])
+    body = str(payload.get("body") or "")
+    body_kind = str(payload.get("bodyKind") or "none")
+    if body and body_kind not in {"none", "multipart", "form"}:
+        parts.extend(["--data-raw", body])
+    if url:
+        parts.append(url)
+    return " ".join(parts)

@@ -1,3 +1,4 @@
+use crate::graphql::build_body_raw;
 use crate::path_params::apply_path_params;
 use crate::types::{
     env_pairs, ApiRequestDto, AuthConfig, EnvVariable, HttpRequestPayload, KeyValue, MultipartField,
@@ -43,27 +44,15 @@ pub fn interpolate_request(mut request: ApiRequestDto, variables: &[EnvVariable]
     request.auth.api_key_value = substitute_variables(&request.auth.api_key_value, variables);
 
     if request.body_kind == "graphql" {
-        request.body = build_graphql_body(&request);
+        if let Ok(body) = build_body_raw(
+            &request.graphql_query,
+            &request.graphql_variables,
+            Some(request.graphql_operation_name.as_str()),
+        ) {
+            request.body = body;
+        }
     }
     request
-}
-
-fn build_graphql_body(request: &ApiRequestDto) -> String {
-    let variables_raw = if request.graphql_variables.trim().is_empty() {
-        "{}".to_string()
-    } else {
-        request.graphql_variables.clone()
-    };
-    let variables = serde_json::from_str::<serde_json::Value>(&variables_raw)
-        .unwrap_or_else(|_| serde_json::json!({}));
-    let mut payload = serde_json::json!({
-        "query": request.graphql_query,
-        "variables": variables,
-    });
-    if !request.graphql_operation_name.trim().is_empty() {
-        payload["operationName"] = serde_json::Value::String(request.graphql_operation_name.clone());
-    }
-    payload.to_string()
 }
 
 pub fn to_http_payload(request: &ApiRequestDto, request_id: Option<String>) -> HttpRequestPayload {

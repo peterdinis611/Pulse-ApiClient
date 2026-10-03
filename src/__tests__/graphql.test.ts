@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   buildGraphqlBody,
+  buildGraphqlFieldStub,
   formatGraphqlResponse,
+  formatGraphqlTypeRef,
+  graphqlOperationKindForType,
   parseGraphqlResponse,
   parseGraphqlSchema,
   validateGraphqlRequest,
@@ -68,5 +71,32 @@ describe("graphql", () => {
     const schema = parseGraphqlSchema(raw);
     expect(schema?.queryType?.name).toBe("Query");
     expect(visibleGraphqlTypes(schema!).map((type) => type.name)).toEqual(["Query"]);
+  });
+
+  it("builds subscription stubs and detects operation kinds", () => {
+    const schema = {
+      queryType: { name: "Query" },
+      mutationType: { name: "Mutation" },
+      subscriptionType: { name: "Subscription" },
+      types: [],
+    };
+    expect(graphqlOperationKindForType(schema, "Subscription")).toBe("subscription");
+    expect(graphqlOperationKindForType(schema, "Mutation")).toBe("mutation");
+    expect(graphqlOperationKindForType(schema, "Query")).toBe("query");
+    expect(buildGraphqlFieldStub("subscription", "Subscription", "messageAdded")).toContain(
+      "subscription Subscription",
+    );
+  });
+
+  it("formats nested NON_NULL list type refs", () => {
+    expect(
+      formatGraphqlTypeRef({
+        kind: "NON_NULL",
+        ofType: {
+          kind: "LIST",
+          ofType: { kind: "SCALAR", name: "String" },
+        },
+      }),
+    ).toBe("[String]!");
   });
 });

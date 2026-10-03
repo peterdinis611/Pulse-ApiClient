@@ -45,9 +45,13 @@ class McpProtocolTests(unittest.TestCase):
         self.assertIn("pulse_workspace_search", names)
         self.assertIn("pulse_workspace_status", names)
         self.assertIn("pulse_contract", names)
+        self.assertIn("pulse_sse", names)
+        self.assertIn("pulse_graphql_ws", names)
+        self.assertIn("pulse_workspace_init", names)
         self.assertIn("pulse_junit", names)
         self.assertIn("pulse_mock_start", names)
         self.assertIn("pulse_mock_stop", names)
+        self.assertIn("pulse_agent", names)
 
     def test_mcp_paths_are_posix(self) -> None:
         self.assertEqual(
@@ -71,6 +75,22 @@ class McpProtocolTests(unittest.TestCase):
             }
         )
         self.assertEqual(result["result"]["content"][0]["text"], "ok")
+
+    def test_agent_tool_parses_curl(self) -> None:
+        result = handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 31,
+                "method": "tools/call",
+                "params": {
+                    "name": "pulse_agent",
+                    "arguments": {"input": "curl -X GET https://api.example.com/health"},
+                },
+            }
+        )
+        payload = json.loads(result["result"]["content"][0]["text"])
+        self.assertEqual(payload["kind"], "import_curl")
+        self.assertEqual(payload["data"]["method"], "GET")
 
     def test_openapi_tool_uses_examples(self) -> None:
         spec = Path(__file__).resolve().parents[1] / "examples" / "openapi.json"

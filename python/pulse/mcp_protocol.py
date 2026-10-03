@@ -8,12 +8,19 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Callable
 
+from .agent import run_agent
 from .bench import compare_bench, run_bench
 from .curl import curl_to_payload
 from .diff import compare as diff_compare
 from .envfile import load_data_rows
 from .export import to_run_input
-from .graphql import INTROSPECTION_QUERY, build_body as build_graphql_body, summarize_schema
+from .graphql import (
+    INTROSPECTION_QUERY,
+    build_body as build_graphql_body,
+    format_response as format_graphql_response,
+    list_operations as list_graphql_operations,
+    summarize_schema,
+)
 from .har import har_to_pulse
 from .junit import to_junit
 from .mcp_prompts import get_prompt, list_prompts
@@ -473,6 +480,51 @@ def tool_export_openapi(arguments: dict) -> dict:
 
 
 def tool_graphql(arguments: dict) -> dict:
+    kind = str(arguments.get("kind") or "").strip().lower()
+    if not kind:
+        if arguments.get("url"):
+            kind = "send"
+        elif arguments.get("body") is not None:
+            kind = "summarize"
+        elif arguments.get("document") is not None:
+            kind = "operations"
+        else:
+            kind = "body"
+
+    if kind == "introspection_query":
+        return _text(INTROSPECTION_QUERY)
+    if kind == "body":
+        query = arguments.get("query") or arguments.get("graphqlQuery") or ""
+        variables = arguments.get("variables")
+        if variables is None:
+            variables = arguments.get("graphqlVariables")
+        operation = arguments.get("operationName") or arguments.get("graphqlOperationName")
+        try:
+            return _text(build_graphql_body(str(query), variables, operation))
+        except (ValueError, json.JSONDecodeError) as error:
+            return _text(str(error), error=True)
+    if kind == "summarize":
+        body = arguments.get("body")
+        if body is None:
+            return _text("body is required for summarize", error=True)
+        summary = summarize_schema(body if isinstance(body, (str, dict)) else json.dumps(body))
+        if summary is None:
+            return _text("No GraphQL __schema found in body", error=True)
+        return _json(summary)
+    if kind == "format":
+        body = arguments.get("body")
+        if body is None:
+            return _text("body is required for format", error=True)
+        raw = body if isinstance(body, str) else json.dumps(body)
+        return _text(format_graphql_response(raw))
+    if kind == "operations":
+        document = str(arguments.get("document") or arguments.get("query") or "")
+        if not document.strip():
+            return _text("document (or query) is required", error=True)
+        return _json(list_graphql_operations(document))
+    if kind != "send":
+        return _text(f"Unknown pulse_graphql kind: {kind}", error=True)
+
     url = str(arguments.get("url") or "")
     if not url:
         return _text("url is required", error=True)
@@ -511,6 +563,29 @@ def tool_curl(arguments: dict) -> dict:
     if arguments.get("send"):
         return _text(_native().send_once_json(json.dumps(payload)))
     return _json(payload)
+
+
+def tool_agent(arguments: dict) -> dict:
+    utterance = arguments.get("input") or arguments.get("utterance") or ""
+    body = arguments.get("body")
+    workspace = arguments.get("workspace")
+    history_limit = arguments.get("historyLimit") or arguments.get("history_limit") or 15
+    try:
+        limit = int(history_limit)
+    except (TypeError, ValueError):
+        limit = 15
+    try:
+        result = run_agent(
+            str(utterance),
+            workspace=str(workspace) if workspace else None,
+            body=str(body) if body is not None else None,
+            history_limit=limit,
+            source="mcp-agent",
+            record_history=True,
+        )
+    except Exception as error:  # noqa: BLE001 — surface to agent
+        return _text(str(error), error=True)
+    return _json(result)
 
 
 def tool_snippet(arguments: dict) -> dict:
@@ -769,7 +844,20 @@ def tool_workspace_export_openapi(arguments: dict) -> dict:
     return _json({"path": _mcp_path(written), "paths": len(spec.get("paths") or {})})
 
 
-def tool_contract(_arguments: dict) -> dict:
+def tool_contract(arguments: dict) -> dict:
+    if arguments.get("schema") is not None and arguments.get("body") is not None:
+        from pulse.contract import compare_to_schema
+
+        body = arguments.get("body")
+        schema = arguments.get("schema")
+        if isinstance(schema, str):
+            schema = json.loads(schema)
+        report = compare_to_schema(body if isinstance(body, str) else json.dumps(body), schema)
+        return _json(report)
+    if arguments.get("previous") is not None and arguments.get("current") is not None:
+        from pulse.contract import breaking_diff
+
+        return _json(breaking_diff(arguments["previous"], arguments["current"]))
     root, error = _require_workspace()
     if error or root is None:
         return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
@@ -781,6 +869,90 @@ def tool_contract(_arguments: dict) -> dict:
         except json.JSONDecodeError:
             return _text(raw)
     return _json(check_workspace_files(root))
+
+
+def tool_sse(arguments: dict) -> dict:
+    from pulse.sse import collect, parse_text
+
+    if arguments.get("text") is not None:
+        return _json(parse_text(str(arguments.get("text") or "")))
+    url = str(arguments.get("url") or "").strip()
+    if not url:
+        return _text("Provide url or text", error=True)
+    headers = arguments.get("headers") if isinstance(arguments.get("headers"), dict) else None
+    try:
+        events = collect(
+            url,
+            method=str(arguments.get("method") or "GET"),
+            headers={str(k): str(v) for k, v in (headers or {}).items()},
+            body=str(arguments["body"]) if arguments.get("body") is not None else None,
+            max_events=int(arguments.get("maxEvents") or 50),
+            timeout_s=float(arguments.get("timeoutMs") or 30000) / 1000.0,
+            last_event_id=str(arguments["lastEventId"]) if arguments.get("lastEventId") else None,
+            event=str(arguments["event"]) if arguments.get("event") else None,
+        )
+    except Exception as error:  # noqa: BLE001
+        return _text(str(error), error=True)
+    return _json(events)
+
+
+def tool_graphql_ws(arguments: dict) -> dict:
+    from pulse import graphql_ws as gws
+
+    kind = str(arguments.get("kind") or arguments.get("action") or "").strip()
+    if kind == "protocols":
+        return _text(gws.protocols())
+    if kind == "connection_init" or kind == "init":
+        payload = arguments.get("payload")
+        auth = arguments.get("auth")
+        return _text(
+            gws.connection_init(
+                payload=payload if isinstance(payload, dict) else None,
+                auth=auth if isinstance(auth, dict) else None,
+            )
+        )
+    if kind in {"subscribe", "start"}:
+        query = str(arguments.get("query") or "").strip()
+        if not query:
+            return _text("subscribe requires query", error=True)
+        builder = gws.start if kind == "start" else gws.subscribe
+        return _text(
+            builder(
+                str(arguments.get("id") or "1"),
+                query,
+                variables=arguments.get("variables"),
+                operation_name=str(arguments["operationName"]) if arguments.get("operationName") else None,
+            )
+        )
+    if kind == "complete":
+        return _text(gws.complete(str(arguments.get("id") or "1")))
+    if kind == "stop":
+        return _text(gws.stop(str(arguments.get("id") or "1")))
+    if kind == "ping":
+        return _text(gws.ping(arguments.get("payload")))
+    if kind == "pong":
+        return _text(gws.pong(arguments.get("payload")))
+    if kind == "parse":
+        return _json(gws.parse_frame(str(arguments.get("text") or "")))
+    return _text(
+        "kind must be protocols|connection_init|subscribe|start|complete|stop|ping|pong|parse",
+        error=True,
+    )
+
+
+def tool_workspace_init(arguments: dict) -> dict:
+    from pulse.workspace import init_workspace
+
+    root, error = _require_workspace()
+    if error or root is None:
+        # Allow creating a new path when workspace is passed explicitly.
+        raw = str(arguments.get("workspace") or os.environ.get("PULSE_WORKSPACE") or "").strip()
+        if not raw:
+            return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+        root = Path(raw).expanduser().resolve()
+    name = str(arguments.get("name") or root.name or "Pulse")
+    path = init_workspace(root, name)
+    return _json({"path": _mcp_path(path)})
 
 
 def tool_junit(arguments: dict) -> dict:
@@ -873,9 +1045,13 @@ TOOLS: dict[str, Callable[[dict], dict]] = {
     "pulse_workspace_import_openapi": tool_workspace_import_openapi,
     "pulse_workspace_export_openapi": tool_workspace_export_openapi,
     "pulse_contract": tool_contract,
+    "pulse_sse": tool_sse,
+    "pulse_graphql_ws": tool_graphql_ws,
+    "pulse_workspace_init": tool_workspace_init,
     "pulse_junit": tool_junit,
     "pulse_mock_start": tool_mock_start,
     "pulse_mock_stop": tool_mock_stop,
+    "pulse_agent": tool_agent,
     "pulse_help": tool_help,
 }
 
@@ -1058,20 +1234,26 @@ TOOL_DEFS = [
     },
     {
         "name": "pulse_graphql",
-        "description": "Send a GraphQL query (or introspect=true) through the Pulse Rust engine.",
+        "description": "GraphQL helpers: send/introspect over HTTP, or offline body/summarize/format/operations (Rust engine).",
         "inputSchema": {
             "type": "object",
-            "required": ["url"],
             "properties": {
+                "kind": {
+                    "type": "string",
+                    "enum": ["send", "body", "summarize", "format", "operations", "introspection_query"],
+                },
                 "url": {"type": "string"},
                 "graphqlQuery": {"type": "string"},
                 "query": {"type": "string", "description": "Alias for graphqlQuery"},
                 "graphqlVariables": {"description": "JSON object or string"},
                 "variables": {"description": "Alias for graphqlVariables"},
                 "graphqlOperationName": {"type": "string"},
+                "operationName": {"type": "string"},
                 "introspect": {"type": "boolean"},
                 "headers": {"type": "object", "additionalProperties": {"type": "string"}},
                 "bearerToken": {"type": "string"},
+                "body": {"description": "Response/introspection JSON for summarize/format"},
+                "document": {"type": "string", "description": "GraphQL document for operations"},
             },
         },
     },
@@ -1242,8 +1424,76 @@ TOOL_DEFS = [
     },
     {
         "name": "pulse_contract",
-        "description": "Check PULSE_WORKSPACE contracts: JSON Schema on requests and breaking diffs vs *.previous.json snapshots.",
-        "inputSchema": {"type": "object", "properties": {}},
+        "description": "Check PULSE_WORKSPACE contracts, or pass schema+body / previous+current for schema/breaking diffs.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "schema": {"type": "object"},
+                "body": {},
+                "previous": {},
+                "current": {},
+            },
+        },
+    },
+    {
+        "name": "pulse_sse",
+        "description": "Parse SSE text or collect events from a URL (Accept: text/event-stream).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string"},
+                "text": {"type": "string", "description": "Offline SSE document to parse"},
+                "method": {"type": "string", "default": "GET"},
+                "headers": {"type": "object", "additionalProperties": {"type": "string"}},
+                "body": {"type": "string"},
+                "maxEvents": {"type": "integer", "default": 50},
+                "timeoutMs": {"type": "integer", "default": 30000},
+                "lastEventId": {"type": "string"},
+                "event": {"type": "string", "description": "Only keep events with this event: name"},
+            },
+        },
+    },
+    {
+        "name": "pulse_graphql_ws",
+        "description": "Build or parse graphql-ws / graphql-transport-ws frames (connection_init, subscribe/start, complete/stop, ping/pong).",
+        "inputSchema": {
+            "type": "object",
+            "required": ["kind"],
+            "properties": {
+                "kind": {
+                    "type": "string",
+                    "enum": [
+                        "protocols",
+                        "connection_init",
+                        "subscribe",
+                        "start",
+                        "complete",
+                        "stop",
+                        "ping",
+                        "pong",
+                        "parse",
+                    ],
+                },
+                "id": {"type": "string"},
+                "query": {"type": "string"},
+                "variables": {},
+                "operationName": {"type": "string"},
+                "payload": {"type": "object"},
+                "auth": {"type": "object"},
+                "text": {"type": "string"},
+            },
+        },
+    },
+    {
+        "name": "pulse_workspace_init",
+        "description": "Create pulse.yaml + collections/ + environments/ under PULSE_WORKSPACE (or workspace path).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "workspace": {"type": "string"},
+                "name": {"type": "string"},
+            },
+        },
     },
     {
         "name": "pulse_junit",
@@ -1274,6 +1524,20 @@ TOOL_DEFS = [
         "name": "pulse_mock_stop",
         "description": "Stop the local mock server started by pulse_mock_start.",
         "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "pulse_agent",
+        "description": "Local intent router (no LLM). Offline-safe: help, parse curl/sse, workspace status/history, GraphQL summarize from body.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["input"],
+            "properties": {
+                "input": {"type": "string", "description": "Natural utterance or pasted curl/SSE"},
+                "body": {"type": "string", "description": "GraphQL introspection/response JSON for summarize"},
+                "workspace": {"type": "string", "description": "Override PULSE_WORKSPACE"},
+                "historyLimit": {"type": "integer", "default": 15},
+            },
+        },
     },
     {
         "name": "pulse_help",

@@ -76,6 +76,11 @@ import {
   saveLayoutPreferences,
   type HomeView,
 } from "@/lib/layout-preferences";
+import {
+  loadAgentLlmSettings,
+  saveAgentLlmSettings,
+  type AgentLlmSettings,
+} from "@/lib/agent-settings";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/useLocale";
 import type { MessageKey } from "@/lib/i18n";
@@ -150,6 +155,7 @@ const SETTINGS_NAV: Array<{ id: string; labelKey: MessageKey }> = [
   { id: "appearance", labelKey: "settings.nav.appearance" },
   { id: "data", labelKey: "settings.nav.data" },
   { id: "http", labelKey: "settings.nav.http" },
+  { id: "agent", labelKey: "agent.settings.nav" },
   { id: "layout", labelKey: "settings.nav.layout" },
   { id: "cookies", labelKey: "settings.nav.cookies" },
   { id: "collections", labelKey: "settings.nav.collections" },
@@ -295,6 +301,7 @@ export function SettingsView() {
     path: "/",
   });
   const [editingCookieKey, setEditingCookieKey] = useState<string | null>(null);
+  const [agentLlm, setAgentLlm] = useState<AgentLlmSettings>(() => loadAgentLlmSettings());
   const [activeSection, setActiveSection] = useState<string>(SETTINGS_NAV[0].id);
 
   const scrollToSection = (id: string) => {
@@ -1210,6 +1217,64 @@ export function SettingsView() {
 
           <Button type="button" onClick={() => void handleSaveHttpSettings()}>
             Save HTTP settings
+          </Button>
+        </SettingsSection>
+
+        <SettingsSection
+          id="agent"
+          title={t("agent.settings.title")}
+          description={t("agent.settings.description")}
+        >
+          <SettingRow
+            title={t("agent.settings.provider")}
+            description={t("agent.settings.providerSoon")}
+          >
+            <Select
+              value={agentLlm.provider}
+              onValueChange={(value) =>
+                setAgentLlm((prev) => ({
+                  ...prev,
+                  provider: value as AgentLlmSettings["provider"],
+                }))
+              }
+            >
+              <SelectTrigger className="w-[260px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">{t("agent.settings.providerNone")}</SelectItem>
+                <SelectItem value="openai" disabled>
+                  OpenAI ({t("agent.settings.providerSoon")})
+                </SelectItem>
+                <SelectItem value="anthropic" disabled>
+                  Anthropic ({t("agent.settings.providerSoon")})
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </SettingRow>
+          <SettingRow
+            title={t("agent.settings.apiKey")}
+            description={t("agent.settings.apiKeyHint")}
+          >
+            <Input
+              type="password"
+              autoComplete="off"
+              className="max-w-md"
+              value={agentLlm.apiKey}
+              onChange={(event) =>
+                setAgentLlm((prev) => ({ ...prev, apiKey: event.target.value }))
+              }
+              placeholder="sk-…"
+            />
+          </SettingRow>
+          <Button
+            type="button"
+            onClick={() => {
+              saveAgentLlmSettings(agentLlm);
+              toast.success(t("agent.settings.saved"));
+            }}
+          >
+            Save agent settings
           </Button>
         </SettingsSection>
 

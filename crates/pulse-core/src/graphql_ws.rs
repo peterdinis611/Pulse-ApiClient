@@ -1,10 +1,13 @@
 //! graphql-ws / graphql-transport-ws client frames (on top of raw WebSocket).
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 pub const GRAPHQL_TRANSPORT_WS: &str = "graphql-transport-ws";
 pub const GRAPHQL_WS: &str = "graphql-ws";
+
+/// Value for `Sec-WebSocket-Protocol` offering both modern and legacy dialects.
+pub const GRAPHQL_WS_PROTOCOLS: &str = "graphql-transport-ws, graphql-ws";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphqlWsMessage {
@@ -23,6 +26,43 @@ pub fn connection_init(payload: Option<Value>) -> String {
         payload,
     })
     .expect("json")
+}
+
+/// Build a common `connection_init` payload from HTTP-style auth.
+/// Many GraphQL servers expect `{ "Authorization": "Bearer …" }` in the init payload.
+pub fn connection_init_payload_from_auth(
+    auth_type: &str,
+    bearer_token: Option<&str>,
+    api_key_key: Option<&str>,
+    api_key_value: Option<&str>,
+    api_key_in: Option<&str>,
+) -> Option<Value> {
+    let mut map = Map::new();
+    match auth_type {
+        "bearer" | "oauth2" => {
+            let token = bearer_token.unwrap_or("").trim();
+            if !token.is_empty() {
+                map.insert(
+                    "Authorization".into(),
+                    Value::String(format!("Bearer {token}")),
+                );
+            }
+        }
+        "apiKey" => {
+            let key = api_key_key.unwrap_or("").trim();
+            let value = api_key_value.unwrap_or("");
+            let loc = api_key_in.unwrap_or("header");
+            if !key.is_empty() && loc != "query" {
+                map.insert(key.to_string(), Value::String(value.to_string()));
+            }
+        }
+        _ => {}
+    }
+    if map.is_empty() {
+        None
+    } else {
+        Some(Value::Object(map))
+    }
 }
 
 pub fn subscribe(id: &str, query: &str, variables: Option<Value>, operation_name: Option<&str>) -> String {
@@ -50,8 +90,65 @@ pub fn complete(id: &str) -> String {
     .expect("json")
 }
 
+pub fn ping(payload: Option<Value>) -> String {
+    serde_json::to_string(&GraphqlWsMessage {
+        kind: "ping".into(),
+        id: None,
+        payload,
+    })
+    .expect("json")
+}
+
+pub fn pong(payload: Option<Value>) -> String {
+    serde_json::to_string(&GraphqlWsMessage {
+        kind: "pong".into(),
+        id: None,
+        payload,
+    })
+    .expect("json")
+}
+
+/// Legacy `graphql-ws` dialect uses `start` instead of `subscribe`.
+pub fn start(id: &str, query: &str, variables: Option<Value>, operation_name: Option<&str>) -> String {
+    let mut payload = json!({ "query": query });
+    if let Some(variables) = variables {
+        payload["variables"] = variables;
+    }
+    if let Some(name) = operation_name.filter(|item| !item.is_empty()) {
+        payload["operationName"] = Value::String(name.to_string());
+    }
+    serde_json::to_string(&GraphqlWsMessage {
+        kind: "start".into(),
+        id: Some(id.into()),
+        payload: Some(payload),
+    })
+    .expect("json")
+}
+
+/// Legacy `graphql-ws` dialect uses `stop` instead of `complete`.
+pub fn stop(id: &str) -> String {
+    serde_json::to_string(&GraphqlWsMessage {
+        kind: "stop".into(),
+        id: Some(id.into()),
+        payload: None,
+    })
+    .expect("json")
+}
+
 pub fn parse_message(text: &str) -> Option<GraphqlWsMessage> {
     serde_json::from_str(text).ok()
+}
+
+/// Normalize legacy frame types to the modern graphql-transport-ws vocabulary.
+pub fn normalize_frame_kind(kind: &str) -> &str {
+    match kind {
+        "start" => "subscribe",
+        "stop" => "complete",
+        "ka" => "pong",
+        "connection_error" => "error",
+        "data" => "next",
+        other => other,
+    }
 }
 
 #[cfg(test)]
@@ -64,5 +161,82 @@ mod tests {
         let parsed = parse_message(&raw).unwrap();
         assert_eq!(parsed.kind, "subscribe");
         assert_eq!(parsed.id.as_deref(), Some("1"));
+    }
+
+    #[test]
+    fn connection_init_includes_bearer() {
+        let payload = connection_init_payload_from_auth(
+            "bearer",
+            Some("tok"),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            payload.get("Authorization").and_then(Value::as_str),
+            Some("Bearer tok")
+        );
+        let raw = connection_init(Some(payload));
+        let parsed = parse_message(&raw).unwrap();
+        assert_eq!(parsed.kind, "connection_init");
+    }
+
+    #[test]
+    fn builds_pong_frame() {
+        let raw = pong(None);
+        assert_eq!(parse_message(&raw).unwrap().kind, "pong");
+        assert_eq!(parse_message(&ping(None)).unwrap().kind, "ping");
+        assert_eq!(normalize_frame_kind("start"), "subscribe");
+        assert_eq!(normalize_frame_kind("data"), "next");
+    }
+
+    #[test]
+    fn legacy_start_and_stop_frames() {
+        let started = start("9", "subscription { x }", Some(json!({"a": 1})), Some("X"));
+        let parsed = parse_message(&started).unwrap();
+        assert_eq!(parsed.kind, "start");
+        assert_eq!(parsed.id.as_deref(), Some("9"));
+        assert_eq!(
+            parsed.payload.as_ref().and_then(|p| p.get("operationName")).and_then(Value::as_str),
+            Some("X")
+        );
+        assert_eq!(parse_message(&stop("9")).unwrap().kind, "stop");
+        assert_eq!(normalize_frame_kind("stop"), "complete");
+        assert_eq!(normalize_frame_kind("ka"), "pong");
+        assert_eq!(normalize_frame_kind("connection_error"), "error");
+    }
+
+    #[test]
+    fn connection_init_maps_api_key_header() {
+        let payload = connection_init_payload_from_auth(
+            "apiKey",
+            None,
+            Some("X-Api-Key"),
+            Some("secret"),
+            Some("header"),
+        )
+        .unwrap();
+        assert_eq!(
+            payload.get("X-Api-Key").and_then(Value::as_str),
+            Some("secret")
+        );
+        assert!(connection_init_payload_from_auth(
+            "apiKey",
+            None,
+            Some("token"),
+            Some("x"),
+            Some("query"),
+        )
+        .is_none());
+        assert!(connection_init_payload_from_auth("none", None, None, None, None).is_none());
+    }
+
+    #[test]
+    fn ping_can_carry_payload() {
+        let raw = ping(Some(json!({"n": 1})));
+        let parsed = parse_message(&raw).unwrap();
+        assert_eq!(parsed.kind, "ping");
+        assert_eq!(parsed.payload.unwrap()["n"], 1);
     }
 }

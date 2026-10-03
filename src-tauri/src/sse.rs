@@ -1,13 +1,21 @@
-use crate::http::{build_request_headers, build_request_url, HttpRequestPayload, ResponseHeader};
+use crate::http::{
+    build_request_headers, build_request_url, encode_response_body, HttpRequestPayload,
+    ResponseHeader,
+};
 use crate::state::HttpState;
 use crate::ws_state::{WsConnectionHandle, WsState, WsWriteMessage};
 use futures_util::StreamExt;
-use reqwest::header::{HeaderValue, ACCEPT, CACHE_CONTROL};
+use pulse_core::sse::SseBuffer;
+use reqwest::header::{HeaderName, HeaderValue, ACCEPT, CACHE_CONTROL};
+use reqwest::Method;
 use serde::Serialize;
+use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
+
+const MAX_BUFFER_BYTES: usize = 4 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -25,6 +33,12 @@ struct SseMessageEvent {
     data: String,
     binary: bool,
     timestamp: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    event: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    event_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    retry_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -51,24 +65,6 @@ fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
-fn parse_sse_block(block: &str) -> Option<String> {
-    let mut data = Vec::new();
-    for line in block.lines() {
-        let trimmed = line.trim_end();
-        if trimmed.is_empty() || trimmed.starts_with(':') {
-            continue;
-        }
-        if let Some(rest) = trimmed.strip_prefix("data:") {
-            data.push(rest.trim_start());
-        }
-    }
-    if data.is_empty() {
-        None
-    } else {
-        Some(data.join("\n"))
-    }
-}
-
 pub async fn connect(
     app: AppHandle,
     http: &HttpState,
@@ -81,17 +77,68 @@ pub async fn connect(
         return Err("SSE URL must use http:// or https://".to_string());
     }
 
-    let mut headers = build_request_headers(&payload)?;
-    headers.insert(ACCEPT, HeaderValue::from_static("text/event-stream"));
-    headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    let method_raw = payload.method.trim().to_uppercase();
+    let method = if method_raw.is_empty() || method_raw == "GET" {
+        Method::GET
+    } else {
+        Method::from_bytes(method_raw.as_bytes()).map_err(|e| format!("Invalid HTTP method: {e}"))?
+    };
 
-    let response = http
-        .client()
-        .get(url)
-        .headers(headers)
-        .send()
-        .await
-        .map_err(|error| error.to_string())?;
+    let mut headers = build_request_headers(&payload)?;
+    if !headers.contains_key(ACCEPT) {
+        headers.insert(ACCEPT, HeaderValue::from_static("text/event-stream"));
+    }
+    if !headers.contains_key(CACHE_CONTROL) {
+        headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    }
+
+    if let Some(last_id) = payload
+        .headers
+        .iter()
+        .find(|item| item.enabled && item.key.eq_ignore_ascii_case("last-event-id"))
+        .map(|item| item.value.trim())
+        .filter(|value| !value.is_empty())
+    {
+        if let (Ok(name), Ok(value)) = (
+            HeaderName::from_str("Last-Event-ID"),
+            HeaderValue::from_str(last_id),
+        ) {
+            headers.insert(name, value);
+        }
+    }
+
+    let mut request = http.client().request(method.clone(), url.clone()).headers(headers);
+
+    request = match payload.body_kind.as_str() {
+        "none" => request,
+        "json" if !payload.body.trim().is_empty() => {
+            let _: serde_json::Value = serde_json::from_str(&payload.body)
+                .map_err(|e| format!("Invalid JSON body: {e}"))?;
+            request
+                .header("content-type", "application/json")
+                .body(payload.body.clone())
+        }
+        "graphql" if !payload.body.trim().is_empty() => request
+            .header("content-type", "application/json")
+            .body(payload.body.clone()),
+        "raw" | "json" | "graphql" if !payload.body.is_empty() => request.body(payload.body.clone()),
+        "form" => {
+            let pairs: Vec<(String, String)> = payload
+                .form
+                .iter()
+                .filter(|item| item.enabled && !item.key.trim().is_empty())
+                .map(|item| (item.key.trim().to_string(), item.value.clone()))
+                .collect();
+            if pairs.is_empty() {
+                request
+            } else {
+                request.form(&pairs)
+            }
+        }
+        _ => request,
+    };
+
+    let response = request.send().await.map_err(|error| error.to_string())?;
 
     let status = response.status().as_u16();
     let response_headers: Vec<ResponseHeader> = response
@@ -103,8 +150,17 @@ pub async fn connect(
         })
         .collect();
 
+    http.record_set_cookies(
+        url.as_str(),
+        &response_headers
+            .iter()
+            .map(|header| (header.key.clone(), header.value.clone()))
+            .collect::<Vec<_>>(),
+    );
+
     if !response.status().is_success() {
-        let body = response.text().await.unwrap_or_default();
+        let body_bytes = response.bytes().await.unwrap_or_default();
+        let (body, _) = encode_response_body(&body_bytes, None);
         return Err(format!("SSE handshake failed ({status}): {body}"));
     }
 
@@ -118,25 +174,35 @@ pub async fn connect(
     let cancel_task = cancel.clone();
 
     let read_task = tokio::spawn(async move {
-        let mut buffer = String::new();
+        let mut buffer = SseBuffer::new(MAX_BUFFER_BYTES);
         loop {
             tokio::select! {
                 _ = cancel_task.cancelled() => break,
                 chunk = stream.next() => {
                     match chunk {
                         Some(Ok(bytes)) => {
-                            buffer.push_str(&String::from_utf8_lossy(&bytes));
-                            while let Some(index) = buffer.find("\n\n") {
-                                let block = buffer[..index].to_string();
-                                buffer = buffer[index + 2..].to_string();
-                                if let Some(data) = parse_sse_block(&block) {
-                                    let _ = app_task.emit("ws-message", SseMessageEvent {
+                            match buffer.push(&String::from_utf8_lossy(&bytes)) {
+                                Ok(events) => {
+                                    for parsed in events {
+                                        let _ = app_task.emit("ws-message", SseMessageEvent {
+                                            connection_id: conn_task.clone(),
+                                            tab_id: tab_task.clone(),
+                                            data: parsed.data,
+                                            binary: false,
+                                            timestamp: now_ms(),
+                                            event: parsed.event,
+                                            event_id: parsed.id,
+                                            retry_ms: parsed.retry_ms,
+                                        });
+                                    }
+                                }
+                                Err(message) => {
+                                    let _ = app_task.emit("ws-error", SseErrorEvent {
                                         connection_id: conn_task.clone(),
                                         tab_id: tab_task.clone(),
-                                        data,
-                                        binary: false,
-                                        timestamp: now_ms(),
+                                        message,
                                     });
+                                    break;
                                 }
                             }
                         }
@@ -179,15 +245,4 @@ pub async fn connect(
         status,
         headers: response_headers,
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::parse_sse_block;
-
-    #[test]
-    fn parse_sse_block_joins_data_lines() {
-        let data = parse_sse_block("event: ping\ndata: hello\ndata: world").unwrap();
-        assert_eq!(data, "hello\nworld");
-    }
 }

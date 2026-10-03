@@ -145,14 +145,19 @@ Stream protocols on the request bar: WebSocket frames or text/event-stream.
 - SSE uses `http://` / `https://` with `Accept: text/event-stream` (AI streams, logs, ticks)
 - Connect / Disconnect replace Send while the stream is active
 - Headers, query, path params, and inherited auth apply on connect
-- WebSocket: send text or binary frames; ping; inspect incoming messages
-- GraphQL subscriptions: set body to GraphQL on a `ws://` request — Pulse negotiates `graphql-transport-ws` and can send subscribe frames
+- WebSocket: send text or binary frames; ping/pong visible in the message list; inspect handshake headers
+- GraphQL subscriptions: GraphQL body on `ws://` offers `graphql-transport-ws` + `graphql-ws`, sends `connection_init` (with auth), tracks `connection_ack`, Subscribe / Complete
+- Schema explorer: introspection over HTTP; subscription fields switch the tab to WebSocket
 - SSE is incoming-only — events land in the same message list, no send/ping
+- SSE parses `event`, `id`, `retry`, and multi-line `data` (LF or CRLF); filter by event name in the panel
+- SSE supports GET or POST (body/headers for chat-style streams); reconnect sends `Last-Event-ID`
 
 **How to**
 
-1. Switch protocol to SSE, set the events URL, Connect. Data lines show as incoming messages.
-2. For WebSocket, use `wss://…` or pick WS, then Connect and send frames.
+1. Switch protocol to SSE, pick GET or POST, set the events URL, Connect. Named events, ids, and retry hints show as badges.
+2. Disconnect and Connect again to resume — Pulse sends the last `id` as `Last-Event-ID`.
+3. For WebSocket, use `wss://…` or pick WS, Connect, send text/binary, use Ping — pong frames show in the list.
+4. For GraphQL subscriptions: set body to GraphQL, Connect, wait for connection_ack, Subscribe, then Complete when done.
 
 ## Scripting
 
@@ -442,6 +447,7 @@ Pulse does not operate a cloud. Your workspace stays on this device unless you s
 
 Satellite around the Rust engine — collection runs, Git workspace, mock, GraphQL, OpenAPI/HAR. Not inside the desktop app.
 
+- `bun run pulse:cli agent "workspace status"` — local intent router (cURL/SSE/workspace/GraphQL summarize; same engine as MCP `pulse_agent`)
 - `bun run pulse:cli run collection.json` — Pulse export or CollectionRunInput, optional `.env` / CSV iterations; stores last-run for `last-run` / `validate-run`
 - `workspace status|list|search|envs|history|pending|read|write|delete|send|import-openapi|export-openapi` — MCP parity for a Git YAML folder (`PULSE_WORKSPACE`)
 - `contract` — validate YAML examples vs responseSchema / `*.previous.json` (path or `PULSE_WORKSPACE`)
@@ -466,10 +472,11 @@ Satellite around the Rust engine — collection runs, Git workspace, mock, Graph
 Cursor (and other MCP clients) call the Pulse engine over stdio via one Python server — send, GraphQL, cURL, collections, bench, OpenAPI, Git workspace, contract, JUnit.
 
 - Project config: `.cursor/mcp.json` launches **pulse** only (`python/pulse_mcp.py`) — covers OpenAPI/HAR plus YAML workspace tools
+- In-app **MCP** page (left rail) walks through setup, example prompts, tools, resources, and confirm safety
 - Optional Rust twin: `cargo run -p pulse-mcp` (workspace tools + run_tests / pre_request / run_collection / openapi_list / mock_start/stop)
 - Set `PULSE_WORKSPACE` to the same Git folder the desktop attached
 - Resources: `pulse://examples/pets.json`, `pulse://last-run`, `pulse://openapi/{file}`, `pulse://out/{file}`, `pulse://workspace/requests|environments|history|pending`, `pulse://workspace/request/{id}`
-- Tools: pulse_workspace_*, pulse_send, pulse_run_collection, pulse_bench, pulse_write_collection, pulse_pre_request, pulse_interpolate, pulse_run_tests, pulse_openapi, pulse_har, pulse_schema, pulse_diff, pulse_export_openapi, pulse_graphql, pulse_curl, pulse_snippet (curl/fetch/httpie/python/axios/okhttp/reqwest/swift), pulse_mock_start/stop, pulse_last_run, pulse_validate_run, pulse_contract, pulse_junit, pulse_help
+- Tools: pulse_workspace_*, pulse_send, pulse_run_collection, pulse_bench, pulse_write_collection, pulse_pre_request, pulse_interpolate, pulse_run_tests, pulse_openapi, pulse_har, pulse_schema, pulse_diff, pulse_export_openapi, pulse_graphql, pulse_curl, pulse_agent (local intents, no LLM), pulse_snippet (curl/fetch/httpie/python/axios/okhttp/reqwest/swift), pulse_mock_start/stop, pulse_last_run, pulse_validate_run, pulse_contract, pulse_junit, pulse_help
 - Prompts: run_and_explain, openapi_to_pulse, compare_responses, graphql_introspect, curl_import, export_openapi, explain_last_run, validate_schema, send_saved_request, workspace_status, contract_check, import_openapi_workspace
 - Long collection runs and bench emit MCP progress (request name, status, ms) after each step
 - OpenAPI/HAR write to `python/examples/.out/` and return a POSIX path — not a huge JSON blob
@@ -478,11 +485,12 @@ Cursor (and other MCP clients) call the Pulse engine over stdio via one Python s
 
 **How to**
 
-1. Run `bun run pulse:cli:install` so `.venv` has `pulse_native`.
-2. Reload Cursor. In Settings → MCP, enable **pulse** if it is listed as disabled.
-3. Ask the agent to send a saved YAML request (`pulse_workspace_send`), list Git workspace status, or convert OpenAPI into `*.pulse.yaml`.
-4. Built-in prompts cover collection runs, OpenAPI import/export into JSON or the Git folder, GraphQL introspection, cURL import, last-run summary, schema validation, contract check, and comparing two JSON responses (`pulse_diff`).
-5. OpenAPI conversion writes `python/examples/.out/…json` or YAML under `PULSE_WORKSPACE/collections/`; read `pulse://last-run` / `pulse://workspace/*` after a run. Generated files are also `pulse://out/{file}`.
+1. Open MCP from the left rail for a full how-to (setup, prompts, tools, safety).
+2. Run `bun run pulse:cli:install` so `.venv` has `pulse_native`.
+3. Reload Cursor. In Settings → MCP, enable **pulse** if it is listed as disabled.
+4. Ask the agent to send a saved YAML request (`pulse_workspace_send`), list Git workspace status, or convert OpenAPI into `*.pulse.yaml`.
+5. Built-in prompts cover collection runs, OpenAPI import/export into JSON or the Git folder, GraphQL introspection, cURL import, last-run summary, schema validation, contract check, and comparing two JSON responses (`pulse_diff`).
+6. OpenAPI conversion writes `python/examples/.out/…json` or YAML under `PULSE_WORKSPACE/collections/`; read `pulse://last-run` / `pulse://workspace/*` after a run. Generated files are also `pulse://out/{file}`.
 
 ### Libraries & stack
 
@@ -495,11 +503,11 @@ Direct dependencies — desktop UI, Rust engine, Python satellite, and the docs 
 - Desktop bridge — @tauri-apps/api, @tauri-apps/plugin-dialog, @tauri-apps/plugin-opener
 - Workspace UX — @tanstack/react-hotkeys, @tanstack/react-pacer, fuse.js (fuzzy search), xlsx (Excel preview / runner data)
 - Desktop crate (`src-tauri`) — Tauri 2 IPC: HTTP engine (reqwest rustls, gzip/brotli, cookies, SOCKS, SSE stream, timing waterfall, mTLS, response cache + ETag revalidation, cURL parse/format), WebSocket, OAuth, SQLite history/cache, cookie jar, OS keychain secrets, Git workspace watch, fuzzy search, mock server, collection runner, custom themes / languages
-- Engine crate (`crates/pulse-core`) — shared Rust core: YAML workspace I/O, variable layers + secrets redaction, boa_engine scripts (pre-request + tests), collection runner, contract checks, OpenAPI operation flatten, path params, GraphQL-WS helpers, local mock (`:4010` + delay), simple HTTP send
-- MCP crate (`crates/pulse-mcp`) — optional Rust stdio MCP on pulse-core: workspace list/read/write/send/search/envs/history/pending/delete/status, contract, interpolate, send, run_tests, pre_request, run_collection, openapi_list (default agent entry is still Python `pulse`)
-- Python binding (`crates/pulse-native`) — PyO3 (abi3-py310) around pulse-core for CLI/MCP
+- Engine crate (`crates/pulse-core`) — shared Rust core: YAML workspace I/O, variable layers + secrets redaction, boa_engine scripts (pre-request + tests), collection runner, contract checks, OpenAPI operation flatten, path params, GraphQL-WS helpers, local mock (`:4010` + delay), simple HTTP send, local agent intent router
+- MCP crate (`crates/pulse-mcp`) — optional Rust stdio MCP on pulse-core: workspace list/read/write/send/search/envs/history/pending/delete/status, contract, interpolate, send, run_tests, pre_request, run_collection, openapi_list, pulse_agent (default agent entry is still Python `pulse`)
+- Python binding (`crates/pulse-native`) — PyO3 (abi3-py310) around pulse-core for CLI/MCP (`run_agent_json`)
 - Contract binary (`pulse-contract`) — CLI check of Git YAML examples vs responseSchema / snapshots
-- Python package (`python/pulse`) — stdlib only: openapi, har, schema, runner, bench, junit, export, envfile, report, curl, diff, graphql, snippet, workspace (PULSE_WORKSPACE YAML), MCP protocol / tools / prompts / resources
+- Python package (`python/pulse`) — stdlib only: openapi, har, schema, runner, bench, junit, export, envfile, report, curl, diff, graphql, snippet, agent, workspace (PULSE_WORKSPACE YAML), MCP protocol / tools / prompts / resources
 - Optional Python — PyYAML (OpenAPI YAML), schemathesis (`python/tools/schemathesis_pulse.py`), maturin to build pulse_native
 - Docs site (`docs/site`) — Next.js, Fumadocs (core, MDX, UI), lucide-react, cnfast
 - Tests — Vitest (UI), wiremock (Rust HTTP), Python unittest

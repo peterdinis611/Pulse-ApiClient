@@ -14,7 +14,14 @@ export type OAuth2GrantType = "client_credentials" | "authorization_code";
 export type ApiKeyLocation = "header" | "query";
 export type MultipartFieldType = "text" | "file";
 export type SidebarTab = "collections" | "history" | "environments";
-export type MainView = "overview" | "request" | "environments" | "settings" | "docs";
+export type MainView =
+  | "overview"
+  | "request"
+  | "environments"
+  | "settings"
+  | "docs"
+  | "mcp"
+  | "agent";
 
 export type RequestProtocol = "http" | "websocket" | "sse";
 
@@ -26,6 +33,12 @@ export type WebSocketMessage = {
   data: string;
   binary: boolean;
   timestamp: number;
+  /** SSE `event:` field (named event type). */
+  event?: string;
+  /** SSE `id:` field (Last-Event-ID resume). */
+  eventId?: string;
+  /** SSE `retry:` field in milliseconds. */
+  retryMs?: number;
 };
 
 export type WebSocketSession = {
@@ -34,9 +47,25 @@ export type WebSocketSession = {
   messages: WebSocketMessage[];
   handshakeStatus?: number;
   handshakeHeaders?: Array<{ key: string; value: string }>;
+  /** Negotiated Sec-WebSocket-Protocol (e.g. graphql-transport-ws). */
+  subprotocol?: string | null;
   closeCode?: number;
   closeReason?: string;
   error?: string | null;
+  /** Last SSE event id — sent as Last-Event-ID on reconnect. */
+  lastEventId?: string | null;
+  /** Last SSE retry hint from the stream (ms). */
+  lastRetryMs?: number | null;
+  /** SSE: automatically reconnect using Last-Event-ID after the stream ends. */
+  autoReconnect?: boolean;
+  /** Internal: user clicked Disconnect — skip auto-reconnect once. */
+  userClosed?: boolean;
+  /** SSE auto-reconnect attempts since the last successful connect. */
+  reconnectAttempts?: number;
+  /** GraphQL-WS: true after connection_ack. */
+  graphqlAcked?: boolean;
+  /** GraphQL-WS: active subscription ids. */
+  graphqlSubscriptionIds?: string[];
 };
 
 export type RequestTabState = {

@@ -7,6 +7,7 @@ export type WsConnectResult = {
   connectionId: string;
   status: number;
   headers: HttpResponse["headers"];
+  subprotocol?: string | null;
 };
 
 export type WsMessageEvent = {
@@ -15,6 +16,9 @@ export type WsMessageEvent = {
   data: string;
   binary: boolean;
   timestamp: number;
+  event?: string;
+  eventId?: string;
+  retryMs?: number;
 };
 
 export type WsCloseEvent = {

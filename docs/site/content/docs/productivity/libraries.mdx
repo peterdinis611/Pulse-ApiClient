@@ -14,11 +14,11 @@ Direct dependencies — desktop UI, Rust engine, Python satellite, and the docs 
 - Desktop bridge — @tauri-apps/api, @tauri-apps/plugin-dialog, @tauri-apps/plugin-opener
 - Workspace UX — @tanstack/react-hotkeys, @tanstack/react-pacer, fuse.js (fuzzy search), xlsx (Excel preview / runner data)
 - Desktop crate (`src-tauri`) — Tauri 2 IPC: HTTP engine (reqwest rustls, gzip/brotli, cookies, SOCKS, SSE stream, timing waterfall, mTLS, response cache + ETag revalidation, cURL parse/format), WebSocket, OAuth, SQLite history/cache, cookie jar, OS keychain secrets, Git workspace watch, fuzzy search, mock server, collection runner, custom themes / languages
-- Engine crate (`crates/pulse-core`) — shared Rust core: YAML workspace I/O, variable layers + secrets redaction, boa_engine scripts (pre-request + tests), collection runner, contract checks, OpenAPI operation flatten, path params, GraphQL-WS helpers, local mock (`:4010` + delay), simple HTTP send
-- MCP crate (`crates/pulse-mcp`) — optional Rust stdio MCP on pulse-core: workspace list/read/write/send/search/envs/history/pending/delete/status, contract, interpolate, send, run_tests, pre_request, run_collection, openapi_list (default agent entry is still Python `pulse`)
-- Python binding (`crates/pulse-native`) — PyO3 (abi3-py310) around pulse-core for CLI/MCP
+- Engine crate (`crates/pulse-core`) — shared Rust core: YAML workspace I/O, variable layers + secrets redaction, boa_engine scripts (pre-request + tests), collection runner, contract checks, OpenAPI operation flatten, path params, GraphQL-WS helpers, local mock (`:4010` + delay), simple HTTP send, local agent intent router
+- MCP crate (`crates/pulse-mcp`) — optional Rust stdio MCP on pulse-core: workspace list/read/write/send/search/envs/history/pending/delete/status, contract, interpolate, send, run_tests, pre_request, run_collection, openapi_list, pulse_agent (default agent entry is still Python `pulse`)
+- Python binding (`crates/pulse-native`) — PyO3 (abi3-py310) around pulse-core for CLI/MCP (`run_agent_json`)
 - Contract binary (`pulse-contract`) — CLI check of Git YAML examples vs responseSchema / snapshots
-- Python package (`python/pulse`) — stdlib only: openapi, har, schema, runner, bench, junit, export, envfile, report, curl, diff, graphql, snippet, workspace (PULSE_WORKSPACE YAML), MCP protocol / tools / prompts / resources
+- Python package (`python/pulse`) — stdlib only: openapi, har, schema, runner, bench, junit, export, envfile, report, curl, diff, graphql, snippet, agent, workspace (PULSE_WORKSPACE YAML), MCP protocol / tools / prompts / resources
 - Optional Python — PyYAML (OpenAPI YAML), schemathesis (`python/tools/schemathesis_pulse.py`), maturin to build pulse_native
 - Docs site (`docs/site`) — Next.js, Fumadocs (core, MDX, UI), lucide-react, cnfast
 - Tests — Vitest (UI), wiremock (Rust HTTP), Python unittest

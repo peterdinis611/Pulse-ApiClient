@@ -83,3 +83,38 @@ fn round_trips_export() {
 fn rejects_non_curl() {
     assert!(curl_to_payload("wget https://example.com").is_err());
 }
+
+#[test]
+fn parses_cookie_user_agent_and_referer() {
+    let payload = curl_to_payload(
+        r#"curl -A 'Pulse/1' -e 'https://ref.test' -b 'a=1; b=2' https://api.example.com/x"#,
+    )
+    .expect("parse");
+    let header = |name: &str| {
+        payload
+            .headers
+            .iter()
+            .find(|item| item.key.eq_ignore_ascii_case(name))
+            .map(|item| item.value.as_str())
+    };
+    assert_eq!(header("User-Agent"), Some("Pulse/1"));
+    assert_eq!(header("Referer"), Some("https://ref.test"));
+    assert_eq!(header("Cookie"), Some("a=1; b=2"));
+}
+
+#[test]
+fn parses_url_flag_and_data_urlencode() {
+    let payload = curl_to_payload(
+        r#"curl --url 'https://api.example.com/search' --data-urlencode 'q=hello world'"#,
+    )
+    .expect("parse");
+    assert_eq!(payload.url, "https://api.example.com/search");
+    assert_eq!(payload.body_kind, "form");
+    assert_eq!(payload.form[0].key, "q");
+    assert_eq!(payload.form[0].value, "hello world");
+}
+
+#[test]
+fn rejects_missing_url() {
+    assert!(curl_to_payload("curl -X POST -d 'x=1'").is_err());
+}

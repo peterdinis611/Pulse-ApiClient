@@ -135,6 +135,8 @@ export function useApp() {
     sendCurrentRequest: () => send({ type: "SEND" }),
     connectWebSocket: () => send({ type: "WS_CONNECT" }),
     disconnectWebSocket: () => send({ type: "WS_DISCONNECT" }),
+    setWebSocketAutoReconnect: (enabled: boolean) =>
+      send({ type: "WS_SET_AUTO_RECONNECT", enabled }),
     sendWebSocketMessage: (data: string, binary?: boolean) =>
       send({ type: "WS_SEND", data, binary }),
     sendWebSocketPing: () => send({ type: "WS_PING" }),
