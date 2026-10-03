@@ -1,6 +1,7 @@
 pub mod collection_run;
 pub mod contract;
 pub mod curl;
+pub mod graphql;
 pub mod graphql_ws;
 pub mod inherit;
 pub mod json_assertions;
@@ -23,6 +24,11 @@ pub use collection_run::{
     run_collection, run_collection_with_progress, CollectionRunInput, CollectionRunResult, CollectionRunStep,
 };
 pub use curl::{curl_to_payload, payload_to_curl};
+pub use graphql::{
+    build_body as build_graphql_body, build_body_raw as build_graphql_body_raw,
+    format_response as format_graphql_response, list_operations as list_graphql_operations,
+    summarize_schema as summarize_graphql_schema, validate as validate_graphql, INTROSPECTION_QUERY,
+};
 pub use mock_server::{
     routes_from_saved_requests, start_mock_server, start_mock_server_with_delay, MockRoute, MockServer,
     MockServerHandle, LOCKED_MOCK_PORT,

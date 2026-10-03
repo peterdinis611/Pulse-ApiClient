@@ -596,9 +596,33 @@ def cmd_pre_request(args: argparse.Namespace) -> int:
 
 
 def cmd_graphql(args: argparse.Namespace) -> int:
-    from pulse.graphql import INTROSPECTION_QUERY, build_body, summarize_schema
+    from pulse.graphql import (
+        INTROSPECTION_QUERY,
+        build_body,
+        format_response,
+        list_operations,
+        summarize_schema,
+    )
+
+    if args.body_only:
+        print(build_body(args.query or "", args.variables, args.operation))
+        return 0
+    if args.summarize_body:
+        summary = summarize_schema(args.summarize_body)
+        if summary is None:
+            raise SystemExit("No GraphQL __schema found in --summarize-body")
+        print(json.dumps(summary, indent=2))
+        return 0
+    if args.format_body:
+        print(format_response(args.format_body))
+        return 0
+    if args.list_operations:
+        print(json.dumps(list_operations(args.list_operations), indent=2))
+        return 0
 
     native = load_native()
+    if not args.url:
+        raise SystemExit("--url is required (or use an offline flag)")
     query = INTROSPECTION_QUERY if args.introspect else args.query
     if not query:
         raise SystemExit("Provide a GraphQL query or --introspect")
@@ -899,13 +923,20 @@ def main(argv: list[str] | None = None) -> int:
     send.add_argument("--input", help="HttpRequestPayload JSON file")
     send.set_defaults(func=cmd_send)
 
-    graphql = sub.add_parser("graphql", help="POST a GraphQL query (or --introspect) through the Rust engine")
-    graphql.add_argument("--url", required=True)
+    graphql = sub.add_parser(
+        "graphql",
+        help="POST GraphQL (or --introspect); offline: --body-only / --summarize-body / --format-body / --list-operations",
+    )
+    graphql.add_argument("--url", help="GraphQL HTTP endpoint")
     graphql.add_argument("--query", help="GraphQL query document")
     graphql.add_argument("--variables", default="{}", help="Variables JSON object")
     graphql.add_argument("--operation", help="operationName")
     graphql.add_argument("--bearer")
     graphql.add_argument("--introspect", action="store_true", help="Run built-in introspection and summarize")
+    graphql.add_argument("--body-only", action="store_true", help="Print request JSON body and exit")
+    graphql.add_argument("--summarize-body", help="Summarize an introspection JSON body (offline)")
+    graphql.add_argument("--format-body", help="Pretty-format a GraphQL response body (offline)")
+    graphql.add_argument("--list-operations", help="List operations in a GraphQL document (offline)")
     graphql.set_defaults(func=cmd_graphql)
 
     contract = sub.add_parser(
@@ -1053,8 +1084,12 @@ def main(argv: list[str] | None = None) -> int:
         send.error("provide --url or --input")
     if args.command == "snippet" and not args.input and not args.url:
         snippet.error("provide --url or --input")
-    if args.command == "graphql" and not args.introspect and not args.query:
-        graphql.error("provide --query or --introspect")
+    if args.command == "graphql":
+        offline = args.body_only or args.summarize_body or args.format_body or args.list_operations
+        if not offline and not args.introspect and not args.query:
+            graphql.error("provide --query, --introspect, or an offline flag")
+        if args.body_only and not args.query:
+            graphql.error("--body-only requires --query")
     return args.func(args)
 
 

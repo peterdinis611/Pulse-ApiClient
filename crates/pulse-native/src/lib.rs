@@ -3,6 +3,11 @@ use pyo3::prelude::*;
 use pyo3::types::PyAny;
 use pyo3::types::PyModule;
 use pulse_core::contract::check_workspace;
+use pulse_core::graphql::{
+    build_body_raw as gql_build_body_raw, format_response as gql_format_response,
+    list_operations as gql_list_operations, summarize_schema as gql_summarize_schema,
+    validate as gql_validate, INTROSPECTION_QUERY,
+};
 use pulse_core::graphql_ws::{
     complete as gql_complete, connection_init, connection_init_payload_from_auth, parse_message,
     pong as gql_pong, subscribe as gql_subscribe, GRAPHQL_WS_PROTOCOLS,
@@ -268,6 +273,59 @@ fn graphql_ws_parse_json(text: String) -> PyResult<String> {
 }
 
 #[pyfunction]
+#[pyo3(signature = (query, variables_json=None, operation_name=None))]
+fn graphql_build_body_json(
+    query: String,
+    variables_json: Option<String>,
+    operation_name: Option<String>,
+) -> PyResult<String> {
+    gql_build_body_raw(
+        &query,
+        variables_json.as_deref().unwrap_or("{}"),
+        operation_name.as_deref(),
+    )
+    .map_err(py_err)
+}
+
+#[pyfunction]
+#[pyo3(signature = (query, variables_json=None, operation_name=None))]
+fn graphql_validate_json(
+    query: String,
+    variables_json: Option<String>,
+    operation_name: Option<String>,
+) -> PyResult<String> {
+    let error = gql_validate(
+        &query,
+        variables_json.as_deref().unwrap_or("{}"),
+        operation_name.as_deref(),
+    );
+    serde_json::to_string(&serde_json::json!({ "ok": error.is_none(), "error": error })).map_err(py_err)
+}
+
+#[pyfunction]
+fn graphql_format_response_json(body: String) -> PyResult<String> {
+    Ok(gql_format_response(&body))
+}
+
+#[pyfunction]
+fn graphql_summarize_schema_json(body: String) -> PyResult<String> {
+    match gql_summarize_schema(&body) {
+        Some(summary) => serde_json::to_string(&summary).map_err(py_err),
+        None => Err(py_err("No GraphQL __schema found in body")),
+    }
+}
+
+#[pyfunction]
+fn graphql_list_operations_json(document: String) -> PyResult<String> {
+    serde_json::to_string(&gql_list_operations(&document)).map_err(py_err)
+}
+
+#[pyfunction]
+fn graphql_introspection_query() -> PyResult<String> {
+    Ok(INTROSPECTION_QUERY.to_string())
+}
+
+#[pyfunction]
 fn graphql_ws_protocols() -> PyResult<String> {
     Ok(GRAPHQL_WS_PROTOCOLS.to_string())
 }
@@ -343,6 +401,12 @@ fn pulse_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(graphql_ws_frame_json, m)?)?;
     m.add_function(wrap_pyfunction!(graphql_ws_parse_json, m)?)?;
     m.add_function(wrap_pyfunction!(graphql_ws_protocols, m)?)?;
+    m.add_function(wrap_pyfunction!(graphql_build_body_json, m)?)?;
+    m.add_function(wrap_pyfunction!(graphql_validate_json, m)?)?;
+    m.add_function(wrap_pyfunction!(graphql_format_response_json, m)?)?;
+    m.add_function(wrap_pyfunction!(graphql_summarize_schema_json, m)?)?;
+    m.add_function(wrap_pyfunction!(graphql_list_operations_json, m)?)?;
+    m.add_function(wrap_pyfunction!(graphql_introspection_query, m)?)?;
     m.add_function(wrap_pyfunction!(parse_curl_json, m)?)?;
     m.add_function(wrap_pyfunction!(format_curl_json, m)?)?;
     m.add_function(wrap_pyfunction!(mock_start_json, m)?)?;

@@ -287,6 +287,14 @@ export const CHANGELOG: ChangelogRelease[] = [
         },
       },
       {
+        id: "graphql-shared-core",
+        title: { en: "Shared GraphQL in pulse-core", sk: "Zdieľaný GraphQL v pulse-core" },
+        detail: {
+          en: "pulse-core owns GraphQL body build, response format, schema summarize, and operation listing; Python/CLI/MCP + pulse-native prefer it (with fallbacks). MCP pulse_graphql supports offline kinds.",
+          sk: "pulse-core vlastní GraphQL body build, format odpovede, schema summarize a listing operácií; Python/CLI/MCP + pulse-native to preferujú (s fallbackom). MCP pulse_graphql má offline kindy.",
+        },
+      },
+      {
         id: "rust-mcp-parity",
         title: { en: "Richer Rust MCP", sk: "Bohatší Rust MCP" },
         detail: {

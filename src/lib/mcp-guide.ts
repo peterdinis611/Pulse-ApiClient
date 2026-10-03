@@ -90,8 +90,8 @@ export const MCP_GUIDE_SECTIONS: McpGuideSection[] = [
         sk: "HTTP — `pulse_send`, `pulse_graphql`, `pulse_run_collection`, `pulse_bench`, `pulse_pre_request`, `pulse_run_tests`, `pulse_interpolate`",
       },
       {
-        en: "Streams — `pulse_sse` (parse/collect), `pulse_graphql_ws` (connection_init / subscribe / complete frames). Rust MCP (`cargo run -p pulse-mcp`) now covers the same stream/contract tools plus `pulse_diff` / `pulse_schema` / `pulse_graphql`.",
-        sk: "Streamy — `pulse_sse` (parse/collect), `pulse_graphql_ws` (connection_init / subscribe / complete frames). Rust MCP (`cargo run -p pulse-mcp`) pokrýva rovnaké stream/contract tools plus `pulse_diff` / `pulse_schema` / `pulse_graphql`.",
+        en: "Streams — `pulse_sse` (parse/collect), `pulse_graphql_ws` (frames). `pulse_graphql` supports send/introspect plus offline `body` / `summarize` / `format` / `operations`. Rust MCP matches Python on these helpers.",
+        sk: "Streamy — `pulse_sse` (parse/collect), `pulse_graphql_ws` (frames). `pulse_graphql` podporuje send/introspect aj offline `body` / `summarize` / `format` / `operations`. Rust MCP sedí s Pythonom.",
       },
       {
         en: "Workspace — `pulse_workspace_list|read|write|send|search|envs|history|pending|delete|status|init|import_openapi|export_openapi`",

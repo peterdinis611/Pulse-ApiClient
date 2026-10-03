@@ -13,7 +13,13 @@ from .curl import curl_to_payload
 from .diff import compare as diff_compare
 from .envfile import load_data_rows
 from .export import to_run_input
-from .graphql import INTROSPECTION_QUERY, build_body as build_graphql_body, summarize_schema
+from .graphql import (
+    INTROSPECTION_QUERY,
+    build_body as build_graphql_body,
+    format_response as format_graphql_response,
+    list_operations as list_graphql_operations,
+    summarize_schema,
+)
 from .har import har_to_pulse
 from .junit import to_junit
 from .mcp_prompts import get_prompt, list_prompts
@@ -473,6 +479,51 @@ def tool_export_openapi(arguments: dict) -> dict:
 
 
 def tool_graphql(arguments: dict) -> dict:
+    kind = str(arguments.get("kind") or "").strip().lower()
+    if not kind:
+        if arguments.get("url"):
+            kind = "send"
+        elif arguments.get("body") is not None:
+            kind = "summarize"
+        elif arguments.get("document") is not None:
+            kind = "operations"
+        else:
+            kind = "body"
+
+    if kind == "introspection_query":
+        return _text(INTROSPECTION_QUERY)
+    if kind == "body":
+        query = arguments.get("query") or arguments.get("graphqlQuery") or ""
+        variables = arguments.get("variables")
+        if variables is None:
+            variables = arguments.get("graphqlVariables")
+        operation = arguments.get("operationName") or arguments.get("graphqlOperationName")
+        try:
+            return _text(build_graphql_body(str(query), variables, operation))
+        except (ValueError, json.JSONDecodeError) as error:
+            return _text(str(error), error=True)
+    if kind == "summarize":
+        body = arguments.get("body")
+        if body is None:
+            return _text("body is required for summarize", error=True)
+        summary = summarize_schema(body if isinstance(body, (str, dict)) else json.dumps(body))
+        if summary is None:
+            return _text("No GraphQL __schema found in body", error=True)
+        return _json(summary)
+    if kind == "format":
+        body = arguments.get("body")
+        if body is None:
+            return _text("body is required for format", error=True)
+        raw = body if isinstance(body, str) else json.dumps(body)
+        return _text(format_graphql_response(raw))
+    if kind == "operations":
+        document = str(arguments.get("document") or arguments.get("query") or "")
+        if not document.strip():
+            return _text("document (or query) is required", error=True)
+        return _json(list_graphql_operations(document))
+    if kind != "send":
+        return _text(f"Unknown pulse_graphql kind: {kind}", error=True)
+
     url = str(arguments.get("url") or "")
     if not url:
         return _text("url is required", error=True)
@@ -1147,20 +1198,26 @@ TOOL_DEFS = [
     },
     {
         "name": "pulse_graphql",
-        "description": "Send a GraphQL query (or introspect=true) through the Pulse Rust engine.",
+        "description": "GraphQL helpers: send/introspect over HTTP, or offline body/summarize/format/operations (Rust engine).",
         "inputSchema": {
             "type": "object",
-            "required": ["url"],
             "properties": {
+                "kind": {
+                    "type": "string",
+                    "enum": ["send", "body", "summarize", "format", "operations", "introspection_query"],
+                },
                 "url": {"type": "string"},
                 "graphqlQuery": {"type": "string"},
                 "query": {"type": "string", "description": "Alias for graphqlQuery"},
                 "graphqlVariables": {"description": "JSON object or string"},
                 "variables": {"description": "Alias for graphqlVariables"},
                 "graphqlOperationName": {"type": "string"},
+                "operationName": {"type": "string"},
                 "introspect": {"type": "boolean"},
                 "headers": {"type": "object", "additionalProperties": {"type": "string"}},
                 "bearerToken": {"type": "string"},
+                "body": {"description": "Response/introspection JSON for summarize/format"},
+                "document": {"type": "string", "description": "GraphQL document for operations"},
             },
         },
     },

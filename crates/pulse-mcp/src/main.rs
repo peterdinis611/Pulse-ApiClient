@@ -6,8 +6,13 @@ mod catalog;
 use pulse_core::breaking_diff;
 use pulse_core::check_workspace;
 use pulse_core::compare_to_schema;
+use pulse_core::build_graphql_body_raw;
 use pulse_core::curl_to_payload;
 use pulse_core::diff_compare;
+use pulse_core::format_graphql_response;
+use pulse_core::list_graphql_operations;
+use pulse_core::summarize_graphql_schema;
+use pulse_core::INTROSPECTION_QUERY;
 use pulse_core::graphql_ws::{
     complete as gql_complete, connection_init, connection_init_payload_from_auth, parse_message,
     pong as gql_pong, subscribe as gql_subscribe, GRAPHQL_WS_PROTOCOLS,
@@ -507,18 +512,27 @@ fn tools() -> Value {
         },
         {
             "name": "pulse_graphql",
-            "description": "POST a GraphQL query through the Pulse HTTP engine",
+            "description": "GraphQL helpers: send/introspect over HTTP, or offline body/summarize/format/operations",
             "inputSchema": {
                 "type": "object",
-                "required": ["url"],
                 "properties": {
+                    "kind": {
+                        "type": "string",
+                        "enum": ["send", "body", "summarize", "format", "operations", "introspection_query"],
+                        "description": "Default send when url is set; offline helpers otherwise"
+                    },
                     "url": { "type": "string" },
                     "query": { "type": "string" },
+                    "graphqlQuery": { "type": "string" },
                     "variables": {},
+                    "graphqlVariables": {},
                     "operationName": { "type": "string" },
                     "bearerToken": { "type": "string" },
                     "headers": { "type": "object", "additionalProperties": { "type": "string" } },
-                    "confirm": { "type": "boolean" }
+                    "confirm": { "type": "boolean" },
+                    "introspect": { "type": "boolean" },
+                    "body": { "type": "string", "description": "Response/introspection JSON for summarize/format" },
+                    "document": { "type": "string", "description": "GraphQL document for operations" }
                 }
             }
         },
@@ -1086,42 +1100,173 @@ async fn dispatch_tool(name: &str, arguments: &Value) -> Value {
             }
         }
         "pulse_graphql" => {
-            let url = arg_str(arguments, "url");
-            if url.is_empty() {
-                return text("url is required", true);
-            }
-            let query = arg_str(arguments, "query");
-            if query.is_empty() {
-                return text("query is required", true);
-            }
-            let mut payload_obj = Map::new();
-            payload_obj.insert("query".into(), Value::String(query));
-            if let Some(variables) = arguments.get("variables") {
-                payload_obj.insert("variables".into(), variables.clone());
-            } else {
-                payload_obj.insert("variables".into(), json!({}));
-            }
-            let operation = arg_str(arguments, "operationName");
-            if !operation.is_empty() {
-                payload_obj.insert("operationName".into(), Value::String(operation));
-            }
-            let mut args = arguments.clone();
-            if let Some(obj) = args.as_object_mut() {
-                obj.insert("method".into(), Value::String("POST".into()));
-                obj.insert("bodyKind".into(), Value::String("graphql".into()));
-                obj.insert(
-                    "body".into(),
-                    Value::String(Value::Object(payload_obj).to_string()),
-                );
-                if obj.get("headers").is_none() {
-                    obj.insert(
-                        "headers".into(),
-                        json!({ "Content-Type": "application/json" }),
-                    );
+            let kind = arg_str(arguments, "kind");
+            let kind = if kind.is_empty() {
+                if !arg_str(arguments, "url").is_empty() {
+                    "send".into()
+                } else if arguments.get("body").is_some() {
+                    "summarize".into()
+                } else if arguments.get("document").is_some() {
+                    "operations".into()
+                } else {
+                    "body".into()
                 }
+            } else {
+                kind
+            };
+            match kind.as_str() {
+                "introspection_query" => text(INTROSPECTION_QUERY, false),
+                "body" => {
+                    let query = {
+                        let q = arg_str(arguments, "query");
+                        if q.is_empty() {
+                            arg_str(arguments, "graphqlQuery")
+                        } else {
+                            q
+                        }
+                    };
+                    let variables_json = match arguments
+                        .get("variables")
+                        .or_else(|| arguments.get("graphqlVariables"))
+                    {
+                        Some(Value::String(text)) => text.clone(),
+                        Some(other) => other.to_string(),
+                        None => "{}".into(),
+                    };
+                    let operation = arg_str(arguments, "operationName");
+                    match build_graphql_body_raw(
+                        &query,
+                        &variables_json,
+                        if operation.is_empty() {
+                            None
+                        } else {
+                            Some(operation.as_str())
+                        },
+                    ) {
+                        Ok(body) => text(body, false),
+                        Err(error) => text(error, true),
+                    }
+                }
+                "summarize" => {
+                    let body = match arguments.get("body") {
+                        Some(Value::String(text)) => text.clone(),
+                        Some(other) => other.to_string(),
+                        None => return text("body is required for summarize", true),
+                    };
+                    match summarize_graphql_schema(&body) {
+                        Some(summary) => {
+                            json_text(&serde_json::to_value(summary).unwrap_or(Value::Null), false)
+                        }
+                        None => text("No GraphQL __schema found in body", true),
+                    }
+                }
+                "format" => {
+                    let body = match arguments.get("body") {
+                        Some(Value::String(text)) => text.clone(),
+                        Some(other) => other.to_string(),
+                        None => return text("body is required for format", true),
+                    };
+                    text(format_graphql_response(&body), false)
+                }
+                "operations" => {
+                    let document = arg_str(arguments, "document");
+                    let document = if document.is_empty() {
+                        arg_str(arguments, "query")
+                    } else {
+                        document
+                    };
+                    if document.trim().is_empty() {
+                        return text("document (or query) is required", true);
+                    }
+                    json_text(
+                        &serde_json::to_value(list_graphql_operations(&document))
+                            .unwrap_or(Value::Null),
+                        false,
+                    )
+                }
+                "send" => {
+                    let url = arg_str(arguments, "url");
+                    if url.is_empty() {
+                        return text("url is required", true);
+                    }
+                    let introspect = arguments.get("introspect") == Some(&Value::Bool(true));
+                    let query = if introspect {
+                        INTROSPECTION_QUERY.to_string()
+                    } else {
+                        let q = arg_str(arguments, "query");
+                        if q.is_empty() {
+                            arg_str(arguments, "graphqlQuery")
+                        } else {
+                            q
+                        }
+                    };
+                    if query.trim().is_empty() {
+                        return text("query (or introspect=true) is required", true);
+                    }
+                    let variables_json = match arguments
+                        .get("variables")
+                        .or_else(|| arguments.get("graphqlVariables"))
+                    {
+                        Some(Value::String(text)) => text.clone(),
+                        Some(other) => other.to_string(),
+                        None => "{}".into(),
+                    };
+                    let operation = arg_str(arguments, "operationName");
+                    let body = match build_graphql_body_raw(
+                        &query,
+                        &variables_json,
+                        if operation.is_empty() {
+                            None
+                        } else {
+                            Some(operation.as_str())
+                        },
+                    ) {
+                        Ok(body) => body,
+                        Err(error) => return text(error, true),
+                    };
+                    let mut args = arguments.clone();
+                    if let Some(obj) = args.as_object_mut() {
+                        obj.insert("method".into(), Value::String("POST".into()));
+                        obj.insert("bodyKind".into(), Value::String("graphql".into()));
+                        obj.insert("body".into(), Value::String(body));
+                        if obj.get("headers").is_none() {
+                            obj.insert(
+                                "headers".into(),
+                                json!({ "Content-Type": "application/json" }),
+                            );
+                        }
+                    }
+                    let http = http_from_args(&args);
+                    let response = send_and_record(http, json!({ "method": "POST", "url": url })).await;
+                    if introspect {
+                        if let Some(content) = response
+                            .get("content")
+                            .and_then(|items| items.as_array())
+                            .and_then(|items| items.first())
+                            .and_then(|item| item.get("text"))
+                            .and_then(|text| text.as_str())
+                        {
+                            if let Ok(http_value) = serde_json::from_str::<Value>(content) {
+                                let body = http_value
+                                    .get("body")
+                                    .and_then(|item| item.as_str())
+                                    .unwrap_or(content);
+                                if let Some(summary) = summarize_graphql_schema(body) {
+                                    return json_text(
+                                        &json!({
+                                            "http": http_value,
+                                            "schema": summary,
+                                        }),
+                                        false,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    response
+                }
+                other => text(format!("Unknown pulse_graphql kind: {other}"), true),
             }
-            let http = http_from_args(&args);
-            send_and_record(http, json!({ "method": "POST", "url": url })).await
         }
         "pulse_send" => {
             let method = arg_str(arguments, "method");
