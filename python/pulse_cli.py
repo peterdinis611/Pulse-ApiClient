@@ -182,6 +182,34 @@ def cmd_curl(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_agent(args: argparse.Namespace) -> int:
+    from pulse.agent import run_agent
+
+    body = args.body
+    if args.body_file:
+        body = Path(args.body_file).read_text(encoding="utf-8")
+    try:
+        result = run_agent(
+            args.utterance or "",
+            workspace=args.workspace,
+            body=body,
+            history_limit=args.limit,
+            source="cli-agent",
+            record_history=not args.no_history,
+        )
+    except Exception as error:  # noqa: BLE001 — CLI surface
+        print(str(error), file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(result, indent=2))
+    else:
+        print(result.get("markdown") or json.dumps(result, indent=2))
+        if args.show_data and result.get("data") is not None:
+            print("---")
+            print(json.dumps(result["data"], indent=2))
+    return 0
+
+
 def cmd_diff(args: argparse.Namespace) -> int:
     left_path = Path(args.left)
     right_path = Path(args.right)
@@ -747,7 +775,7 @@ def cmd_help(_args: argparse.Namespace) -> int:
     lines = [
         "pulse CLI — same engine as MCP (pulse_native)",
         "",
-        "Core:        interpolate · test · pre-request · run · bench · send · graphql",
+        "Core:        interpolate · test · pre-request · run · bench · send · graphql · agent",
         "Streams:     sse · graphql-ws",
         "Convert:     openapi [--list|--export] · har [--export] · curl · snippet · diff · schema",
         "CI:          junit · report · validate-run · last-run · contract · env",
@@ -786,6 +814,7 @@ def cmd_version(_args: argparse.Namespace) -> int:
                 "graphql_ws_frame_json",
                 "mock_start_json",
                 "mock_stop",
+                "run_agent_json",
             )
             if hasattr(native, name)
         )
@@ -882,6 +911,25 @@ def main(argv: list[str] | None = None) -> int:
     curl.add_argument("command", help="Full curl command (quote the whole string)")
     curl.add_argument("--out")
     curl.set_defaults(func=cmd_curl)
+
+    agent = sub.add_parser(
+        "agent",
+        help="Local intent router (no LLM): cURL, SSE, workspace status/history, GraphQL summarize",
+    )
+    agent.add_argument(
+        "utterance",
+        nargs="?",
+        default="",
+        help='Natural command, e.g. "workspace status" or a curl/SSE paste',
+    )
+    agent.add_argument("--workspace", help="Override PULSE_WORKSPACE")
+    agent.add_argument("--body", help="GraphQL introspection/response JSON for summarize")
+    agent.add_argument("--body-file", help="Read GraphQL body from a file")
+    agent.add_argument("--limit", type=int, default=15, help="History entries to show (default 15)")
+    agent.add_argument("--json", action="store_true", help="Print full AgentResult JSON")
+    agent.add_argument("--show-data", action="store_true", help="Also print structured data after markdown")
+    agent.add_argument("--no-history", action="store_true", help="Do not append to .pulse/history.jsonl")
+    agent.set_defaults(func=cmd_agent)
 
     diff = sub.add_parser("diff", help="Unified diff between two JSON values or files")
     diff.add_argument("left")

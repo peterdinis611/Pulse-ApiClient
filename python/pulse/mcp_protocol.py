@@ -8,6 +8,7 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Callable
 
+from .agent import run_agent
 from .bench import compare_bench, run_bench
 from .curl import curl_to_payload
 from .diff import compare as diff_compare
@@ -564,6 +565,29 @@ def tool_curl(arguments: dict) -> dict:
     return _json(payload)
 
 
+def tool_agent(arguments: dict) -> dict:
+    utterance = arguments.get("input") or arguments.get("utterance") or ""
+    body = arguments.get("body")
+    workspace = arguments.get("workspace")
+    history_limit = arguments.get("historyLimit") or arguments.get("history_limit") or 15
+    try:
+        limit = int(history_limit)
+    except (TypeError, ValueError):
+        limit = 15
+    try:
+        result = run_agent(
+            str(utterance),
+            workspace=str(workspace) if workspace else None,
+            body=str(body) if body is not None else None,
+            history_limit=limit,
+            source="mcp-agent",
+            record_history=True,
+        )
+    except Exception as error:  # noqa: BLE001 — surface to agent
+        return _text(str(error), error=True)
+    return _json(result)
+
+
 def tool_snippet(arguments: dict) -> dict:
     payload = arguments.get("request")
     if isinstance(payload, str):
@@ -1027,6 +1051,7 @@ TOOLS: dict[str, Callable[[dict], dict]] = {
     "pulse_junit": tool_junit,
     "pulse_mock_start": tool_mock_start,
     "pulse_mock_stop": tool_mock_stop,
+    "pulse_agent": tool_agent,
     "pulse_help": tool_help,
 }
 
@@ -1499,6 +1524,20 @@ TOOL_DEFS = [
         "name": "pulse_mock_stop",
         "description": "Stop the local mock server started by pulse_mock_start.",
         "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "pulse_agent",
+        "description": "Local intent router (no LLM). Offline-safe: help, parse curl/sse, workspace status/history, GraphQL summarize from body.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["input"],
+            "properties": {
+                "input": {"type": "string", "description": "Natural utterance or pasted curl/SSE"},
+                "body": {"type": "string", "description": "GraphQL introspection/response JSON for summarize"},
+                "workspace": {"type": "string", "description": "Override PULSE_WORKSPACE"},
+                "historyLimit": {"type": "integer", "default": 15},
+            },
+        },
     },
     {
         "name": "pulse_help",

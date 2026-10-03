@@ -72,8 +72,8 @@ export const MCP_GUIDE_SECTIONS: McpGuideSection[] = [
         sk: "„Spusti kolekciu pets a vysvetli zlyhania z last run.“",
       },
       {
-        en: "Built-in prompts: `run_and_explain`, `send_saved_request`, `workspace_status`, `import_openapi_workspace`, `contract_check`, `graphql_introspect`, `curl_import`, …",
-        sk: "Vstavané prompty: `run_and_explain`, `send_saved_request`, `workspace_status`, `import_openapi_workspace`, `contract_check`, `graphql_introspect`, `curl_import`, …",
+        en: "Built-in prompts: `run_and_explain`, `send_saved_request`, `workspace_status`, `import_openapi_workspace`, `contract_check`, `graphql_introspect`, `curl_import`, … Also `pulse_agent` for local intents (cURL/SSE/workspace/GraphQL summarize) without an LLM.",
+        sk: "Vstavané prompty: `run_and_explain`, `send_saved_request`, `workspace_status`, `import_openapi_workspace`, `contract_check`, `graphql_introspect`, `curl_import`, … Plus `pulse_agent` na lokálne intentty (cURL/SSE/workspace/GraphQL summarize) bez LLM.",
       },
     ],
   },

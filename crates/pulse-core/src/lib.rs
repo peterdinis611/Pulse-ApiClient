@@ -1,3 +1,4 @@
+pub mod agent;
 pub mod collection_run;
 pub mod contract;
 pub mod curl;
@@ -20,6 +21,10 @@ pub mod types;
 pub mod vars;
 pub mod workspace_fs;
 
+pub use agent::{
+    execute_agent_intent, route_agent_input, run_agent, AgentExecuteOptions, AgentIntent, AgentResult,
+    AGENT_HELP_TEXT,
+};
 pub use collection_run::{
     run_collection, run_collection_with_progress, CollectionRunInput, CollectionRunResult, CollectionRunStep,
 };

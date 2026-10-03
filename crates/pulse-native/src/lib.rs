@@ -437,6 +437,28 @@ fn parse_curl_json(command: String) -> PyResult<String> {
 }
 
 #[pyfunction]
+#[pyo3(signature = (input, workspace=None, body=None, history_limit=None, source=None, record_history=None))]
+fn run_agent_json(
+    input: String,
+    workspace: Option<String>,
+    body: Option<String>,
+    history_limit: Option<usize>,
+    source: Option<String>,
+    record_history: Option<bool>,
+) -> PyResult<String> {
+    let source_owned = source.unwrap_or_else(|| "cli-agent".into());
+    let opts = pulse_core::AgentExecuteOptions {
+        workspace_root: workspace.as_deref(),
+        graphql_body: body.as_deref(),
+        history_limit: history_limit.unwrap_or(15),
+        source: &source_owned,
+        record_history: record_history.unwrap_or(true),
+    };
+    let result = pulse_core::run_agent(&input, &opts).map_err(py_err)?;
+    serde_json::to_string(&result).map_err(py_err)
+}
+
+#[pyfunction]
 fn format_curl_json(payload_json: String) -> PyResult<String> {
     let payload: HttpRequestPayload = serde_json::from_str(&payload_json).map_err(py_err)?;
     Ok(pulse_core::payload_to_curl(&payload))
@@ -469,6 +491,7 @@ fn pulse_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(graphql_introspection_query, m)?)?;
     m.add_function(wrap_pyfunction!(parse_curl_json, m)?)?;
     m.add_function(wrap_pyfunction!(format_curl_json, m)?)?;
+    m.add_function(wrap_pyfunction!(run_agent_json, m)?)?;
     m.add_function(wrap_pyfunction!(mock_start_json, m)?)?;
     m.add_function(wrap_pyfunction!(mock_stop, m)?)?;
     Ok(())

@@ -7,6 +7,8 @@ use pulse_core::breaking_diff;
 use pulse_core::check_workspace;
 use pulse_core::compare_to_schema;
 use pulse_core::build_graphql_body_raw;
+use pulse_core::AgentExecuteOptions;
+use pulse_core::run_agent;
 use pulse_core::curl_to_payload;
 use pulse_core::diff_compare;
 use pulse_core::format_graphql_response;
@@ -642,6 +644,20 @@ fn tools() -> Value {
             "inputSchema": { "type": "object", "properties": {} }
         },
         {
+            "name": "pulse_agent",
+            "description": "Local intent router (no LLM). Offline-safe: help, parse curl/sse, workspace status/history, GraphQL summarize from body.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["input"],
+                "properties": {
+                    "input": { "type": "string", "description": "Natural utterance or pasted curl/SSE" },
+                    "body": { "type": "string", "description": "GraphQL introspection/response JSON for summarize" },
+                    "workspace": { "type": "string", "description": "Override PULSE_WORKSPACE" },
+                    "historyLimit": { "type": "integer", "default": 15 }
+                }
+            }
+        },
+        {
             "name": "pulse_help",
             "description": "List Pulse MCP tools and workspace resources",
             "inputSchema": { "type": "object", "properties": {} }
@@ -742,6 +758,31 @@ async fn send_and_record(mut payload: HttpRequestPayload, request_meta: Value) -
 
 async fn dispatch_tool(name: &str, arguments: &Value) -> Value {
     match name {
+        "pulse_agent" => {
+            let input = arg_str(arguments, "input");
+            let body = arg_str(arguments, "body");
+            let workspace = arguments
+                .get("workspace")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+                .or_else(|| workspace_root().ok());
+            let history_limit = arguments
+                .get("historyLimit")
+                .and_then(|v| v.as_u64())
+                .map(|n| n as usize)
+                .unwrap_or(15);
+            let opts = AgentExecuteOptions {
+                workspace_root: workspace.as_deref(),
+                graphql_body: if body.is_empty() { None } else { Some(body.as_str()) },
+                history_limit,
+                source: "mcp-agent",
+                record_history: true,
+            };
+            match run_agent(&input, &opts) {
+                Ok(result) => json_text(&serde_json::to_value(result).unwrap_or(json!({})), false),
+                Err(error) => text(error, true),
+            }
+        }
         "pulse_help" => {
             let mut catalog = Map::new();
             catalog.insert("tools".into(), tools());

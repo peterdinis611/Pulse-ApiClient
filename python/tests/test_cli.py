@@ -26,6 +26,22 @@ class CliHelpTests(unittest.TestCase):
         self.assertIn("workspace status", text)
         self.assertIn("mock start", text)
         self.assertIn("pre-request", text)
+        self.assertIn("agent", text)
+
+    def test_agent_curl_and_help(self) -> None:
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            code = pulse_cli.main(["agent", "curl -X GET https://api.example.com/health", "--json", "--no-history"])
+        self.assertEqual(code, 0)
+        payload = json.loads(buf.getvalue())
+        self.assertEqual(payload["kind"], "import_curl")
+        self.assertEqual(payload["data"]["method"], "GET")
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            code = pulse_cli.main(["agent", "help", "--no-history"])
+        self.assertEqual(code, 0)
+        self.assertIn("Import cURL", buf.getvalue())
 
     def test_env_merge_dotenv(self) -> None:
         buf = io.StringIO()

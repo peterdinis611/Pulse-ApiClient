@@ -318,6 +318,14 @@ export const CHANGELOG: ChangelogRelease[] = [
           sk: "Nový Agent v raili: lokálne intentty (zatiaľ bez LLM) na import cURL, vysvetlenie odpovede/testov, stav/históriu workspace, SSE parse, GraphQL schema summarize a potvrdené behy kolekcií. Settings majú stub LLM providera + API kľúča.",
         },
       },
+      {
+        id: "agent-rust-python",
+        title: { en: "Agent on Rust + Python", sk: "Agent v Ruste a Pythone" },
+        detail: {
+          en: "Shared agent router lives in pulse-core; pulse-native, `pulse agent \"…\"`, and MCP `pulse_agent` (Python + Rust) run the same offline intents (cURL, SSE, workspace, GraphQL summarize).",
+          sk: "Zdieľaný agent router je v pulse-core; pulse-native, `pulse agent \"…\"` a MCP `pulse_agent` (Python + Rust) spúšťajú rovnaké offline intenzity (cURL, SSE, workspace, GraphQL summarize).",
+        },
+      },
     ],
   },
 ];

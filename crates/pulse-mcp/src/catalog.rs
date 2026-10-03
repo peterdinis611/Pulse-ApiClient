@@ -10,6 +10,7 @@ pub const STREAM_AND_CONTRACT_TOOLS: &[&str] = &[
     "pulse_sse",
     "pulse_graphql_ws",
     "pulse_graphql",
+    "pulse_agent",
 ];
 
 #[cfg(test)]
@@ -24,6 +25,7 @@ mod tests {
         assert!(STREAM_AND_CONTRACT_TOOLS.contains(&"pulse_curl"));
         assert!(STREAM_AND_CONTRACT_TOOLS.contains(&"pulse_diff"));
         assert!(STREAM_AND_CONTRACT_TOOLS.contains(&"pulse_schema"));
+        assert!(STREAM_AND_CONTRACT_TOOLS.contains(&"pulse_agent"));
     }
 
     #[test]
