@@ -1,8 +1,10 @@
 pub mod collection_run;
 pub mod contract;
+pub mod curl;
 pub mod graphql_ws;
 pub mod inherit;
 pub mod json_assertions;
+pub mod json_diff;
 pub mod json_path;
 pub mod mock_server;
 pub mod openapi_ops;
@@ -20,6 +22,7 @@ pub mod workspace_fs;
 pub use collection_run::{
     run_collection, run_collection_with_progress, CollectionRunInput, CollectionRunResult, CollectionRunStep,
 };
+pub use curl::{curl_to_payload, payload_to_curl};
 pub use mock_server::{
     routes_from_saved_requests, start_mock_server, start_mock_server_with_delay, MockRoute, MockServer,
     MockServerHandle, LOCKED_MOCK_PORT,
@@ -29,6 +32,7 @@ pub use test_runner::{
     PreRequestResult, TestCaseResult, TestRunResult,
 };
 pub use contract::{breaking_diff, check_workspace, compare_to_schema};
+pub use json_diff::{compare as diff_compare, compare_raw as diff_compare_raw, pretty_any, unified_lines};
 pub use prepare::{interpolate_request, to_http_payload};
 pub use sse::{next_event_boundary, parse_sse_block, parse_sse_text, ParsedSseEvent, SseBuffer};
 pub use types::{AuthConfig, EnvVariable, HttpRequestPayload, HttpResponsePayload, KeyValue};

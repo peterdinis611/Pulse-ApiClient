@@ -31,7 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FolderSelect } from "@/components/FolderSelect";
-import { curlToRequest } from "@/lib/curl";
+import { curlToRequestAsync } from "@/lib/curl";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { formatModShortcut, PULSE_HOTKEYS } from "@/lib/hotkeys";
 import { toast } from "@/lib/toast";
@@ -341,9 +341,9 @@ export function RequestBar() {
           onChange={(event) => {
             const file = event.target.files?.[0];
             if (!file) return;
-            void file.text().then((raw) => {
+            void file.text().then(async (raw) => {
               try {
-                openRequestTab(curlToRequest(raw));
+                openRequestTab(await curlToRequestAsync(raw));
                 toast.success("Imported request from cURL");
               } catch (error) {
                 toast.error(error instanceof Error ? error.message : "Invalid cURL command");

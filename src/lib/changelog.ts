@@ -278,6 +278,22 @@ export const CHANGELOG: ChangelogRelease[] = [
           sk: "pulse-core vlastní SSE parser; pulse-native + Python sprístupnia sse, graphql-ws frames, workspace init/migrate a bohatší contract schema/breaking.",
         },
       },
+      {
+        id: "curl-shared-core",
+        title: { en: "Shared cURL in pulse-core", sk: "Zdieľaný cURL v pulse-core" },
+        detail: {
+          en: "cURL parse/format lives in pulse-core; Tauri, pulse-native, Python, and the desktop importer prefer the same engine (JS/Python fallbacks remain).",
+          sk: "cURL parse/format je v pulse-core; Tauri, pulse-native, Python a desktop importér preferujú rovnaký engine (JS/Python fallback ostáva).",
+        },
+      },
+      {
+        id: "rust-mcp-parity",
+        title: { en: "Richer Rust MCP", sk: "Bohatší Rust MCP" },
+        detail: {
+          en: "pulse-mcp adds workspace init/migrate, schema, JSON diff, cURL parse/send, SSE parse, GraphQL HTTP + graphql-ws frames, and richer contract modes — closer to the Python MCP surface.",
+          sk: "pulse-mcp pridáva workspace init/migrate, schema, JSON diff, cURL parse/send, SSE parse, GraphQL HTTP + graphql-ws frames a bohatší contract — bližšie k Python MCP.",
+        },
+      },
     ],
   },
 ];

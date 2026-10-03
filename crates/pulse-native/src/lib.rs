@@ -188,6 +188,15 @@ fn breaking_diff_json(previous_json: String, current_json: String) -> PyResult<S
 }
 
 #[pyfunction]
+fn diff_json(left_json: String, right_json: String) -> PyResult<String> {
+    let left: serde_json::Value = serde_json::from_str(&left_json)
+        .unwrap_or_else(|_| serde_json::Value::String(left_json.clone()));
+    let right: serde_json::Value = serde_json::from_str(&right_json)
+        .unwrap_or_else(|_| serde_json::Value::String(right_json.clone()));
+    Ok(pulse_core::diff_compare(&left, &right))
+}
+
+#[pyfunction]
 #[pyo3(signature = (kind, id=None, query=None, variables_json=None, operation_name=None, payload_json=None, auth_json=None))]
 fn graphql_ws_frame_json(
     kind: String,
@@ -304,6 +313,18 @@ fn mock_stop() -> PyResult<()> {
     Ok(())
 }
 
+#[pyfunction]
+fn parse_curl_json(command: String) -> PyResult<String> {
+    let payload = pulse_core::curl_to_payload(&command).map_err(py_err)?;
+    serde_json::to_string(&payload).map_err(py_err)
+}
+
+#[pyfunction]
+fn format_curl_json(payload_json: String) -> PyResult<String> {
+    let payload: HttpRequestPayload = serde_json::from_str(&payload_json).map_err(py_err)?;
+    Ok(pulse_core::payload_to_curl(&payload))
+}
+
 #[pymodule]
 fn pulse_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(interpolate, m)?)?;
@@ -318,9 +339,12 @@ fn pulse_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parse_sse_json, m)?)?;
     m.add_function(wrap_pyfunction!(compare_schema_json, m)?)?;
     m.add_function(wrap_pyfunction!(breaking_diff_json, m)?)?;
+    m.add_function(wrap_pyfunction!(diff_json, m)?)?;
     m.add_function(wrap_pyfunction!(graphql_ws_frame_json, m)?)?;
     m.add_function(wrap_pyfunction!(graphql_ws_parse_json, m)?)?;
     m.add_function(wrap_pyfunction!(graphql_ws_protocols, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_curl_json, m)?)?;
+    m.add_function(wrap_pyfunction!(format_curl_json, m)?)?;
     m.add_function(wrap_pyfunction!(mock_start_json, m)?)?;
     m.add_function(wrap_pyfunction!(mock_stop, m)?)?;
     Ok(())

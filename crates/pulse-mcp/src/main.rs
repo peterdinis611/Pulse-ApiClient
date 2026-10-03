@@ -1,8 +1,22 @@
 use std::io::{self, BufRead, Write};
+use std::sync::Mutex;
 
+mod catalog;
+
+use pulse_core::breaking_diff;
 use pulse_core::check_workspace;
+use pulse_core::compare_to_schema;
+use pulse_core::curl_to_payload;
+use pulse_core::diff_compare;
+use pulse_core::graphql_ws::{
+    complete as gql_complete, connection_init, connection_init_payload_from_auth, parse_message,
+    pong as gql_pong, subscribe as gql_subscribe, GRAPHQL_WS_PROTOCOLS,
+};
+use pulse_core::init_workspace;
 use pulse_core::interpolate_request;
+use pulse_core::migrate_pulse_json_dumps;
 use pulse_core::openapi_ops::list_operations;
+use pulse_core::parse_sse_text;
 use pulse_core::routes_from_saved_requests;
 use pulse_core::run_collection;
 use pulse_core::run_http_tests;
@@ -22,7 +36,8 @@ use pulse_core::workspace_fs::{
 };
 use pulse_core::{CollectionRunInput, MockRoute, MockServer};
 use serde_json::{json, Map, Value};
-use std::sync::Mutex;
+
+use catalog::STREAM_AND_CONTRACT_TOOLS;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -390,9 +405,122 @@ fn tools() -> Value {
             "inputSchema": { "type": "object", "properties": {} }
         },
         {
+            "name": "pulse_workspace_init",
+            "description": "Create pulse.yaml + collections/ + environments/ under PULSE_WORKSPACE (or workspace path)",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "workspace": { "type": "string" },
+                    "name": { "type": "string" }
+                }
+            }
+        },
+        {
+            "name": "pulse_workspace_migrate",
+            "description": "Migrate Pulse JSON dumps under the workspace into YAML",
+            "inputSchema": {
+                "type": "object",
+                "properties": { "workspace": { "type": "string" } }
+            }
+        },
+        {
             "name": "pulse_contract",
-            "description": "Check YAML workspace contracts (schema + breaking diffs)",
-            "inputSchema": { "type": "object", "properties": {} }
+            "description": "Check YAML workspace contracts, or pass schema+body / previous+current for schema/breaking diffs",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "schema": { "type": "object" },
+                    "body": {},
+                    "previous": {},
+                    "current": {}
+                }
+            }
+        },
+        {
+            "name": "pulse_schema",
+            "description": "Validate a JSON body against a (subset) JSON Schema",
+            "inputSchema": {
+                "type": "object",
+                "required": ["body", "schema"],
+                "properties": {
+                    "body": {},
+                    "schema": { "type": "object" }
+                }
+            }
+        },
+        {
+            "name": "pulse_diff",
+            "description": "Unified line diff between two JSON values",
+            "inputSchema": {
+                "type": "object",
+                "required": ["left", "right"],
+                "properties": {
+                    "left": {},
+                    "right": {}
+                }
+            }
+        },
+        {
+            "name": "pulse_curl",
+            "description": "Parse a cURL command into a Pulse request. Pass send=true to execute it.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["command"],
+                "properties": {
+                    "command": { "type": "string" },
+                    "send": { "type": "boolean", "default": false }
+                }
+            }
+        },
+        {
+            "name": "pulse_sse",
+            "description": "Parse an SSE document (text) into events (event/id/retry/data)",
+            "inputSchema": {
+                "type": "object",
+                "required": ["text"],
+                "properties": {
+                    "text": { "type": "string", "description": "SSE document to parse offline" }
+                }
+            }
+        },
+        {
+            "name": "pulse_graphql_ws",
+            "description": "Build or parse graphql-ws / graphql-transport-ws frames",
+            "inputSchema": {
+                "type": "object",
+                "required": ["kind"],
+                "properties": {
+                    "kind": {
+                        "type": "string",
+                        "enum": ["protocols", "connection_init", "subscribe", "complete", "pong", "parse"]
+                    },
+                    "id": { "type": "string" },
+                    "query": { "type": "string" },
+                    "variables": {},
+                    "operationName": { "type": "string" },
+                    "payload": { "type": "object" },
+                    "auth": { "type": "object" },
+                    "text": { "type": "string" },
+                    "bearerToken": { "type": "string" }
+                }
+            }
+        },
+        {
+            "name": "pulse_graphql",
+            "description": "POST a GraphQL query through the Pulse HTTP engine",
+            "inputSchema": {
+                "type": "object",
+                "required": ["url"],
+                "properties": {
+                    "url": { "type": "string" },
+                    "query": { "type": "string" },
+                    "variables": {},
+                    "operationName": { "type": "string" },
+                    "bearerToken": { "type": "string" },
+                    "headers": { "type": "object", "additionalProperties": { "type": "string" } },
+                    "confirm": { "type": "boolean" }
+                }
+            }
         },
         {
             "name": "pulse_send",
@@ -584,6 +712,10 @@ async fn dispatch_tool(name: &str, arguments: &Value) -> Value {
             let mut catalog = Map::new();
             catalog.insert("tools".into(), tools());
             catalog.insert(
+                "streamAndContractTools".into(),
+                json!(STREAM_AND_CONTRACT_TOOLS),
+            );
+            catalog.insert(
                 "resources".into(),
                 json!(workspace_root()
                     .map(|root| workspace_resources(&root))
@@ -766,10 +898,231 @@ async fn dispatch_tool(name: &str, arguments: &Value) -> Value {
             Ok(status) => json_text(&status, false),
             Err(error) => text(error, true),
         },
-        "pulse_contract" => match workspace_root().and_then(|root| check_workspace(&root)) {
-            Ok(report) => json_text(&json!({ "ok": report.ok, "errors": report.errors }), false),
-            Err(error) => text(error, true),
-        },
+        "pulse_workspace_init" => {
+            let root = arguments
+                .get("workspace")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+                .or_else(|| workspace_root().ok());
+            let Some(root) = root else {
+                return text("PULSE_WORKSPACE is not set (or pass workspace)", true);
+            };
+            let name = arg_str(arguments, "name");
+            let name = if name.is_empty() { "Pulse".into() } else { name };
+            match init_workspace(&root, &name) {
+                Ok(path) => json_text(&json!({ "path": path.to_string_lossy() }), false),
+                Err(error) => text(error, true),
+            }
+        }
+        "pulse_workspace_migrate" => {
+            let root = arguments
+                .get("workspace")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+                .or_else(|| workspace_root().ok());
+            let Some(root) = root else {
+                return text("PULSE_WORKSPACE is not set (or pass workspace)", true);
+            };
+            match migrate_pulse_json_dumps(&root) {
+                Ok(migrated) => json_text(&json!({ "migrated": migrated }), false),
+                Err(error) => text(error, true),
+            }
+        }
+        "pulse_contract" => {
+            if arguments.get("schema").is_some() && arguments.get("body").is_some() {
+                let body = match arguments.get("body") {
+                    Some(Value::String(text)) => text.clone(),
+                    Some(other) => other.to_string(),
+                    None => String::new(),
+                };
+                let schema = arguments.get("schema").cloned().unwrap_or(Value::Null);
+                let report = compare_to_schema(&body, &schema);
+                return json_text(&json!({ "ok": report.ok, "errors": report.errors }), false);
+            }
+            if arguments.get("previous").is_some() && arguments.get("current").is_some() {
+                let previous = arguments.get("previous").cloned().unwrap_or(Value::Null);
+                let current = arguments.get("current").cloned().unwrap_or(Value::Null);
+                let errors = breaking_diff(&previous, &current);
+                return json_text(&json!({ "ok": errors.is_empty(), "errors": errors }), false);
+            }
+            match workspace_root().and_then(|root| check_workspace(&root)) {
+                Ok(report) => json_text(&json!({ "ok": report.ok, "errors": report.errors }), false),
+                Err(error) => text(error, true),
+            }
+        }
+        "pulse_schema" => {
+            let body = match arguments.get("body") {
+                Some(Value::String(text)) => text.clone(),
+                Some(other) => other.to_string(),
+                None => return text("body is required", true),
+            };
+            let Some(schema) = arguments.get("schema") else {
+                return text("schema is required", true);
+            };
+            let report = compare_to_schema(&body, schema);
+            json_text(&json!({ "ok": report.ok, "errors": report.errors }), !report.ok)
+        }
+        "pulse_diff" => {
+            let Some(left) = arguments.get("left") else {
+                return text("left is required", true);
+            };
+            let Some(right) = arguments.get("right") else {
+                return text("right is required", true);
+            };
+            text(diff_compare(left, right), false)
+        }
+        "pulse_curl" => {
+            let command = arg_str(arguments, "command");
+            let command = if command.is_empty() {
+                arg_str(arguments, "curl")
+            } else {
+                command
+            };
+            if command.trim().is_empty() {
+                return text("command is required", true);
+            }
+            let payload = match curl_to_payload(&command) {
+                Ok(payload) => payload,
+                Err(error) => return text(error, true),
+            };
+            if arguments.get("send") == Some(&Value::Bool(true)) {
+                if is_mutating_method(&payload.method) && !confirmed(arguments) {
+                    return text(
+                        format!(
+                            "{} is mutating — pass confirm=true to send",
+                            payload.method.to_uppercase()
+                        ),
+                        true,
+                    );
+                }
+                match send_once(payload).await {
+                    Ok(response) => {
+                        json_text(&serde_json::to_value(response).unwrap_or(Value::Null), false)
+                    }
+                    Err(error) => text(error, true),
+                }
+            } else {
+                json_text(&serde_json::to_value(payload).unwrap_or(Value::Null), false)
+            }
+        }
+        "pulse_sse" => {
+            let text_doc = arg_str(arguments, "text");
+            if text_doc.is_empty() {
+                return text("text is required", true);
+            }
+            match parse_sse_text(&text_doc) {
+                Ok(events) => json_text(&serde_json::to_value(events).unwrap_or(Value::Null), false),
+                Err(error) => text(error, true),
+            }
+        }
+        "pulse_graphql_ws" => {
+            let kind = arg_str(arguments, "kind");
+            match kind.as_str() {
+                "protocols" => text(GRAPHQL_WS_PROTOCOLS, false),
+                "connection_init" | "init" => {
+                    let payload = if let Some(raw) = arguments.get("payload") {
+                        Some(raw.clone())
+                    } else if let Some(auth) = arguments.get("auth") {
+                        connection_init_payload_from_auth(
+                            auth.get("authType").and_then(|v| v.as_str()).unwrap_or("none"),
+                            auth.get("bearerToken").and_then(|v| v.as_str()),
+                            auth.get("apiKeyKey").and_then(|v| v.as_str()),
+                            auth.get("apiKeyValue").and_then(|v| v.as_str()),
+                            auth.get("apiKeyIn").and_then(|v| v.as_str()),
+                        )
+                    } else if !arg_str(arguments, "bearerToken").is_empty() {
+                        connection_init_payload_from_auth(
+                            "bearer",
+                            Some(&arg_str(arguments, "bearerToken")),
+                            None,
+                            None,
+                            None,
+                        )
+                    } else {
+                        None
+                    };
+                    text(connection_init(payload), false)
+                }
+                "subscribe" => {
+                    let id = arg_str(arguments, "id");
+                    let id = if id.is_empty() { "1".into() } else { id };
+                    let query = arg_str(arguments, "query");
+                    if query.is_empty() {
+                        return text("subscribe requires query", true);
+                    }
+                    let variables = arguments.get("variables").cloned();
+                    let operation = arg_str(arguments, "operationName");
+                    text(
+                        gql_subscribe(
+                            &id,
+                            &query,
+                            variables,
+                            if operation.is_empty() {
+                                None
+                            } else {
+                                Some(operation.as_str())
+                            },
+                        ),
+                        false,
+                    )
+                }
+                "complete" => {
+                    let id = arg_str(arguments, "id");
+                    let id = if id.is_empty() { "1".into() } else { id };
+                    text(gql_complete(&id), false)
+                }
+                "pong" => text(gql_pong(arguments.get("payload").cloned()), false),
+                "parse" => {
+                    let raw = arg_str(arguments, "text");
+                    match parse_message(&raw) {
+                        Some(msg) => json_text(&serde_json::to_value(msg).unwrap_or(Value::Null), false),
+                        None => text("null", false),
+                    }
+                }
+                _ => text(
+                    "kind must be protocols|connection_init|subscribe|complete|pong|parse",
+                    true,
+                ),
+            }
+        }
+        "pulse_graphql" => {
+            let url = arg_str(arguments, "url");
+            if url.is_empty() {
+                return text("url is required", true);
+            }
+            let query = arg_str(arguments, "query");
+            if query.is_empty() {
+                return text("query is required", true);
+            }
+            let mut payload_obj = Map::new();
+            payload_obj.insert("query".into(), Value::String(query));
+            if let Some(variables) = arguments.get("variables") {
+                payload_obj.insert("variables".into(), variables.clone());
+            } else {
+                payload_obj.insert("variables".into(), json!({}));
+            }
+            let operation = arg_str(arguments, "operationName");
+            if !operation.is_empty() {
+                payload_obj.insert("operationName".into(), Value::String(operation));
+            }
+            let mut args = arguments.clone();
+            if let Some(obj) = args.as_object_mut() {
+                obj.insert("method".into(), Value::String("POST".into()));
+                obj.insert("bodyKind".into(), Value::String("graphql".into()));
+                obj.insert(
+                    "body".into(),
+                    Value::String(Value::Object(payload_obj).to_string()),
+                );
+                if obj.get("headers").is_none() {
+                    obj.insert(
+                        "headers".into(),
+                        json!({ "Content-Type": "application/json" }),
+                    );
+                }
+            }
+            let http = http_from_args(&args);
+            send_and_record(http, json!({ "method": "POST", "url": url })).await
+        }
         "pulse_send" => {
             let method = arg_str(arguments, "method");
             let method = if method.is_empty() { "GET".into() } else { method };

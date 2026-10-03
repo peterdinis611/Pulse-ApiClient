@@ -1,6 +1,132 @@
+import { invoke } from "@tauri-apps/api/core";
 import { prepareRequest } from "./http-client";
 import { createKeyValue, createRequest } from "./helpers";
-import type { ApiRequest, Environment, HttpMethod, KeyValue, MultipartField } from "@/types";
+import { canUseTauriIpc } from "./tauri-runtime";
+import type { ApiRequest, AuthConfig, BodyKind, Environment, HttpMethod, KeyValue, MultipartField } from "@/types";
+
+type NativeCurlPayload = {
+  method: string;
+  url: string;
+  headers: Array<{ key: string; value: string; enabled?: boolean }>;
+  query: Array<{ key: string; value: string; enabled?: boolean }>;
+  bodyKind: string;
+  body: string;
+  form: Array<{ key: string; value: string; enabled?: boolean }>;
+  multipart: Array<{
+    key: string;
+    enabled?: boolean;
+    fieldType?: string;
+    value?: string;
+    fileName?: string | null;
+    mimeType?: string | null;
+  }>;
+  auth: {
+    authType?: string;
+    bearerToken?: string | null;
+    basicUsername?: string | null;
+    basicPassword?: string | null;
+    apiKeyKey?: string | null;
+    apiKeyValue?: string | null;
+    apiKeyIn?: string | null;
+  };
+};
+
+function payloadToRequest(payload: NativeCurlPayload): ApiRequest {
+  const auth: Partial<AuthConfig> = {
+    authType: (payload.auth?.authType as AuthConfig["authType"]) || "none",
+    bearerToken: payload.auth?.bearerToken ?? "",
+    basicUsername: payload.auth?.basicUsername ?? "",
+    basicPassword: payload.auth?.basicPassword ?? "",
+    apiKeyKey: payload.auth?.apiKeyKey ?? "",
+    apiKeyValue: payload.auth?.apiKeyValue ?? "",
+    apiKeyIn: (payload.auth?.apiKeyIn as AuthConfig["apiKeyIn"]) || "header",
+  };
+  return createRequest({
+    method: (payload.method || "GET").toUpperCase() as HttpMethod,
+    url: payload.url,
+    headers: (payload.headers ?? []).map((item) =>
+      createKeyValue({ key: item.key, value: item.value, enabled: item.enabled ?? true }),
+    ),
+    query: (payload.query ?? []).map((item) =>
+      createKeyValue({ key: item.key, value: item.value, enabled: item.enabled ?? true }),
+    ),
+    bodyKind: (payload.bodyKind || "none") as BodyKind,
+    body: payload.body || "{\n  \n}",
+    form: (payload.form ?? []).map((item) =>
+      createKeyValue({ key: item.key, value: item.value, enabled: item.enabled ?? true }),
+    ),
+    multipart: (payload.multipart ?? []).map((item) => ({
+      id: crypto.randomUUID(),
+      key: item.key,
+      enabled: item.enabled ?? true,
+      fieldType: (item.fieldType === "file" ? "file" : "text") as MultipartField["fieldType"],
+      value: item.value ?? "",
+      fileName: item.fileName ?? undefined,
+      mimeType: item.mimeType ?? undefined,
+    })),
+    auth,
+  });
+}
+
+function requestToNativePayload(request: ApiRequest, environment: Environment | null = null): NativeCurlPayload {
+  const prepared = prepareRequest(request, environment);
+  return {
+    method: prepared.method,
+    url: prepared.url,
+    headers: prepared.headers.filter((item) => item.enabled && item.key.trim()),
+    query: prepared.query.filter((item) => item.enabled && item.key.trim()),
+    bodyKind: prepared.bodyKind,
+    body: prepared.body,
+    form: prepared.form.filter((item) => item.enabled && item.key.trim()),
+    multipart: prepared.multipart
+      .filter((item) => item.enabled && item.key.trim())
+      .map((item) => ({
+        key: item.key.trim(),
+        enabled: true,
+        fieldType: item.fieldType,
+        value: item.value,
+        fileName: item.fileName ?? null,
+        mimeType: item.mimeType ?? null,
+      })),
+    auth: {
+      authType: prepared.auth.authType === "inherit" ? "none" : prepared.auth.authType,
+      bearerToken: prepared.auth.bearerToken,
+      basicUsername: prepared.auth.basicUsername,
+      basicPassword: prepared.auth.basicPassword,
+      apiKeyKey: prepared.auth.apiKeyKey,
+      apiKeyValue: prepared.auth.apiKeyValue,
+      apiKeyIn: prepared.auth.apiKeyIn,
+    },
+  };
+}
+
+/** Prefer pulse-core via Tauri when available; sync JS fallback otherwise. */
+export async function curlToRequestAsync(raw: string): Promise<ApiRequest> {
+  if (canUseTauriIpc()) {
+    try {
+      const payload = await invoke<NativeCurlPayload>("parse_curl", { command: raw });
+      return payloadToRequest(payload);
+    } catch {
+      // fall through to local parser
+    }
+  }
+  return curlToRequest(raw);
+}
+
+/** Prefer pulse-core via Tauri when available; sync JS fallback otherwise. */
+export async function requestToCurlAsync(
+  request: ApiRequest,
+  environment: Environment | null = null,
+): Promise<string> {
+  if (canUseTauriIpc()) {
+    try {
+      return await invoke<string>("format_curl", { payload: requestToNativePayload(request, environment) });
+    } catch {
+      // fall through
+    }
+  }
+  return requestToCurl(request, environment);
+}
 
 function shellEscape(value: string): string {
   if (value === "") return "''";
