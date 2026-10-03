@@ -212,12 +212,16 @@ pub async fn connect(
                     let text = text.to_string();
                     let (event, event_id, gql_ping_payload) =
                         if let Some(parsed) = pulse_core::graphql_ws::parse_message(&text) {
-                            let ping_payload = if graphql_ws_read && parsed.kind == "ping" {
+                            let kind = pulse_core::graphql_ws::normalize_frame_kind(&parsed.kind)
+                                .to_string();
+                            let ping_payload = if graphql_ws_read
+                                && (parsed.kind == "ping" || parsed.kind == "ka")
+                            {
                                 Some(parsed.payload.clone())
                             } else {
                                 None
                             };
-                            (Some(parsed.kind), parsed.id, ping_payload)
+                            (Some(kind), parsed.id, ping_payload)
                         } else {
                             (None, None, None)
                         };
@@ -275,13 +279,25 @@ pub async fn connect(
                     );
                 }
                 Ok(Message::Close(frame)) => {
+                    let code = frame.as_ref().map(|value| u16::from(value.code));
+                    let reason = frame.map(|value| value.reason.to_string()).filter(|item| !item.is_empty());
+                    let reason = match (code, reason) {
+                        (Some(code), Some(text)) => Some(format!(
+                            "{text} ({})",
+                            pulse_core::ws_close_code_label(code)
+                        )),
+                        (Some(code), None) => {
+                            Some(pulse_core::ws_close_code_label(code).to_string())
+                        }
+                        (_, reason) => reason,
+                    };
                     let _ = app_for_read.emit(
                         "ws-close",
                         WsCloseEvent {
                             connection_id: connection_id_for_read.clone(),
                             tab_id: tab_id_for_read.clone(),
-                            code: frame.as_ref().map(|value| u16::from(value.code)),
-                            reason: frame.map(|value| value.reason.to_string()),
+                            code,
+                            reason,
                         },
                     );
                     break;

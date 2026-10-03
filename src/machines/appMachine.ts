@@ -57,7 +57,13 @@ import {
   saveLayoutPreferences,
 } from "@/lib/layout-preferences";
 import { loadThemeMode, saveThemeMode, type ThemeMode } from "@/lib/theme";
-import { defaultWebSocketSession, inferProtocolFromUrl, isSseProtocol } from "@/lib/protocol";
+import {
+  defaultWebSocketSession,
+  inferProtocolFromUrl,
+  isSseProtocol,
+  SSE_DEFAULT_RETRY_MS,
+  SSE_MAX_RECONNECT_ATTEMPTS,
+} from "@/lib/protocol";
 import { snapshotResponseExample } from "@/lib/request-examples";
 import { toast } from "@/lib/toast";
 import { syncPathParams } from "@/lib/path-params";
@@ -69,6 +75,16 @@ import { getGitWorkspaceRoot, saveGitRequest } from "@/lib/git-workspace";
 import { validateResponseAgainstSchema } from "@/lib/json-schema";
 import { parseGraphqlWsFrame } from "@/lib/graphql-ws";
 import { wsClose, wsConnect, sseConnect, wsPing, wsSend } from "@/lib/ws-client";
+
+const sseReconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function clearSseReconnectTimer(tabId: string) {
+  const handle = sseReconnectTimers.get(tabId);
+  if (handle != null) {
+    clearTimeout(handle);
+    sseReconnectTimers.delete(tabId);
+  }
+}
 
 export function createTabState(
   request = createRequest(),
@@ -287,7 +303,8 @@ export type AppMachineEvent =
     }
   | { type: "SEND_FAILED"; tabId: string; requestId: string; error: string }
   | { type: "CANCEL_SEND"; tabId?: string }
-  | { type: "WS_CONNECT" }
+  | { type: "WS_CONNECT"; tabId?: string }
+  | { type: "WS_SET_AUTO_RECONNECT"; enabled: boolean }
   | { type: "WS_CONNECT_STARTED"; tabId: string }
   | {
       type: "WS_CONNECT_COMPLETE";
@@ -628,10 +645,13 @@ export const appMachine = setup({
         });
       })();
     },
-    startActiveTabWebSocket: ({ context, self }) => {
-      const tab = getActiveTab(context);
+    startActiveTabWebSocket: ({ context, self, event }) => {
+      const tabId =
+        event.type === "WS_CONNECT" && event.tabId ? event.tabId : context.activeTabId;
+      const tab = context.tabs.find((item) => item.id === tabId) ?? getActiveTab(context);
       if (!tab || tab.ws.status === "connecting" || tab.ws.status === "open") return;
       if (!tab.request.url.trim()) return;
+      clearSseReconnectTimer(tab.id);
 
       const prepared = resolveRequestForSend({
         request: tab.request,
@@ -1590,18 +1610,35 @@ export const appMachine = setup({
         WS_CONNECT: {
           actions: "startActiveTabWebSocket",
         },
-        WS_CONNECT_STARTED: {
+        WS_SET_AUTO_RECONNECT: {
           actions: assign(({ context, event }) => ({
-            tabs: mapTabById(context, event.tabId, (tab) => ({
+            tabs: mapActiveTab(context, (tab) => ({
               ...tab,
               ws: {
-                ...defaultWebSocketSession(),
-                status: "connecting",
-                // Keep Last-Event-ID / retry across reconnect for SSE resume.
-                lastEventId: tab.ws.lastEventId ?? null,
-                lastRetryMs: tab.ws.lastRetryMs ?? null,
+                ...tab.ws,
+                autoReconnect: event.enabled,
               },
             })),
+          })),
+        },
+        WS_CONNECT_STARTED: {
+          actions: assign(({ context, event }) => ({
+            tabs: mapTabById(context, event.tabId, (tab) => {
+              const reconnecting = (tab.ws.reconnectAttempts ?? 0) > 0 || Boolean(tab.ws.lastEventId);
+              return {
+                ...tab,
+                ws: {
+                  ...defaultWebSocketSession(),
+                  status: "connecting",
+                  messages: reconnecting ? tab.ws.messages : [],
+                  lastEventId: tab.ws.lastEventId ?? null,
+                  lastRetryMs: tab.ws.lastRetryMs ?? null,
+                  autoReconnect: tab.ws.autoReconnect ?? true,
+                  reconnectAttempts: tab.ws.reconnectAttempts ?? 0,
+                  userClosed: false,
+                },
+              };
+            }),
           })),
         },
         WS_CONNECT_COMPLETE: {
@@ -1617,6 +1654,8 @@ export const appMachine = setup({
                   handshakeHeaders: event.headers,
                   subprotocol: event.subprotocol ?? null,
                   error: null,
+                  userClosed: false,
+                  reconnectAttempts: 0,
                   graphqlAcked: false,
                   graphqlSubscriptionIds: [],
                 },
@@ -1645,8 +1684,11 @@ export const appMachine = setup({
                   ...defaultWebSocketSession(),
                   status: "error",
                   error: event.error,
+                  messages: tab.ws.messages,
                   lastEventId: tab.ws.lastEventId ?? null,
                   lastRetryMs: tab.ws.lastRetryMs ?? null,
+                  autoReconnect: tab.ws.autoReconnect ?? true,
+                  reconnectAttempts: tab.ws.reconnectAttempts ?? 0,
                 },
               })),
             })),
@@ -1663,6 +1705,7 @@ export const appMachine = setup({
           actions: [
             ({ context, event }) => {
               const tabId = event.tabId ?? context.activeTabId;
+              clearSseReconnectTimer(tabId);
               const tab = context.tabs.find((item) => item.id === tabId);
               if (tab) disconnectTabWebSocket(tab);
             },
@@ -1675,12 +1718,20 @@ export const appMachine = setup({
                     ...tab.ws,
                     connectionId: null,
                     status: "closed",
+                    userClosed: true,
+                    reconnectAttempts: 0,
                   },
                 })),
               };
             }),
-            () => {
-              toast.info("WebSocket disconnected");
+            ({ context, event }) => {
+              const tabId = event.tabId ?? context.activeTabId;
+              const tab = context.tabs.find((item) => item.id === tabId);
+              toast.info(
+                isSseProtocol(tab?.request.protocol ?? "http")
+                  ? "SSE disconnected"
+                  : "WebSocket disconnected",
+              );
             },
           ],
         },
@@ -1773,23 +1824,55 @@ export const appMachine = setup({
           })),
         },
         WS_CLOSED: {
-          actions: assign(({ context, event }) => ({
-            tabs: context.tabs.map((tab) => {
-              if (tab.id !== event.tabId || tab.ws.connectionId !== event.connectionId) {
-                return tab;
+          actions: [
+            assign(({ context, event }) => ({
+              tabs: context.tabs.map((tab) => {
+                if (tab.id !== event.tabId || tab.ws.connectionId !== event.connectionId) {
+                  return tab;
+                }
+                const shouldReconnect =
+                  isSseProtocol(tab.request.protocol) &&
+                  !tab.ws.userClosed &&
+                  tab.ws.autoReconnect !== false;
+                const attempts = shouldReconnect ? (tab.ws.reconnectAttempts ?? 0) + 1 : 0;
+                return {
+                  ...tab,
+                  ws: {
+                    ...tab.ws,
+                    connectionId: null,
+                    status: "closed",
+                    closeCode: event.code,
+                    closeReason: event.reason,
+                    reconnectAttempts: attempts,
+                  },
+                };
+              }),
+            })),
+            ({ context, event, self }) => {
+              const tab = context.tabs.find((item) => item.id === event.tabId);
+              if (!tab || !isSseProtocol(tab.request.protocol)) return;
+              if (tab.ws.userClosed || tab.ws.autoReconnect === false) return;
+              const attempts = tab.ws.reconnectAttempts ?? 0;
+              if (attempts > SSE_MAX_RECONNECT_ATTEMPTS) {
+                toast.error(
+                  "SSE reconnect stopped",
+                  `Exceeded ${SSE_MAX_RECONNECT_ATTEMPTS} attempts`,
+                );
+                return;
               }
-              return {
-                ...tab,
-                ws: {
-                  ...tab.ws,
-                  connectionId: null,
-                  status: "closed",
-                  closeCode: event.code,
-                  closeReason: event.reason,
-                },
-              };
-            }),
-          })),
+              const delay =
+                tab.ws.lastRetryMs && tab.ws.lastRetryMs > 0
+                  ? tab.ws.lastRetryMs
+                  : SSE_DEFAULT_RETRY_MS;
+              clearSseReconnectTimer(tab.id);
+              const handle = setTimeout(() => {
+                sseReconnectTimers.delete(tab.id);
+                self.send({ type: "WS_CONNECT", tabId: tab.id });
+              }, delay);
+              sseReconnectTimers.set(tab.id, handle);
+              toast.info("SSE reconnecting", `Retry in ${delay}ms (attempt ${attempts})`);
+            },
+          ],
         },
         WS_ERROR: {
           actions: [

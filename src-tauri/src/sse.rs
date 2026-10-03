@@ -5,7 +5,7 @@ use crate::http::{
 use crate::state::HttpState;
 use crate::ws_state::{WsConnectionHandle, WsState, WsWriteMessage};
 use futures_util::StreamExt;
-use pulse_core::sse::{next_event_boundary, parse_sse_block};
+use pulse_core::sse::SseBuffer;
 use reqwest::header::{HeaderName, HeaderValue, ACCEPT, CACHE_CONTROL};
 use reqwest::Method;
 use serde::Serialize;
@@ -174,47 +174,35 @@ pub async fn connect(
     let cancel_task = cancel.clone();
 
     let read_task = tokio::spawn(async move {
-        let mut buffer = String::new();
+        let mut buffer = SseBuffer::new(MAX_BUFFER_BYTES);
         loop {
             tokio::select! {
                 _ = cancel_task.cancelled() => break,
                 chunk = stream.next() => {
                     match chunk {
                         Some(Ok(bytes)) => {
-                            buffer.push_str(&String::from_utf8_lossy(&bytes));
-                            if buffer.len() > MAX_BUFFER_BYTES {
-                                let _ = app_task.emit("ws-error", SseErrorEvent {
-                                    connection_id: conn_task.clone(),
-                                    tab_id: tab_task.clone(),
-                                    message: format!(
-                                        "SSE buffer exceeded {} bytes without an event boundary",
-                                        MAX_BUFFER_BYTES
-                                    ),
-                                });
-                                break;
-                            }
-                            while let Some(end) = next_event_boundary(&buffer) {
-                                let sep = if buffer[..end].ends_with("\r\n\r\n") { 4 } else { 2 };
-                                let block = buffer[..end - sep].to_string();
-                                buffer = buffer[end..].to_string();
-                                if let Some(parsed) = parse_sse_block(&block) {
-                                    if parsed.data.is_empty()
-                                        && parsed.event.is_none()
-                                        && parsed.id.is_none()
-                                        && parsed.retry_ms.is_none()
-                                    {
-                                        continue;
+                            match buffer.push(&String::from_utf8_lossy(&bytes)) {
+                                Ok(events) => {
+                                    for parsed in events {
+                                        let _ = app_task.emit("ws-message", SseMessageEvent {
+                                            connection_id: conn_task.clone(),
+                                            tab_id: tab_task.clone(),
+                                            data: parsed.data,
+                                            binary: false,
+                                            timestamp: now_ms(),
+                                            event: parsed.event,
+                                            event_id: parsed.id,
+                                            retry_ms: parsed.retry_ms,
+                                        });
                                     }
-                                    let _ = app_task.emit("ws-message", SseMessageEvent {
+                                }
+                                Err(message) => {
+                                    let _ = app_task.emit("ws-error", SseErrorEvent {
                                         connection_id: conn_task.clone(),
                                         tab_id: tab_task.clone(),
-                                        data: parsed.data,
-                                        binary: false,
-                                        timestamp: now_ms(),
-                                        event: parsed.event,
-                                        event_id: parsed.id,
-                                        retry_ms: parsed.retry_ms,
+                                        message,
                                     });
+                                    break;
                                 }
                             }
                         }

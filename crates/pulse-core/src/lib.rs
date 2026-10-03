@@ -40,7 +40,11 @@ pub use test_runner::{
 pub use contract::{breaking_diff, check_workspace, compare_to_schema};
 pub use json_diff::{compare as diff_compare, compare_raw as diff_compare_raw, pretty_any, unified_lines};
 pub use prepare::{interpolate_request, to_http_payload};
-pub use sse::{next_event_boundary, parse_sse_block, parse_sse_text, ParsedSseEvent, SseBuffer};
+pub use sse::{
+    collect_sse, filter_events as filter_sse_events, latest_event_id as latest_sse_event_id,
+    latest_retry_ms as latest_sse_retry_ms, next_event_boundary, parse_sse_block, parse_sse_text,
+    ws_close_code_label, ParsedSseEvent, SseBuffer, SseCollectOptions,
+};
 pub use types::{AuthConfig, EnvVariable, HttpRequestPayload, HttpResponsePayload, KeyValue};
 pub use vars::substitute_variables;
 pub use workspace_fs::{

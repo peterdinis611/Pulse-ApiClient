@@ -1,6 +1,11 @@
-//! Server-Sent Events parser (WHATWG / HTML Living Standard).
+//! Server-Sent Events parser + bounded stream collect (WHATWG / HTML Living Standard).
 
+use futures_util::StreamExt;
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, CACHE_CONTROL};
+use reqwest::Method;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
+use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -12,6 +17,17 @@ pub struct ParsedSseEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub retry_ms: Option<u64>,
     pub data: String,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SseCollectOptions {
+    pub method: String,
+    pub headers: Vec<(String, String)>,
+    pub body: Option<String>,
+    pub max_events: usize,
+    pub timeout_ms: u64,
+    pub last_event_id: Option<String>,
+    pub event_filter: Option<String>,
 }
 
 /// Parse one SSE event block (fields between blank-line delimiters).
@@ -110,6 +126,7 @@ impl SseBuffer {
     }
 
     pub fn push(&mut self, chunk: &str) -> Result<Vec<ParsedSseEvent>, String> {
+        let chunk = chunk.strip_prefix('\u{feff}').unwrap_or(chunk);
         self.buffer.push_str(chunk);
         if self.buffer.len() > self.max_bytes {
             return Err(format!(
@@ -147,6 +164,7 @@ impl SseBuffer {
 
 /// Parse a complete SSE document (or partial stream text) into events.
 pub fn parse_sse_text(text: &str) -> Result<Vec<ParsedSseEvent>, String> {
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     let mut buf = SseBuffer::new(16 * 1024 * 1024);
     let mut events = buf.push(text)?;
     // Trailing block without final delimiter — still try once.
@@ -156,6 +174,149 @@ pub fn parse_sse_text(text: &str) -> Result<Vec<ParsedSseEvent>, String> {
         }
     }
     Ok(events)
+}
+
+pub fn latest_event_id(events: &[ParsedSseEvent]) -> Option<&str> {
+    events
+        .iter()
+        .rev()
+        .find_map(|event| event.id.as_deref().filter(|id| !id.is_empty()))
+}
+
+pub fn latest_retry_ms(events: &[ParsedSseEvent]) -> Option<u64> {
+    events.iter().rev().find_map(|event| event.retry_ms)
+}
+
+pub fn filter_events<'a>(
+    events: &'a [ParsedSseEvent],
+    event_name: Option<&str>,
+) -> Vec<&'a ParsedSseEvent> {
+    let Some(needle) = event_name.map(str::trim).filter(|item| !item.is_empty()) else {
+        return events.iter().collect();
+    };
+    events
+        .iter()
+        .filter(|event| {
+            event
+                .event
+                .as_deref()
+                .unwrap_or("message")
+                .eq_ignore_ascii_case(needle)
+        })
+        .collect()
+}
+
+/// Open an HTTP SSE stream and collect up to `max_events` (shared by CLI / MCP / native).
+pub async fn collect_sse(url: &str, options: SseCollectOptions) -> Result<Vec<ParsedSseEvent>, String> {
+    let max_events = options.max_events.max(1);
+    let timeout = Duration::from_millis(options.timeout_ms.max(1));
+    let method_raw = if options.method.trim().is_empty() {
+        "GET".to_string()
+    } else {
+        options.method.trim().to_uppercase()
+    };
+    let method = Method::from_bytes(method_raw.as_bytes())
+        .map_err(|error| format!("Invalid HTTP method: {error}"))?;
+
+    let mut headers = HeaderMap::new();
+    headers.insert(ACCEPT, HeaderValue::from_static("text/event-stream"));
+    headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    for (key, value) in &options.headers {
+        let name = HeaderName::from_str(key.trim())
+            .map_err(|error| format!("Invalid header name '{key}': {error}"))?;
+        let header_value = HeaderValue::from_str(value)
+            .map_err(|error| format!("Invalid header value for '{key}': {error}"))?;
+        headers.insert(name, header_value);
+    }
+    if let Some(last_id) = options
+        .last_event_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+    {
+        headers.insert(
+            HeaderName::from_static("last-event-id"),
+            HeaderValue::from_str(last_id).map_err(|error| format!("Invalid Last-Event-ID: {error}"))?,
+        );
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(timeout)
+        .build()
+        .map_err(|error| error.to_string())?;
+
+    let mut request = client.request(method.clone(), url).headers(headers);
+    if let Some(body) = options.body.as_ref().filter(|item| !item.is_empty()) {
+        if method != Method::GET && method != Method::HEAD {
+            request = request.body(body.clone());
+        }
+    }
+
+    let response = request.send().await.map_err(|error| error.to_string())?;
+    if !response.status().is_success() {
+        let status = response.status().as_u16();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("SSE handshake failed ({status}): {body}"));
+    }
+
+    let mut stream = response.bytes_stream();
+    let mut buffer = SseBuffer::new(4 * 1024 * 1024);
+    let mut events = Vec::new();
+    let filter = options.event_filter.clone();
+
+    while events.len() < max_events {
+        match tokio::time::timeout(timeout, stream.next()).await {
+            Ok(Some(Ok(chunk))) => {
+                let text = String::from_utf8_lossy(&chunk);
+                for event in buffer.push(&text)? {
+                    if matches_event_filter(&event, filter.as_deref()) {
+                        events.push(event);
+                        if events.len() >= max_events {
+                            break;
+                        }
+                    }
+                }
+            }
+            Ok(Some(Err(error))) => return Err(error.to_string()),
+            Ok(None) => break,
+            Err(_) => break,
+        }
+    }
+
+    Ok(events)
+}
+
+fn matches_event_filter(event: &ParsedSseEvent, filter: Option<&str>) -> bool {
+    let Some(needle) = filter.map(str::trim).filter(|item| !item.is_empty()) else {
+        return true;
+    };
+    event
+        .event
+        .as_deref()
+        .unwrap_or("message")
+        .eq_ignore_ascii_case(needle)
+}
+
+/// Human-readable WebSocket close code label (RFC 6455 + common extensions).
+pub fn ws_close_code_label(code: u16) -> &'static str {
+    match code {
+        1000 => "normal closure",
+        1001 => "going away",
+        1002 => "protocol error",
+        1003 => "unsupported data",
+        1005 => "no status received",
+        1006 => "abnormal closure",
+        1007 => "invalid frame payload",
+        1008 => "policy violation",
+        1009 => "message too big",
+        1010 => "mandatory extension",
+        1011 => "internal error",
+        1012 => "service restart",
+        1013 => "try again later",
+        1014 => "bad gateway",
+        1015 => "TLS handshake",
+        _ => "close",
+    }
 }
 
 #[cfg(test)]
@@ -200,11 +361,23 @@ mod tests {
     #[test]
     fn buffer_drains_multiple_events() {
         let mut buf = SseBuffer::new(4096);
-        let events = buf
-            .push("data: one\n\ndata: two\n\n")
-            .unwrap();
+        let events = buf.push("data: one\n\ndata: two\n\n").unwrap();
         assert_eq!(events.len(), 2);
         assert_eq!(events[0].data, "one");
         assert_eq!(events[1].data, "two");
+    }
+
+    #[test]
+    fn strips_bom_and_tracks_latest_fields() {
+        let events = parse_sse_text("\u{feff}id: a\nretry: 1000\ndata: 1\n\nid: b\ndata: 2\n\n").unwrap();
+        assert_eq!(latest_event_id(&events), Some("b"));
+        assert_eq!(latest_retry_ms(&events), Some(1000));
+        assert_eq!(filter_events(&events, Some("message")).len(), 2);
+    }
+
+    #[test]
+    fn close_code_labels() {
+        assert_eq!(ws_close_code_label(1000), "normal closure");
+        assert_eq!(ws_close_code_label(1006), "abnormal closure");
     }
 }

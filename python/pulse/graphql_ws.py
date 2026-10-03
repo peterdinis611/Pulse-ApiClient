@@ -101,6 +101,67 @@ def complete(id: str) -> str:
     return json.dumps({"type": "complete", "id": id})
 
 
+def start(id: str, query: str, variables: Any = None, operation_name: str | None = None) -> str:
+    """Legacy graphql-ws dialect (`type: start`)."""
+    try:
+        from pulse.native import load_native
+
+        native = load_native()
+        if hasattr(native, "graphql_ws_frame_json"):
+            return native.graphql_ws_frame_json(
+                "start",
+                id,
+                query,
+                json.dumps(variables) if variables is not None else None,
+                operation_name,
+                None,
+                None,
+            )
+    except SystemExit:
+        pass
+    payload: dict[str, Any] = {"query": query}
+    if variables is not None:
+        payload["variables"] = variables
+    if operation_name:
+        payload["operationName"] = operation_name
+    return json.dumps({"type": "start", "id": id, "payload": payload})
+
+
+def stop(id: str) -> str:
+    try:
+        from pulse.native import load_native
+
+        native = load_native()
+        if hasattr(native, "graphql_ws_frame_json"):
+            return native.graphql_ws_frame_json("stop", id, None, None, None, None, None)
+    except SystemExit:
+        pass
+    return json.dumps({"type": "stop", "id": id})
+
+
+def ping(payload: Any = None) -> str:
+    try:
+        from pulse.native import load_native
+
+        native = load_native()
+        if hasattr(native, "graphql_ws_frame_json"):
+            return native.graphql_ws_frame_json(
+                "ping",
+                None,
+                None,
+                None,
+                None,
+                json.dumps(payload) if payload is not None else None,
+                None,
+            )
+    except SystemExit:
+        pass
+    body: dict[str, Any] = {"type": "ping"}
+    if payload is not None:
+        body["payload"] = payload
+    return json.dumps(body)
+
+
 def pong(payload: Any = None) -> str:
     try:
         from pulse.native import load_native

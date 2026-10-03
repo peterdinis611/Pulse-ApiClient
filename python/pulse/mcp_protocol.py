@@ -865,6 +865,7 @@ def tool_sse(arguments: dict) -> dict:
             max_events=int(arguments.get("maxEvents") or 50),
             timeout_s=float(arguments.get("timeoutMs") or 30000) / 1000.0,
             last_event_id=str(arguments["lastEventId"]) if arguments.get("lastEventId") else None,
+            event=str(arguments["event"]) if arguments.get("event") else None,
         )
     except Exception as error:  # noqa: BLE001
         return _text(str(error), error=True)
@@ -886,12 +887,13 @@ def tool_graphql_ws(arguments: dict) -> dict:
                 auth=auth if isinstance(auth, dict) else None,
             )
         )
-    if kind == "subscribe":
+    if kind in {"subscribe", "start"}:
         query = str(arguments.get("query") or "").strip()
         if not query:
             return _text("subscribe requires query", error=True)
+        builder = gws.start if kind == "start" else gws.subscribe
         return _text(
-            gws.subscribe(
+            builder(
                 str(arguments.get("id") or "1"),
                 query,
                 variables=arguments.get("variables"),
@@ -900,9 +902,18 @@ def tool_graphql_ws(arguments: dict) -> dict:
         )
     if kind == "complete":
         return _text(gws.complete(str(arguments.get("id") or "1")))
+    if kind == "stop":
+        return _text(gws.stop(str(arguments.get("id") or "1")))
+    if kind == "ping":
+        return _text(gws.ping(arguments.get("payload")))
+    if kind == "pong":
+        return _text(gws.pong(arguments.get("payload")))
     if kind == "parse":
         return _json(gws.parse_frame(str(arguments.get("text") or "")))
-    return _text("kind must be protocols|connection_init|subscribe|complete|parse", error=True)
+    return _text(
+        "kind must be protocols|connection_init|subscribe|start|complete|stop|ping|pong|parse",
+        error=True,
+    )
 
 
 def tool_workspace_init(arguments: dict) -> dict:
@@ -1413,19 +1424,30 @@ TOOL_DEFS = [
                 "maxEvents": {"type": "integer", "default": 50},
                 "timeoutMs": {"type": "integer", "default": 30000},
                 "lastEventId": {"type": "string"},
+                "event": {"type": "string", "description": "Only keep events with this event: name"},
             },
         },
     },
     {
         "name": "pulse_graphql_ws",
-        "description": "Build or parse graphql-ws / graphql-transport-ws frames (connection_init, subscribe, complete).",
+        "description": "Build or parse graphql-ws / graphql-transport-ws frames (connection_init, subscribe/start, complete/stop, ping/pong).",
         "inputSchema": {
             "type": "object",
             "required": ["kind"],
             "properties": {
                 "kind": {
                     "type": "string",
-                    "enum": ["protocols", "connection_init", "subscribe", "complete", "parse"],
+                    "enum": [
+                        "protocols",
+                        "connection_init",
+                        "subscribe",
+                        "start",
+                        "complete",
+                        "stop",
+                        "ping",
+                        "pong",
+                        "parse",
+                    ],
                 },
                 "id": {"type": "string"},
                 "query": {"type": "string"},

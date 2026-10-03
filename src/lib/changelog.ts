@@ -263,6 +263,14 @@ export const CHANGELOG: ChangelogRelease[] = [
         },
       },
       {
+        id: "sse-ws-reconnect",
+        title: { en: "SSE auto-reconnect & shared collect", sk: "SSE auto-reconnect a zdieľaný collect" },
+        detail: {
+          en: "Desktop can auto-reconnect SSE using retry + Last-Event-ID. pulse-core owns collect/filter/BOM handling; Tauri uses SseBuffer; CLI/MCP/native collect from URL with event filters. WS close codes are labeled; GraphQL-WS adds ping/start/stop + legacy frame normalization.",
+          sk: "Desktop vie auto-reconnect SSE cez retry + Last-Event-ID. pulse-core vlastní collect/filter/BOM; Tauri používa SseBuffer; CLI/MCP/native collect z URL s event filtrom. WS close kódy majú label; GraphQL-WS pridáva ping/start/stop + normalizáciu legacy framov.",
+        },
+      },
+      {
         id: "ws-graphql-rich",
         title: { en: "Richer WebSocket & GraphQL", sk: "Bohatší WebSocket a GraphQL" },
         detail: {

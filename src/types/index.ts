@@ -49,6 +49,12 @@ export type WebSocketSession = {
   lastEventId?: string | null;
   /** Last SSE retry hint from the stream (ms). */
   lastRetryMs?: number | null;
+  /** SSE: automatically reconnect using Last-Event-ID after the stream ends. */
+  autoReconnect?: boolean;
+  /** Internal: user clicked Disconnect — skip auto-reconnect once. */
+  userClosed?: boolean;
+  /** SSE auto-reconnect attempts since the last successful connect. */
+  reconnectAttempts?: number;
   /** GraphQL-WS: true after connection_ack. */
   graphqlAcked?: boolean;
   /** GraphQL-WS: active subscription ids. */

@@ -28,11 +28,18 @@ export function defaultWebSocketSession() {
     error: null,
     lastEventId: null as string | null,
     lastRetryMs: null as number | null,
+    autoReconnect: true,
+    userClosed: false,
+    reconnectAttempts: 0,
     subprotocol: null as string | null,
     graphqlAcked: false,
     graphqlSubscriptionIds: [] as string[],
   };
 }
+
+/** Default wait when the stream ends without a `retry:` field. */
+export const SSE_DEFAULT_RETRY_MS = 3000;
+export const SSE_MAX_RECONNECT_ATTEMPTS = 25;
 
 /** Methods commonly used for SSE (GET stream, POST for AI/chat streams). */
 export const SSE_METHODS = ["GET", "POST"] as const;

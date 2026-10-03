@@ -90,6 +90,15 @@ pub fn complete(id: &str) -> String {
     .expect("json")
 }
 
+pub fn ping(payload: Option<Value>) -> String {
+    serde_json::to_string(&GraphqlWsMessage {
+        kind: "ping".into(),
+        id: None,
+        payload,
+    })
+    .expect("json")
+}
+
 pub fn pong(payload: Option<Value>) -> String {
     serde_json::to_string(&GraphqlWsMessage {
         kind: "pong".into(),
@@ -99,8 +108,47 @@ pub fn pong(payload: Option<Value>) -> String {
     .expect("json")
 }
 
+/// Legacy `graphql-ws` dialect uses `start` instead of `subscribe`.
+pub fn start(id: &str, query: &str, variables: Option<Value>, operation_name: Option<&str>) -> String {
+    let mut payload = json!({ "query": query });
+    if let Some(variables) = variables {
+        payload["variables"] = variables;
+    }
+    if let Some(name) = operation_name.filter(|item| !item.is_empty()) {
+        payload["operationName"] = Value::String(name.to_string());
+    }
+    serde_json::to_string(&GraphqlWsMessage {
+        kind: "start".into(),
+        id: Some(id.into()),
+        payload: Some(payload),
+    })
+    .expect("json")
+}
+
+/// Legacy `graphql-ws` dialect uses `stop` instead of `complete`.
+pub fn stop(id: &str) -> String {
+    serde_json::to_string(&GraphqlWsMessage {
+        kind: "stop".into(),
+        id: Some(id.into()),
+        payload: None,
+    })
+    .expect("json")
+}
+
 pub fn parse_message(text: &str) -> Option<GraphqlWsMessage> {
     serde_json::from_str(text).ok()
+}
+
+/// Normalize legacy frame types to the modern graphql-transport-ws vocabulary.
+pub fn normalize_frame_kind(kind: &str) -> &str {
+    match kind {
+        "start" => "subscribe",
+        "stop" => "complete",
+        "ka" => "pong",
+        "connection_error" => "error",
+        "data" => "next",
+        other => other,
+    }
 }
 
 #[cfg(test)]
@@ -138,5 +186,8 @@ mod tests {
     fn builds_pong_frame() {
         let raw = pong(None);
         assert_eq!(parse_message(&raw).unwrap().kind, "pong");
+        assert_eq!(parse_message(&ping(None)).unwrap().kind, "ping");
+        assert_eq!(normalize_frame_kind("start"), "subscribe");
+        assert_eq!(normalize_frame_kind("data"), "next");
     }
 }

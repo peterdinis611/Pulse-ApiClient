@@ -390,6 +390,7 @@ def cmd_sse(args: argparse.Namespace) -> int:
         max_events=int(args.max_events or 50),
         timeout_s=float(args.timeout or 30),
         last_event_id=args.last_event_id,
+        event=getattr(args, "event", None),
     )
     print(json.dumps(events, indent=2))
     return 0
@@ -964,6 +965,7 @@ def main(argv: list[str] | None = None) -> int:
     sse.add_argument("--max-events", type=int, default=50)
     sse.add_argument("--timeout", type=float, default=30.0)
     sse.add_argument("--last-event-id", help="Last-Event-ID header")
+    sse.add_argument("--event", help="Only keep SSE events with this event: name")
     sse.set_defaults(func=cmd_sse)
 
     gqlws = sub.add_parser("graphql-ws", help="Build/parse graphql-ws frames")

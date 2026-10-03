@@ -15,13 +15,16 @@ use pulse_core::summarize_graphql_schema;
 use pulse_core::INTROSPECTION_QUERY;
 use pulse_core::graphql_ws::{
     complete as gql_complete, connection_init, connection_init_payload_from_auth, parse_message,
-    pong as gql_pong, subscribe as gql_subscribe, GRAPHQL_WS_PROTOCOLS,
+    ping as gql_ping, pong as gql_pong, start as gql_start, stop as gql_stop,
+    subscribe as gql_subscribe, GRAPHQL_WS_PROTOCOLS,
 };
 use pulse_core::init_workspace;
 use pulse_core::interpolate_request;
 use pulse_core::migrate_pulse_json_dumps;
 use pulse_core::openapi_ops::list_operations;
+use pulse_core::collect_sse;
 use pulse_core::parse_sse_text;
+use pulse_core::SseCollectOptions;
 use pulse_core::routes_from_saved_requests;
 use pulse_core::run_collection;
 use pulse_core::run_http_tests;
@@ -479,12 +482,19 @@ fn tools() -> Value {
         },
         {
             "name": "pulse_sse",
-            "description": "Parse an SSE document (text) into events (event/id/retry/data)",
+            "description": "Parse SSE text offline, or collect events from a URL (event/id/retry/data)",
             "inputSchema": {
                 "type": "object",
-                "required": ["text"],
                 "properties": {
-                    "text": { "type": "string", "description": "SSE document to parse offline" }
+                    "text": { "type": "string", "description": "SSE document to parse offline" },
+                    "url": { "type": "string" },
+                    "method": { "type": "string", "default": "GET" },
+                    "headers": { "type": "object", "additionalProperties": { "type": "string" } },
+                    "body": { "type": "string" },
+                    "maxEvents": { "type": "integer", "default": 50 },
+                    "timeoutMs": { "type": "integer", "default": 30000 },
+                    "lastEventId": { "type": "string" },
+                    "event": { "type": "string", "description": "Only keep events with this event: name" }
                 }
             }
         },
@@ -497,7 +507,17 @@ fn tools() -> Value {
                 "properties": {
                     "kind": {
                         "type": "string",
-                        "enum": ["protocols", "connection_init", "subscribe", "complete", "pong", "parse"]
+                        "enum": [
+                            "protocols",
+                            "connection_init",
+                            "subscribe",
+                            "start",
+                            "complete",
+                            "stop",
+                            "ping",
+                            "pong",
+                            "parse"
+                        ]
                     },
                     "id": { "type": "string" },
                     "query": { "type": "string" },
@@ -1021,10 +1041,74 @@ async fn dispatch_tool(name: &str, arguments: &Value) -> Value {
         }
         "pulse_sse" => {
             let text_doc = arg_str(arguments, "text");
-            if text_doc.is_empty() {
-                return text("text is required", true);
+            if !text_doc.is_empty() {
+                return match parse_sse_text(&text_doc) {
+                    Ok(events) => {
+                        let filter = arg_str(arguments, "event");
+                        let events = if filter.trim().is_empty() {
+                            events
+                        } else {
+                            pulse_core::filter_sse_events(&events, Some(&filter))
+                                .into_iter()
+                                .cloned()
+                                .collect()
+                        };
+                        json_text(&serde_json::to_value(events).unwrap_or(Value::Null), false)
+                    }
+                    Err(error) => text(error, true),
+                };
             }
-            match parse_sse_text(&text_doc) {
+            let url = arg_str(arguments, "url");
+            if url.trim().is_empty() {
+                return text("Provide url or text", true);
+            }
+            let headers = match arguments.get("headers") {
+                Some(Value::Object(map)) => map
+                    .iter()
+                    .map(|(key, value)| (key.clone(), value_to_string(value)))
+                    .collect(),
+                _ => Vec::new(),
+            };
+            let options = SseCollectOptions {
+                method: {
+                    let method = arg_str(arguments, "method");
+                    if method.is_empty() {
+                        "GET".into()
+                    } else {
+                        method
+                    }
+                },
+                headers,
+                body: arguments
+                    .get("body")
+                    .map(value_to_string)
+                    .filter(|item| !item.is_empty()),
+                max_events: arguments
+                    .get("maxEvents")
+                    .and_then(|item| item.as_u64())
+                    .unwrap_or(50) as usize,
+                timeout_ms: arguments
+                    .get("timeoutMs")
+                    .and_then(|item| item.as_u64())
+                    .unwrap_or(30_000),
+                last_event_id: {
+                    let id = arg_str(arguments, "lastEventId");
+                    if id.is_empty() {
+                        None
+                    } else {
+                        Some(id)
+                    }
+                },
+                event_filter: {
+                    let event = arg_str(arguments, "event");
+                    if event.is_empty() {
+                        None
+                    } else {
+                        Some(event)
+                    }
+                },
+            };
+            match collect_sse(&url, options).await {
                 Ok(events) => json_text(&serde_json::to_value(events).unwrap_or(Value::Null), false),
                 Err(error) => text(error, true),
             }
@@ -1057,7 +1141,7 @@ async fn dispatch_tool(name: &str, arguments: &Value) -> Value {
                     };
                     text(connection_init(payload), false)
                 }
-                "subscribe" => {
+                "subscribe" | "start" => {
                     let id = arg_str(arguments, "id");
                     let id = if id.is_empty() { "1".into() } else { id };
                     let query = arg_str(arguments, "query");
@@ -1066,25 +1150,29 @@ async fn dispatch_tool(name: &str, arguments: &Value) -> Value {
                     }
                     let variables = arguments.get("variables").cloned();
                     let operation = arg_str(arguments, "operationName");
-                    text(
-                        gql_subscribe(
-                            &id,
-                            &query,
-                            variables,
-                            if operation.is_empty() {
-                                None
-                            } else {
-                                Some(operation.as_str())
-                            },
-                        ),
-                        false,
-                    )
+                    let op = if operation.is_empty() {
+                        None
+                    } else {
+                        Some(operation.as_str())
+                    };
+                    let frame = if kind == "start" {
+                        gql_start(&id, &query, variables, op)
+                    } else {
+                        gql_subscribe(&id, &query, variables, op)
+                    };
+                    text(frame, false)
                 }
                 "complete" => {
                     let id = arg_str(arguments, "id");
                     let id = if id.is_empty() { "1".into() } else { id };
                     text(gql_complete(&id), false)
                 }
+                "stop" => {
+                    let id = arg_str(arguments, "id");
+                    let id = if id.is_empty() { "1".into() } else { id };
+                    text(gql_stop(&id), false)
+                }
+                "ping" => text(gql_ping(arguments.get("payload").cloned()), false),
                 "pong" => text(gql_pong(arguments.get("payload").cloned()), false),
                 "parse" => {
                     let raw = arg_str(arguments, "text");
@@ -1094,7 +1182,7 @@ async fn dispatch_tool(name: &str, arguments: &Value) -> Value {
                     }
                 }
                 _ => text(
-                    "kind must be protocols|connection_init|subscribe|complete|pong|parse",
+                    "kind must be protocols|connection_init|subscribe|start|complete|stop|ping|pong|parse",
                     true,
                 ),
             }

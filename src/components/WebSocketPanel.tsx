@@ -68,8 +68,15 @@ function frameBadgeClass(frameType: string | undefined): string {
 }
 
 export function WebSocketPanel() {
-  const { ws, request, connectWebSocket, disconnectWebSocket, sendWebSocketMessage, sendWebSocketPing } =
-    useApp();
+  const {
+    ws,
+    request,
+    connectWebSocket,
+    disconnectWebSocket,
+    setWebSocketAutoReconnect,
+    sendWebSocketMessage,
+    sendWebSocketPing,
+  } = useApp();
   const isSse = isSseProtocol(request.protocol);
   const isGraphqlWs = !isSse && request.bodyKind === "graphql";
   const [draft, setDraft] = useState(
@@ -179,9 +186,15 @@ export function WebSocketPanel() {
               retry {ws.lastRetryMs}ms
             </Badge>
           )}
+          {isSse && (ws.reconnectAttempts ?? 0) > 0 && ws.status !== "open" && (
+            <Badge variant="outline" className="font-mono text-[11px]" title="Auto-reconnect">
+              reconnect #{ws.reconnectAttempts}
+            </Badge>
+          )}
           {ws.closeCode != null && (
-            <Badge variant="outline" className="font-mono text-[11px]">
+            <Badge variant="outline" className="font-mono text-[11px]" title={ws.closeReason}>
               Closed {ws.closeCode}
+              {ws.closeReason ? ` · ${ws.closeReason}` : ""}
             </Badge>
           )}
           {isSse && ws.closeReason && !ws.closeCode && (
@@ -191,6 +204,15 @@ export function WebSocketPanel() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {isSse && (
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Checkbox
+                checked={ws.autoReconnect !== false}
+                onCheckedChange={(checked) => setWebSocketAutoReconnect(checked === true)}
+              />
+              Auto-reconnect
+            </label>
+          )}
           {ws.handshakeHeaders && ws.handshakeHeaders.length > 0 && (
             <Tabs value={view} onValueChange={(value) => setView(value as typeof view)}>
               <TabsList className="h-8">
@@ -234,7 +256,7 @@ export function WebSocketPanel() {
         </ScrollAreaWithTop>
       ) : (
         <>
-          {(isSse || isGraphqlWs) && ws.messages.length > 0 && (
+          {ws.messages.length > 0 && (
             <div className="flex items-center gap-2 border-b border-border px-4 py-2">
               <Label htmlFor="stream-event-filter" className="shrink-0 text-xs text-muted-foreground">
                 Filter
@@ -246,7 +268,9 @@ export function WebSocketPanel() {
                 placeholder={
                   isSse
                     ? "e.g. message, ping, delta"
-                    : "e.g. next, connection_ack, error"
+                    : isGraphqlWs
+                      ? "e.g. next, connection_ack, error"
+                      : "filter message text or frame type"
                 }
                 className="h-8 max-w-xs font-mono text-xs"
               />

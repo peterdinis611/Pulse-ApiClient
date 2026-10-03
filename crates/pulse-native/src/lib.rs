@@ -10,17 +10,18 @@ use pulse_core::graphql::{
 };
 use pulse_core::graphql_ws::{
     complete as gql_complete, connection_init, connection_init_payload_from_auth, parse_message,
-    pong as gql_pong, subscribe as gql_subscribe, GRAPHQL_WS_PROTOCOLS,
+    ping as gql_ping, pong as gql_pong, start as gql_start, stop as gql_stop,
+    subscribe as gql_subscribe, GRAPHQL_WS_PROTOCOLS,
 };
 use pulse_core::simple_http::send_once;
 use pulse_core::types::EnvVariable;
 use pulse_core::workspace_fs::load_workspace;
 use pulse_core::{
-    breaking_diff, compare_to_schema, init_workspace, migrate_pulse_json_dumps, parse_sse_text,
-    routes_from_saved_requests, run_collection_with_progress, run_http_tests,
+    breaking_diff, collect_sse, compare_to_schema, init_workspace, migrate_pulse_json_dumps,
+    parse_sse_text, routes_from_saved_requests, run_collection_with_progress, run_http_tests,
     run_pre_request_script_with_env, start_mock_server_with_delay, substitute_variables,
     CollectionRunInput, CollectionRunStep, HttpRequestPayload, HttpResponsePayload, MockRoute,
-    MockServer,
+    MockServer, SseCollectOptions,
 };
 use std::sync::Mutex;
 
@@ -173,6 +174,52 @@ fn parse_sse_json(text: String) -> PyResult<String> {
 }
 
 #[pyfunction]
+#[pyo3(signature = (url, method=None, headers_json=None, body=None, max_events=None, timeout_ms=None, last_event_id=None, event_filter=None))]
+fn collect_sse_json(
+    url: String,
+    method: Option<String>,
+    headers_json: Option<String>,
+    body: Option<String>,
+    max_events: Option<usize>,
+    timeout_ms: Option<u64>,
+    last_event_id: Option<String>,
+    event_filter: Option<String>,
+) -> PyResult<String> {
+    let headers: Vec<(String, String)> = match headers_json.filter(|item| !item.trim().is_empty()) {
+        Some(raw) => {
+            let map: serde_json::Map<String, serde_json::Value> =
+                serde_json::from_str(&raw).map_err(py_err)?;
+            map.into_iter()
+                .map(|(key, value)| {
+                    (
+                        key,
+                        match value {
+                            serde_json::Value::String(text) => text,
+                            other => other.to_string(),
+                        },
+                    )
+                })
+                .collect()
+        }
+        None => Vec::new(),
+    };
+    let options = SseCollectOptions {
+        method: method.unwrap_or_else(|| "GET".into()),
+        headers,
+        body,
+        max_events: max_events.unwrap_or(50),
+        timeout_ms: timeout_ms.unwrap_or(30_000),
+        last_event_id,
+        event_filter,
+    };
+    let runtime = tokio::runtime::Runtime::new().map_err(py_err)?;
+    let events = runtime
+        .block_on(collect_sse(&url, options))
+        .map_err(py_err)?;
+    serde_json::to_string(&events).map_err(py_err)
+}
+
+#[pyfunction]
 fn compare_schema_json(body: String, schema_json: String) -> PyResult<String> {
     let schema: serde_json::Value = serde_json::from_str(&schema_json).map_err(py_err)?;
     let report = compare_to_schema(&body, &schema);
@@ -232,7 +279,7 @@ fn graphql_ws_frame_json(
             };
             connection_init(payload)
         }
-        "subscribe" => {
+        "subscribe" | "start" => {
             let sid = id.ok_or_else(|| py_err("subscribe requires id"))?;
             let q = query.ok_or_else(|| py_err("subscribe requires query"))?;
             let variables = variables_json
@@ -240,16 +287,28 @@ fn graphql_ws_frame_json(
                 .map(|raw| serde_json::from_str(&raw))
                 .transpose()
                 .map_err(py_err)?;
-            gql_subscribe(
-                &sid,
-                &q,
-                variables,
-                operation_name.as_deref().filter(|item| !item.is_empty()),
-            )
+            let op = operation_name.as_deref().filter(|item| !item.is_empty());
+            if kind == "start" {
+                gql_start(&sid, &q, variables, op)
+            } else {
+                gql_subscribe(&sid, &q, variables, op)
+            }
         }
         "complete" => {
             let sid = id.ok_or_else(|| py_err("complete requires id"))?;
             gql_complete(&sid)
+        }
+        "stop" => {
+            let sid = id.ok_or_else(|| py_err("stop requires id"))?;
+            gql_stop(&sid)
+        }
+        "ping" => {
+            let payload = payload_json
+                .filter(|item| !item.trim().is_empty())
+                .map(|raw| serde_json::from_str(&raw))
+                .transpose()
+                .map_err(py_err)?;
+            gql_ping(payload)
         }
         "pong" => {
             let payload = payload_json
@@ -395,6 +454,7 @@ fn pulse_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(init_workspace_json, m)?)?;
     m.add_function(wrap_pyfunction!(migrate_workspace_json, m)?)?;
     m.add_function(wrap_pyfunction!(parse_sse_json, m)?)?;
+    m.add_function(wrap_pyfunction!(collect_sse_json, m)?)?;
     m.add_function(wrap_pyfunction!(compare_schema_json, m)?)?;
     m.add_function(wrap_pyfunction!(breaking_diff_json, m)?)?;
     m.add_function(wrap_pyfunction!(diff_json, m)?)?;
