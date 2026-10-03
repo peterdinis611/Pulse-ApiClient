@@ -90,16 +90,20 @@ export const MCP_GUIDE_SECTIONS: McpGuideSection[] = [
         sk: "HTTP — `pulse_send`, `pulse_graphql`, `pulse_run_collection`, `pulse_bench`, `pulse_pre_request`, `pulse_run_tests`, `pulse_interpolate`",
       },
       {
-        en: "Workspace — `pulse_workspace_list|read|write|send|search|envs|history|pending|delete|status|import_openapi|export_openapi`",
-        sk: "Workspace — `pulse_workspace_list|read|write|send|search|envs|history|pending|delete|status|import_openapi|export_openapi`",
+        en: "Streams — `pulse_sse` (parse/collect), `pulse_graphql_ws` (connection_init / subscribe / complete frames)",
+        sk: "Streamy — `pulse_sse` (parse/collect), `pulse_graphql_ws` (connection_init / subscribe / complete frames)",
+      },
+      {
+        en: "Workspace — `pulse_workspace_list|read|write|send|search|envs|history|pending|delete|status|init|import_openapi|export_openapi`",
+        sk: "Workspace — `pulse_workspace_list|read|write|send|search|envs|history|pending|delete|status|init|import_openapi|export_openapi`",
       },
       {
         en: "Convert — `pulse_openapi`, `pulse_har`, `pulse_curl`, `pulse_snippet`, `pulse_export_openapi`, `pulse_diff`, `pulse_schema`",
         sk: "Konverzie — `pulse_openapi`, `pulse_har`, `pulse_curl`, `pulse_snippet`, `pulse_export_openapi`, `pulse_diff`, `pulse_schema`",
       },
       {
-        en: "CI / mock — `pulse_contract`, `pulse_junit`, `pulse_last_run`, `pulse_validate_run`, `pulse_mock_start`, `pulse_mock_stop`, `pulse_help`",
-        sk: "CI / mock — `pulse_contract`, `pulse_junit`, `pulse_last_run`, `pulse_validate_run`, `pulse_mock_start`, `pulse_mock_stop`, `pulse_help`",
+        en: "CI / mock — `pulse_contract` (workspace / schema / breaking), `pulse_junit`, `pulse_last_run`, `pulse_validate_run`, `pulse_mock_start`, `pulse_mock_stop`, `pulse_help`",
+        sk: "CI / mock — `pulse_contract` (workspace / schema / breaking), `pulse_junit`, `pulse_last_run`, `pulse_validate_run`, `pulse_mock_start`, `pulse_mock_stop`, `pulse_help`",
       },
     ],
   },

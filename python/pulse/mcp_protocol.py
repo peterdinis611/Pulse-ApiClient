@@ -769,7 +769,20 @@ def tool_workspace_export_openapi(arguments: dict) -> dict:
     return _json({"path": _mcp_path(written), "paths": len(spec.get("paths") or {})})
 
 
-def tool_contract(_arguments: dict) -> dict:
+def tool_contract(arguments: dict) -> dict:
+    if arguments.get("schema") is not None and arguments.get("body") is not None:
+        from pulse.contract import compare_to_schema
+
+        body = arguments.get("body")
+        schema = arguments.get("schema")
+        if isinstance(schema, str):
+            schema = json.loads(schema)
+        report = compare_to_schema(body if isinstance(body, str) else json.dumps(body), schema)
+        return _json(report)
+    if arguments.get("previous") is not None and arguments.get("current") is not None:
+        from pulse.contract import breaking_diff
+
+        return _json(breaking_diff(arguments["previous"], arguments["current"]))
     root, error = _require_workspace()
     if error or root is None:
         return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
@@ -781,6 +794,79 @@ def tool_contract(_arguments: dict) -> dict:
         except json.JSONDecodeError:
             return _text(raw)
     return _json(check_workspace_files(root))
+
+
+def tool_sse(arguments: dict) -> dict:
+    from pulse.sse import collect, parse_text
+
+    if arguments.get("text") is not None:
+        return _json(parse_text(str(arguments.get("text") or "")))
+    url = str(arguments.get("url") or "").strip()
+    if not url:
+        return _text("Provide url or text", error=True)
+    headers = arguments.get("headers") if isinstance(arguments.get("headers"), dict) else None
+    try:
+        events = collect(
+            url,
+            method=str(arguments.get("method") or "GET"),
+            headers={str(k): str(v) for k, v in (headers or {}).items()},
+            body=str(arguments["body"]) if arguments.get("body") is not None else None,
+            max_events=int(arguments.get("maxEvents") or 50),
+            timeout_s=float(arguments.get("timeoutMs") or 30000) / 1000.0,
+            last_event_id=str(arguments["lastEventId"]) if arguments.get("lastEventId") else None,
+        )
+    except Exception as error:  # noqa: BLE001
+        return _text(str(error), error=True)
+    return _json(events)
+
+
+def tool_graphql_ws(arguments: dict) -> dict:
+    from pulse import graphql_ws as gws
+
+    kind = str(arguments.get("kind") or arguments.get("action") or "").strip()
+    if kind == "protocols":
+        return _text(gws.protocols())
+    if kind == "connection_init" or kind == "init":
+        payload = arguments.get("payload")
+        auth = arguments.get("auth")
+        return _text(
+            gws.connection_init(
+                payload=payload if isinstance(payload, dict) else None,
+                auth=auth if isinstance(auth, dict) else None,
+            )
+        )
+    if kind == "subscribe":
+        query = str(arguments.get("query") or "").strip()
+        if not query:
+            return _text("subscribe requires query", error=True)
+        return _text(
+            gws.subscribe(
+                str(arguments.get("id") or "1"),
+                query,
+                variables=arguments.get("variables"),
+                operation_name=str(arguments["operationName"]) if arguments.get("operationName") else None,
+            )
+        )
+    if kind == "complete":
+        return _text(gws.complete(str(arguments.get("id") or "1")))
+    if kind == "parse":
+        return _json(gws.parse_frame(str(arguments.get("text") or "")))
+    return _text("kind must be protocols|connection_init|subscribe|complete|parse", error=True)
+
+
+def tool_workspace_init(arguments: dict) -> dict:
+    from pulse.workspace import init_workspace
+
+    root, error = _require_workspace()
+    if error or root is None:
+        # Allow creating a new path when workspace is passed explicitly.
+        raw = str(arguments.get("workspace") or os.environ.get("PULSE_WORKSPACE") or "").strip()
+        if not raw:
+            return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+        root = Path(raw).expanduser().resolve()
+    name = str(arguments.get("name") or root.name or "Pulse")
+    path = init_workspace(root, name)
+    return _json({"path": _mcp_path(path)})
 
 
 def tool_junit(arguments: dict) -> dict:
@@ -873,6 +959,9 @@ TOOLS: dict[str, Callable[[dict], dict]] = {
     "pulse_workspace_import_openapi": tool_workspace_import_openapi,
     "pulse_workspace_export_openapi": tool_workspace_export_openapi,
     "pulse_contract": tool_contract,
+    "pulse_sse": tool_sse,
+    "pulse_graphql_ws": tool_graphql_ws,
+    "pulse_workspace_init": tool_workspace_init,
     "pulse_junit": tool_junit,
     "pulse_mock_start": tool_mock_start,
     "pulse_mock_stop": tool_mock_stop,
@@ -1242,8 +1331,65 @@ TOOL_DEFS = [
     },
     {
         "name": "pulse_contract",
-        "description": "Check PULSE_WORKSPACE contracts: JSON Schema on requests and breaking diffs vs *.previous.json snapshots.",
-        "inputSchema": {"type": "object", "properties": {}},
+        "description": "Check PULSE_WORKSPACE contracts, or pass schema+body / previous+current for schema/breaking diffs.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "schema": {"type": "object"},
+                "body": {},
+                "previous": {},
+                "current": {},
+            },
+        },
+    },
+    {
+        "name": "pulse_sse",
+        "description": "Parse SSE text or collect events from a URL (Accept: text/event-stream).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string"},
+                "text": {"type": "string", "description": "Offline SSE document to parse"},
+                "method": {"type": "string", "default": "GET"},
+                "headers": {"type": "object", "additionalProperties": {"type": "string"}},
+                "body": {"type": "string"},
+                "maxEvents": {"type": "integer", "default": 50},
+                "timeoutMs": {"type": "integer", "default": 30000},
+                "lastEventId": {"type": "string"},
+            },
+        },
+    },
+    {
+        "name": "pulse_graphql_ws",
+        "description": "Build or parse graphql-ws / graphql-transport-ws frames (connection_init, subscribe, complete).",
+        "inputSchema": {
+            "type": "object",
+            "required": ["kind"],
+            "properties": {
+                "kind": {
+                    "type": "string",
+                    "enum": ["protocols", "connection_init", "subscribe", "complete", "parse"],
+                },
+                "id": {"type": "string"},
+                "query": {"type": "string"},
+                "variables": {},
+                "operationName": {"type": "string"},
+                "payload": {"type": "object"},
+                "auth": {"type": "object"},
+                "text": {"type": "string"},
+            },
+        },
+    },
+    {
+        "name": "pulse_workspace_init",
+        "description": "Create pulse.yaml + collections/ + environments/ under PULSE_WORKSPACE (or workspace path).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "workspace": {"type": "string"},
+                "name": {"type": "string"},
+            },
+        },
     },
     {
         "name": "pulse_junit",

@@ -270,6 +270,14 @@ export const CHANGELOG: ChangelogRelease[] = [
           sk: "WS ukazuje ping/pong, GraphQL-WS ponúka oba subprotokoly, auth v connection_init, ack tracking, Subscribe/Complete a subscription stuby v schema exploreri.",
         },
       },
+      {
+        id: "rust-python-modules",
+        title: { en: "Shared SSE + stream CLI/MCP", sk: "Zdieľané SSE + stream CLI/MCP" },
+        detail: {
+          en: "pulse-core owns the SSE parser; pulse-native + Python expose sse, graphql-ws frames, workspace init/migrate, and richer contract schema/breaking tools.",
+          sk: "pulse-core vlastní SSE parser; pulse-native + Python sprístupnia sse, graphql-ws frames, workspace init/migrate a bohatší contract schema/breaking.",
+        },
+      },
     ],
   },
 ];
