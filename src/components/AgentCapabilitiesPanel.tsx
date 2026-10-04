@@ -23,6 +23,7 @@ const CAPABILITY_LABEL: Record<AgentCapability, MessageKey> = {
   run_collection: "agent.capability.run_collection",
   graphql_summarize: "agent.capability.graphql_summarize",
   sse_parse: "agent.capability.sse_parse",
+  memory: "agent.capability.memory",
 };
 
 const CAPABILITY_HINT: Record<AgentCapability, MessageKey> = {
@@ -34,6 +35,7 @@ const CAPABILITY_HINT: Record<AgentCapability, MessageKey> = {
   run_collection: "agent.capability.run_collectionHint",
   graphql_summarize: "agent.capability.graphql_summarizeHint",
   sse_parse: "agent.capability.sse_parseHint",
+  memory: "agent.capability.memoryHint",
 };
 
 type AgentCapabilitiesPanelProps = {

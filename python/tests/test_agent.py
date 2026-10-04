@@ -39,6 +39,31 @@ class AgentRouterTests(unittest.TestCase):
         self.assertEqual(result["kind"], "import_curl")
         self.assertEqual(result["data"]["method"], "GET")
 
+    def test_memory_roundtrip(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            remembered = run_agent(
+                "remember preferred_base_url=https://staging.test",
+                workspace=tmp,
+                record_history=False,
+            )
+            self.assertEqual(remembered["kind"], "remember")
+            recalled = run_agent(
+                "recall preferred_base_url",
+                workspace=tmp,
+                record_history=False,
+            )
+            self.assertIn("https://staging.test", recalled["markdown"])
+            listed = run_agent("list memory", workspace=tmp, record_history=False)
+            self.assertEqual(listed["kind"], "memory_list")
+            forgot = run_agent(
+                "forget preferred_base_url",
+                workspace=tmp,
+                record_history=False,
+            )
+            self.assertIn("Forgot", forgot["markdown"])
+
 
 if __name__ == "__main__":
     unittest.main()

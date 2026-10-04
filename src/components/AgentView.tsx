@@ -42,6 +42,7 @@ const QUICK_ACTIONS: Array<{
   { id: "quick:run", labelKey: "agent.quick.run", capability: "run_collection" },
   { id: "quick:tests", labelKey: "agent.quick.tests", capability: "explain_tests" },
   { id: "quick:history", labelKey: "agent.quick.history", capability: "workspace_history" },
+  { id: "quick:memory", labelKey: "agent.quick.memory", capability: "memory" },
 ];
 
 function renderAgentMarkdown(text: string) {

@@ -2,6 +2,13 @@ import { curlToRequestAsync } from "@/lib/curl";
 import { formatGraphqlResponse, parseGraphqlResponse, summarizeGraphqlSchemaLike } from "@/lib/agent-format";
 import { runCollectionAuto, type CollectionRunResult } from "@/lib/collection-runner";
 import {
+  deleteAgentMemory,
+  formatMemoryMarkdown,
+  getAgentMemory,
+  listAgentMemory,
+  upsertAgentMemory,
+} from "@/lib/agent-memory";
+import {
   appendGitAgentHistory,
   getGitWorkspaceRoot,
   listGitAgentHistory,
@@ -288,6 +295,100 @@ export async function runAgentIntent(
       }
       if (events.length > 30) lines.push(`…+${events.length - 30} more`);
       return { markdown: lines.join("\n") };
+    }
+    case "remember": {
+      const root = getGitWorkspaceRoot();
+      if (!root) {
+        return {
+          markdown:
+            "No Git workspace attached. Set one in **Settings → Data & storage** before remembering facts.",
+        };
+      }
+      try {
+        const fact = await upsertAgentMemory({
+          workspaceRoot: root,
+          key: intent.key,
+          value: intent.value,
+          scope: intent.scope,
+          source: "in-app-agent",
+        });
+        await recordAgentHistory("remember", { key: fact.key, scope: fact.scope });
+        return {
+          markdown: `Remembered \`${fact.key}\` = ${fact.value} (\`${fact.scope}\`).`,
+          meta: { fact },
+        };
+      } catch (error) {
+        return {
+          markdown: `Remember failed: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
+    }
+    case "recall": {
+      const root = getGitWorkspaceRoot();
+      if (!root) {
+        return { markdown: "No Git workspace attached — cannot recall memory." };
+      }
+      const query = intent.query.trim();
+      if (!query) return { markdown: "Usage: recall <key or search>" };
+      try {
+        const exact = await getAgentMemory(root, query);
+        if (exact) {
+          await recordAgentHistory("recall", { key: exact.key });
+          return {
+            markdown: `**${exact.key}** = ${exact.value} \`[${exact.scope}]\`${
+              exact.note ? `\n_${exact.note}_` : ""
+            }`,
+            meta: { fact: exact },
+          };
+        }
+        const found = await listAgentMemory(root, query);
+        await recordAgentHistory("recall", { query, count: found.length });
+        return {
+          markdown: formatMemoryMarkdown(found, `Recall “${query}”`),
+          meta: { count: found.length, facts: found },
+        };
+      } catch (error) {
+        return {
+          markdown: `Recall failed: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
+    }
+    case "forget": {
+      const root = getGitWorkspaceRoot();
+      if (!root) {
+        return { markdown: "No Git workspace attached — cannot forget memory." };
+      }
+      try {
+        const removed = await deleteAgentMemory(root, intent.key);
+        await recordAgentHistory("forget", { key: intent.key, removed });
+        return {
+          markdown: removed
+            ? `Forgot \`${intent.key}\`.`
+            : `No memory found for \`${intent.key}\`.`,
+        };
+      } catch (error) {
+        return {
+          markdown: `Forget failed: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
+    }
+    case "memory_list": {
+      const root = getGitWorkspaceRoot();
+      if (!root) {
+        return { markdown: "No Git workspace attached — memory list is empty." };
+      }
+      try {
+        const facts = await listAgentMemory(root);
+        await recordAgentHistory("memory_list", { count: facts.length });
+        return {
+          markdown: formatMemoryMarkdown(facts, "Agent memory"),
+          meta: { count: facts.length, facts },
+        };
+      } catch (error) {
+        return {
+          markdown: `Memory list failed: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
     }
     default:
       return { markdown: buildAgentHelpText(settings) };

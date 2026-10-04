@@ -58,4 +58,23 @@ describe("agent-router", () => {
     const result = routeAgentInput("write me a poem about APIs");
     expect(result).toEqual({ kind: "unknown", input: "write me a poem about APIs" });
   });
+
+  it("routes memory intents", () => {
+    expect(routeAgentInput("list memory")).toEqual({ kind: "memory_list" });
+    expect(routeAgentInput("quick:memory")).toEqual({ kind: "memory_list" });
+    expect(routeAgentInput("remember env=staging")).toEqual({
+      kind: "remember",
+      key: "env",
+      value: "staging",
+      scope: "workspace",
+    });
+    expect(routeAgentInput("remember secret=x --local")).toEqual({
+      kind: "remember",
+      key: "secret",
+      value: "x",
+      scope: "local",
+    });
+    expect(routeAgentInput("recall env")).toEqual({ kind: "recall", query: "env" });
+    expect(routeAgentInput("forget env")).toEqual({ kind: "forget", key: "env" });
+  });
 });

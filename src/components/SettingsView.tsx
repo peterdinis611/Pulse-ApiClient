@@ -78,10 +78,16 @@ import {
 } from "@/lib/layout-preferences";
 import { AgentCapabilitiesPanel } from "@/components/AgentCapabilitiesPanel";
 import {
+  clearLocalAgentMemory,
+  listAgentMemory,
+  reindexAgentMemory,
+} from "@/lib/agent-memory";
+import {
   loadAgentSettings,
   saveAgentSettings,
   type AgentSettings,
 } from "@/lib/agent-settings";
+import { getGitWorkspaceRoot } from "@/lib/git-workspace";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/useLocale";
 import type { MessageKey } from "@/lib/i18n";
@@ -303,7 +309,28 @@ export function SettingsView() {
   });
   const [editingCookieKey, setEditingCookieKey] = useState<string | null>(null);
   const [agentSettings, setAgentSettings] = useState<AgentSettings>(() => loadAgentSettings());
+  const [memoryCount, setMemoryCount] = useState<number | null>(null);
+  const [memoryBusy, setMemoryBusy] = useState(false);
   const [activeSection, setActiveSection] = useState<string>(SETTINGS_NAV[0].id);
+
+  const refreshMemoryCount = async () => {
+    const root = getGitWorkspaceRoot() || collectionsFolderPath.trim() || null;
+    if (!root) {
+      setMemoryCount(null);
+      return;
+    }
+    try {
+      const facts = await listAgentMemory(root);
+      setMemoryCount(facts.length);
+    } catch {
+      setMemoryCount(null);
+    }
+  };
+
+  useEffect(() => {
+    void refreshMemoryCount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh when folder path changes
+  }, [collectionsFolderPath]);
 
   const scrollToSection = (id: string) => {
     setActiveSection(id);
@@ -1241,6 +1268,67 @@ export function SettingsView() {
               }
             }}
           />
+          <div className="space-y-2 rounded-md border border-border p-3">
+            <p className="text-sm font-medium">{t("agent.memory.title")}</p>
+            <p className="text-xs text-muted-foreground">{t("agent.memory.description")}</p>
+            <p className="text-xs text-muted-foreground">
+              {memoryCount == null
+                ? t("agent.memory.none")
+                : t("agent.memory.count", { count: memoryCount })}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={memoryBusy}
+                onClick={() => {
+                  const root = getGitWorkspaceRoot() || collectionsFolderPath.trim();
+                  if (!root) {
+                    toast.error(t("agent.memory.none"));
+                    return;
+                  }
+                  setMemoryBusy(true);
+                  void reindexAgentMemory(root)
+                    .then((count) => {
+                      setMemoryCount(count);
+                      toast.success(t("agent.memory.count", { count }));
+                    })
+                    .catch((error) =>
+                      toast.error(error instanceof Error ? error.message : String(error)),
+                    )
+                    .finally(() => setMemoryBusy(false));
+                }}
+              >
+                {t("agent.memory.refresh")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={memoryBusy}
+                onClick={() => {
+                  const root = getGitWorkspaceRoot() || collectionsFolderPath.trim();
+                  if (!root) {
+                    toast.error(t("agent.memory.none"));
+                    return;
+                  }
+                  setMemoryBusy(true);
+                  void clearLocalAgentMemory(root)
+                    .then((count) => {
+                      toast.success(t("agent.memory.cleared", { count }));
+                      return refreshMemoryCount();
+                    })
+                    .catch((error) =>
+                      toast.error(error instanceof Error ? error.message : String(error)),
+                    )
+                    .finally(() => setMemoryBusy(false));
+                }}
+              >
+                {t("agent.memory.clearLocal")}
+              </Button>
+            </div>
+          </div>
           <SettingRow
             title={t("agent.settings.provider")}
             description={t("agent.settings.providerSoon")}

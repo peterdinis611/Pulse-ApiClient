@@ -211,6 +211,8 @@ def cmd_agent(args: argparse.Namespace) -> int:
 
 
 def cmd_agent_memory(args: argparse.Namespace) -> int:
+    import os
+
     from pulse.agent import run_agent
     from pulse.memory import delete_fact, get_fact, list_facts, upsert_fact
     from pulse.workspace import workspace_root
@@ -965,7 +967,7 @@ def main(argv: list[str] | None = None) -> int:
 
     agent = sub.add_parser(
         "agent",
-        help="Local intent router (no LLM): cURL, SSE, workspace status/history, GraphQL summarize",
+        help="Local intent router (no LLM): cURL, SSE, workspace status/history, memory, GraphQL summarize",
     )
     agent.add_argument(
         "utterance",
@@ -981,6 +983,31 @@ def main(argv: list[str] | None = None) -> int:
     agent.add_argument("--show-data", action="store_true", help="Also print structured data after markdown")
     agent.add_argument("--no-history", action="store_true", help="Do not append to .pulse/history.jsonl")
     agent.set_defaults(func=cmd_agent)
+
+    agent_mem = sub.add_parser("agent-memory", help="Structured agent memory (facts/preferences)")
+    agent_mem_sub = agent_mem.add_subparsers(dest="memory_action", required=True)
+    mem_list = agent_mem_sub.add_parser("list", help="List remembered facts")
+    mem_list.add_argument("--workspace")
+    mem_list.add_argument("--json", action="store_true")
+    mem_list.set_defaults(func=cmd_agent_memory, memory_action="list")
+    mem_get = agent_mem_sub.add_parser("get", help="Get a fact by key")
+    mem_get.add_argument("key")
+    mem_get.add_argument("--workspace")
+    mem_get.add_argument("--json", action="store_true")
+    mem_get.set_defaults(func=cmd_agent_memory, memory_action="get")
+    mem_set = agent_mem_sub.add_parser("set", help="Remember key=value")
+    mem_set.add_argument("key")
+    mem_set.add_argument("value")
+    mem_set.add_argument("--workspace")
+    mem_set.add_argument("--local", action="store_true", help="Store in gitignored local memory")
+    mem_set.add_argument("--note")
+    mem_set.add_argument("--json", action="store_true")
+    mem_set.set_defaults(func=cmd_agent_memory, memory_action="set")
+    mem_forget = agent_mem_sub.add_parser("forget", help="Delete a fact by key")
+    mem_forget.add_argument("key")
+    mem_forget.add_argument("--workspace")
+    mem_forget.add_argument("--json", action="store_true")
+    mem_forget.set_defaults(func=cmd_agent_memory, memory_action="forget")
 
     diff = sub.add_parser("diff", help="Unified diff between two JSON values or files")
     diff.add_argument("left")

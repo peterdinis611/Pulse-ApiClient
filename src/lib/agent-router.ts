@@ -1,5 +1,6 @@
 /** Local intent router for the in-app Pulse agent (no LLM). */
 
+import { parseRememberPair } from "@/lib/agent-memory";
 import type { AgentCapability, AgentSettings } from "@/lib/agent-settings";
 import { AGENT_CAPABILITIES, loadAgentSettings } from "@/lib/agent-settings";
 
@@ -13,6 +14,10 @@ export type AgentIntent =
   | { kind: "run_collection" }
   | { kind: "graphql_summarize" }
   | { kind: "sse_parse"; text: string }
+  | { kind: "remember"; key: string; value: string; scope: "workspace" | "local" }
+  | { kind: "recall"; query: string }
+  | { kind: "forget"; key: string }
+  | { kind: "memory_list" }
   | { kind: "unknown"; input: string };
 
 const CURL_BLOCK = /```(?:bash|sh|shell|zsh)?\s*([\s\S]*?curl[\s\S]*?)```/i;
@@ -92,6 +97,41 @@ export function routeAgentInput(raw: string): AgentIntent {
   if (/graphql\s+(summarize|schema|introspect)/.test(quick) || quick === "summarize schema") {
     return { kind: "graphql_summarize" };
   }
+  if (
+    quick === "quick:memory" ||
+    quick === "list memory" ||
+    quick === "memory list" ||
+    quick === "show memory"
+  ) {
+    return { kind: "memory_list" };
+  }
+  if (/^remember\s+/.test(quick)) {
+    const rest = input.replace(/^remember\s+/i, "").trim();
+    let scope: "workspace" | "local" = "workspace";
+    const body = rest
+      .split(/\s+/)
+      .filter((part) => {
+        const p = part.toLowerCase();
+        if (p === "--local" || p === "--scope=local" || p === "scope=local") {
+          scope = "local";
+          return false;
+        }
+        return true;
+      })
+      .join(" ");
+    const pair = parseRememberPair(body);
+    if (pair) return { kind: "remember", key: pair.key, value: pair.value, scope };
+    return { kind: "unknown", input: "Usage: remember key=value  (optional --local)" };
+  }
+  if (/^(?:recall|what\s+do\s+you\s+remember\s+about)\s+/.test(quick)) {
+    const query = input
+      .replace(/^(?:recall|what\s+do\s+you\s+remember\s+about)\s+/i, "")
+      .trim();
+    return { kind: "recall", query };
+  }
+  if (/^forget\s+/.test(quick)) {
+    return { kind: "forget", key: input.replace(/^forget\s+/i, "").trim() };
+  }
 
   const curl = extractCurl(input);
   if (curl || quick === "quick:curl" || /import\s+curl/.test(quick)) {
@@ -119,6 +159,8 @@ const HELP_LINES: Record<AgentCapability, string> = {
   graphql_summarize:
     "• **GraphQL summarize** — summarize introspection body on the active tab",
   sse_parse: "• **Parse SSE** — paste an SSE document",
+  memory:
+    "• **Memory** — `remember key=value`, `recall key`, `forget key`, `list memory`",
 };
 
 export function buildAgentHelpText(settings: AgentSettings = loadAgentSettings()): string {

@@ -14,6 +14,7 @@ export const AGENT_CAPABILITIES = [
   "run_collection",
   "graphql_summarize",
   "sse_parse",
+  "memory",
 ] as const;
 
 export type AgentCapability = (typeof AGENT_CAPABILITIES)[number];
@@ -139,6 +140,14 @@ export function isAgentCapabilityEnabled(
 export function capabilityForIntent(
   kind: string,
 ): AgentCapability | null {
+  if (
+    kind === "remember" ||
+    kind === "recall" ||
+    kind === "forget" ||
+    kind === "memory_list"
+  ) {
+    return "memory";
+  }
   if ((AGENT_CAPABILITIES as readonly string[]).includes(kind)) {
     return kind as AgentCapability;
   }

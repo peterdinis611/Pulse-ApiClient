@@ -17,11 +17,12 @@ use pulse_core::simple_http::send_once;
 use pulse_core::types::EnvVariable;
 use pulse_core::workspace_fs::load_workspace;
 use pulse_core::{
-    breaking_diff, collect_sse, compare_to_schema, init_workspace, migrate_pulse_json_dumps,
-    parse_sse_text, routes_from_saved_requests, run_collection_with_progress, run_http_tests,
-    run_pre_request_script_with_env, start_mock_server_with_delay, substitute_variables,
-    CollectionRunInput, CollectionRunStep, HttpRequestPayload, HttpResponsePayload, MockRoute,
-    MockServer, SseCollectOptions,
+    breaking_diff, collect_sse, compare_to_schema, delete_fact, get_fact, init_workspace, list_facts,
+    migrate_pulse_json_dumps, parse_sse_text, routes_from_saved_requests,
+    run_collection_with_progress, run_http_tests, run_pre_request_script_with_env, search_facts,
+    start_mock_server_with_delay, substitute_variables, upsert_fact, CollectionRunInput,
+    CollectionRunStep, HttpRequestPayload, HttpResponsePayload, MemoryScope, MockRoute, MockServer,
+    SseCollectOptions, UpsertFactInput,
 };
 use std::sync::Mutex;
 
@@ -459,6 +460,71 @@ fn run_agent_json(
 }
 
 #[pyfunction]
+#[pyo3(signature = (workspace, scope=None))]
+fn agent_memory_list_json(workspace: String, scope: Option<String>) -> PyResult<String> {
+    let scope = scope.as_deref().and_then(MemoryScope::parse);
+    let facts = list_facts(&workspace, scope).map_err(py_err)?;
+    serde_json::to_string(&facts).map_err(py_err)
+}
+
+#[pyfunction]
+#[pyo3(signature = (workspace, key, scope=None))]
+fn agent_memory_get_json(
+    workspace: String,
+    key: String,
+    scope: Option<String>,
+) -> PyResult<String> {
+    let scope = scope.as_deref().and_then(MemoryScope::parse);
+    let fact = get_fact(&workspace, &key, scope).map_err(py_err)?;
+    serde_json::to_string(&fact).map_err(py_err)
+}
+
+#[pyfunction]
+#[pyo3(signature = (workspace, key, value, scope=None, source=None, note=None))]
+fn agent_memory_upsert_json(
+    workspace: String,
+    key: String,
+    value: String,
+    scope: Option<String>,
+    source: Option<String>,
+    note: Option<String>,
+) -> PyResult<String> {
+    let scope = MemoryScope::parse(scope.as_deref().unwrap_or("workspace"))
+        .unwrap_or(MemoryScope::Workspace);
+    let source_owned = source.unwrap_or_else(|| "cli".into());
+    let fact = upsert_fact(
+        &workspace,
+        UpsertFactInput {
+            key: &key,
+            value: &value,
+            scope,
+            source: &source_owned,
+            tags: Vec::new(),
+            note: note.as_deref(),
+        },
+    )
+    .map_err(py_err)?;
+    serde_json::to_string(&fact).map_err(py_err)
+}
+
+#[pyfunction]
+#[pyo3(signature = (workspace, key, scope=None))]
+fn agent_memory_delete_json(
+    workspace: String,
+    key: String,
+    scope: Option<String>,
+) -> PyResult<bool> {
+    let scope = scope.as_deref().and_then(MemoryScope::parse);
+    delete_fact(&workspace, &key, scope).map_err(py_err)
+}
+
+#[pyfunction]
+fn agent_memory_search_json(workspace: String, query: String) -> PyResult<String> {
+    let facts = search_facts(&workspace, &query).map_err(py_err)?;
+    serde_json::to_string(&facts).map_err(py_err)
+}
+
+#[pyfunction]
 fn format_curl_json(payload_json: String) -> PyResult<String> {
     let payload: HttpRequestPayload = serde_json::from_str(&payload_json).map_err(py_err)?;
     Ok(pulse_core::payload_to_curl(&payload))
@@ -492,6 +558,11 @@ fn pulse_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parse_curl_json, m)?)?;
     m.add_function(wrap_pyfunction!(format_curl_json, m)?)?;
     m.add_function(wrap_pyfunction!(run_agent_json, m)?)?;
+    m.add_function(wrap_pyfunction!(agent_memory_list_json, m)?)?;
+    m.add_function(wrap_pyfunction!(agent_memory_get_json, m)?)?;
+    m.add_function(wrap_pyfunction!(agent_memory_upsert_json, m)?)?;
+    m.add_function(wrap_pyfunction!(agent_memory_delete_json, m)?)?;
+    m.add_function(wrap_pyfunction!(agent_memory_search_json, m)?)?;
     m.add_function(wrap_pyfunction!(mock_start_json, m)?)?;
     m.add_function(wrap_pyfunction!(mock_stop, m)?)?;
     Ok(())
