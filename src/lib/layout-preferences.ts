@@ -1,6 +1,6 @@
 import { readStorageItem, writeStorageItem } from "./app-config";
 
-export type HomeView = "overview" | "request";
+export type HomeView = "overview" | "request" | "agent";
 
 export type LayoutPreferences = {
   explorerCollapsed: boolean;
@@ -31,7 +31,7 @@ export const WORKSPACE_SPLIT_RATIO_DEFAULT = 52;
 export const HOME_VIEW_DEFAULT: HomeView = "overview";
 
 export function isHomeView(value: unknown): value is HomeView {
-  return value === "overview" || value === "request";
+  return value === "overview" || value === "request" || value === "agent";
 }
 
 const STORAGE_SUFFIX = "layout-v2";

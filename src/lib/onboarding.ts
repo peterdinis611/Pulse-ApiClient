@@ -35,5 +35,5 @@ export function notifyOnboardingCompleted(): void {
   window.dispatchEvent(new Event(ONBOARDING_COMPLETED_EVENT));
 }
 
-export const ONBOARDING_STEPS = ["language", "theme", "workspace"] as const;
+export const ONBOARDING_STEPS = ["language", "theme", "workspace", "agent"] as const;
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];

@@ -76,10 +76,11 @@ import {
   saveLayoutPreferences,
   type HomeView,
 } from "@/lib/layout-preferences";
+import { AgentCapabilitiesPanel } from "@/components/AgentCapabilitiesPanel";
 import {
-  loadAgentLlmSettings,
-  saveAgentLlmSettings,
-  type AgentLlmSettings,
+  loadAgentSettings,
+  saveAgentSettings,
+  type AgentSettings,
 } from "@/lib/agent-settings";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/useLocale";
@@ -301,7 +302,7 @@ export function SettingsView() {
     path: "/",
   });
   const [editingCookieKey, setEditingCookieKey] = useState<string | null>(null);
-  const [agentLlm, setAgentLlm] = useState<AgentLlmSettings>(() => loadAgentLlmSettings());
+  const [agentSettings, setAgentSettings] = useState<AgentSettings>(() => loadAgentSettings());
   const [activeSection, setActiveSection] = useState<string>(SETTINGS_NAV[0].id);
 
   const scrollToSection = (id: string) => {
@@ -1225,16 +1226,31 @@ export function SettingsView() {
           title={t("agent.settings.title")}
           description={t("agent.settings.description")}
         >
+          <AgentCapabilitiesPanel
+            settings={agentSettings}
+            defaultOpen
+            onChange={(next) => {
+              setAgentSettings(next);
+              saveAgentSettings(next);
+              if (!next.enabled && mainView === "agent") {
+                setMainView(homeView === "agent" ? "overview" : homeView);
+              }
+              if (!next.enabled && homeView === "agent") {
+                setHomeViewState("overview");
+                saveLayoutPreferences({ homeView: "overview" });
+              }
+            }}
+          />
           <SettingRow
             title={t("agent.settings.provider")}
             description={t("agent.settings.providerSoon")}
           >
             <Select
-              value={agentLlm.provider}
+              value={agentSettings.provider}
               onValueChange={(value) =>
-                setAgentLlm((prev) => ({
+                setAgentSettings((prev) => ({
                   ...prev,
-                  provider: value as AgentLlmSettings["provider"],
+                  provider: value as AgentSettings["provider"],
                 }))
               }
             >
@@ -1260,9 +1276,9 @@ export function SettingsView() {
               type="password"
               autoComplete="off"
               className="max-w-md"
-              value={agentLlm.apiKey}
+              value={agentSettings.apiKey}
               onChange={(event) =>
-                setAgentLlm((prev) => ({ ...prev, apiKey: event.target.value }))
+                setAgentSettings((prev) => ({ ...prev, apiKey: event.target.value }))
               }
               placeholder="sk-…"
             />
@@ -1270,11 +1286,11 @@ export function SettingsView() {
           <Button
             type="button"
             onClick={() => {
-              saveAgentLlmSettings(agentLlm);
+              saveAgentSettings(agentSettings);
               toast.success(t("agent.settings.saved"));
             }}
           >
-            Save agent settings
+            {t("agent.settings.save")}
           </Button>
         </SettingsSection>
 
@@ -1287,8 +1303,26 @@ export function SettingsView() {
             <p className="text-sm font-medium">{t("onboarding.workspace.title")}</p>
             <p className="text-xs text-muted-foreground">{t("onboarding.workspace.hint")}</p>
             <div className="grid grid-cols-2 gap-2">
-              {(["overview", "request"] as const).map((view) => {
+              {(
+                [
+                  "overview",
+                  "request",
+                  ...(agentSettings.enabled ? (["agent"] as const) : []),
+                ] as HomeView[]
+              ).map((view) => {
                 const active = homeView === view;
+                const labelKey =
+                  view === "overview"
+                    ? "onboarding.home.overview"
+                    : view === "request"
+                      ? "onboarding.home.request"
+                      : "onboarding.home.agent";
+                const hintKey =
+                  view === "overview"
+                    ? "onboarding.home.overviewHint"
+                    : view === "request"
+                      ? "onboarding.home.requestHint"
+                      : "onboarding.home.agentHint";
                 return (
                   <button
                     key={view}
@@ -1304,13 +1338,9 @@ export function SettingsView() {
                         : "border-border/80 hover:border-primary/35",
                     )}
                   >
-                    <span className="block text-sm font-medium">
-                      {view === "overview" ? t("onboarding.home.overview") : t("onboarding.home.request")}
-                    </span>
+                    <span className="block text-sm font-medium">{t(labelKey)}</span>
                     <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                      {view === "overview"
-                        ? t("onboarding.home.overviewHint")
-                        : t("onboarding.home.requestHint")}
+                      {t(hintKey)}
                     </span>
                   </button>
                 );

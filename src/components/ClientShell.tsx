@@ -12,6 +12,7 @@ import { ResizableExplorer } from "./ResizableExplorer";
 import { StatusBar } from "./StatusBar";
 import { ViewHeader } from "./ViewHeader";
 import { APP_NAME } from "@/lib/app-config";
+import { useAgentSettings } from "@/hooks/useAgentSettings";
 import { useWorkspaceHotkeys } from "@/hooks/useWorkspaceHotkeys";
 import { useI18n } from "@/hooks/useLocale";
 import { getCurrentWindowLabel, setWindowTitle } from "@/lib/window-manager";
@@ -42,11 +43,18 @@ const SettingsView = lazy(() =>
 );
 
 export function ClientShell() {
-  const { mainView, consoleOpen, tabs, activeTabId } = useApp();
+  const { mainView, consoleOpen, tabs, activeTabId, setMainView } = useApp();
+  const agentSettings = useAgentSettings();
   const { t, version } = useI18n();
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   useWorkspaceHotkeys({ onCommandPalette: () => setPaletteOpen((open) => !open) });
+
+  useEffect(() => {
+    if (mainView === "agent" && !agentSettings.enabled) {
+      setMainView("overview");
+    }
+  }, [agentSettings.enabled, mainView, setMainView]);
 
   useEffect(() => {
     void (async () => {

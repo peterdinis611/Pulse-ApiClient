@@ -1,5 +1,6 @@
 import { FEATURE_DOC_SECTIONS } from "@/lib/feature-docs";
 import { fuzzyRankIds, type SearchDocument } from "@/lib/fuzzy-search";
+import { isAgentEnabled } from "@/lib/agent-settings";
 import type { CollectionGroup, Environment, SavedRequest } from "@/types";
 
 export type CommandPaletteKind =
@@ -234,7 +235,11 @@ export function buildCommandPaletteItems(input: {
     keywords: `${section.group} ${section.items.slice(0, 4).join(" ")}`,
   }));
 
-  return [...ACTIONS, ...VIEWS, ...settings, ...groups, ...envs, ...requests, ...docs];
+  const views = isAgentEnabled()
+    ? VIEWS
+    : VIEWS.filter((item) => item.view !== "agent");
+
+  return [...ACTIONS, ...views, ...settings, ...groups, ...envs, ...requests, ...docs];
 }
 
 export function filterCommandPaletteItems(

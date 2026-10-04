@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { AlertTriangle, Copy, RefreshCw, RotateCcw, Zap } from "lucide-react";
+import { AlertTriangle, Copy, RefreshCw, RotateCcw } from "lucide-react";
 import { APP_NAME } from "@/lib/app-config";
 import { formatErrorDetails, getErrorPresentation, type ErrorPresentation } from "@/lib/error-presentation";
 import { applyTheme, cycleThemeMode, getThemeDefinition, loadThemeMode, saveThemeMode, type ThemeMode } from "@/lib/theme";
 import { toast } from "@/lib/toast";
+import { PulseLogoBadge } from "@/components/PulseLogo";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -52,9 +53,7 @@ export function AppErrorScreen({ error, presentation, onRetry }: AppErrorScreenP
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <header className="flex items-center justify-between border-b border-border px-6 py-4">
         <div className="flex items-center gap-3">
-          <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Zap className="size-4" />
-          </div>
+          <PulseLogoBadge className="rounded-lg shadow-none" title={APP_NAME} />
           <div>
             <p className="text-sm font-semibold">{APP_NAME}</p>
             <p className="text-xs text-muted-foreground">Recovery mode</p>

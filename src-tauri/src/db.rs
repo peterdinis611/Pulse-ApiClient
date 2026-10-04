@@ -436,6 +436,14 @@ impl DbState {
         let conn = self.user_conn.lock().map_err(|e| e.to_string())?;
         history::clear_history(&conn)
     }
+
+    pub fn with_user_conn<T>(
+        &self,
+        f: impl FnOnce(&Connection) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let conn = self.user_conn.lock().map_err(|e| e.to_string())?;
+        f(&conn)
+    }
 }
 
 fn run_auth_migration(conn: &Connection) -> Result<(), String> {
@@ -518,6 +526,7 @@ fn run_user_migration(conn: &Connection) -> Result<(), String> {
         [],
     );
     crate::workspace_store::migrate_workspace_tables(conn)?;
+    crate::agent_memory::migrate_agent_memory_table(conn)?;
     Ok(())
 }
 

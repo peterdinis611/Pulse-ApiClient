@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod agent_memory;
 pub mod collection_run;
 pub mod contract;
 pub mod curl;
@@ -24,6 +25,10 @@ pub mod workspace_fs;
 pub use agent::{
     execute_agent_intent, route_agent_input, run_agent, AgentExecuteOptions, AgentIntent, AgentResult,
     AGENT_HELP_TEXT,
+};
+pub use agent_memory::{
+    delete_fact, format_facts_markdown, get_fact, list_facts, parse_remember_pair, search_facts,
+    upsert_fact, local_facts_path, workspace_facts_path, MemoryFact, MemoryScope, UpsertFactInput,
 };
 pub use collection_run::{
     run_collection, run_collection_with_progress, CollectionRunInput, CollectionRunResult, CollectionRunStep,

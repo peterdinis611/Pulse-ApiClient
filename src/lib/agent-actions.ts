@@ -8,7 +8,13 @@ import {
   listGitPending,
 } from "@/lib/git-workspace";
 import type { AgentIntent } from "@/lib/agent-router";
-import { AGENT_HELP_TEXT } from "@/lib/agent-router";
+import { buildAgentHelpText } from "@/lib/agent-router";
+import {
+  capabilityForIntent,
+  isAgentCapabilityEnabled,
+  isAgentEnabled,
+  loadAgentSettings,
+} from "@/lib/agent-settings";
 import type {
   ApiRequest,
   CollectionGroup,
@@ -108,12 +114,24 @@ export async function runAgentIntent(
   intent: AgentIntent,
   ctx: AgentActionContext,
 ): Promise<AgentActionResult> {
+  const settings = loadAgentSettings();
+  if (!isAgentEnabled(settings)) {
+    return { markdown: buildAgentHelpText(settings) };
+  }
+
+  const capability = capabilityForIntent(intent.kind);
+  if (capability && !isAgentCapabilityEnabled(capability, settings)) {
+    return {
+      markdown: `**${capability}** is turned off. Expand agent capabilities in **Settings → Agent / LLM**.`,
+    };
+  }
+
   switch (intent.kind) {
     case "help":
-      return { markdown: AGENT_HELP_TEXT };
+      return { markdown: buildAgentHelpText(settings) };
     case "unknown":
       return {
-        markdown: `${intent.input}\n\n---\n${AGENT_HELP_TEXT}`,
+        markdown: `${intent.input}\n\n---\n${buildAgentHelpText(settings)}`,
       };
     case "import_curl": {
       try {
@@ -272,7 +290,7 @@ export async function runAgentIntent(
       return { markdown: lines.join("\n") };
     }
     default:
-      return { markdown: AGENT_HELP_TEXT };
+      return { markdown: buildAgentHelpText(settings) };
   }
 }
 
@@ -280,6 +298,9 @@ export async function confirmAgentAction(
   kind: AgentConfirmKind,
   ctx: AgentActionContext,
 ): Promise<AgentActionResult> {
+  if (!isAgentEnabled() || (kind === "run_collection" && !isAgentCapabilityEnabled("run_collection"))) {
+    return { markdown: buildAgentHelpText() };
+  }
   if (kind === "run_collection") {
     const collectionId = ctx.activeCollectionId;
     const group = ctx.collectionGroups.find((item) => item.id === collectionId);

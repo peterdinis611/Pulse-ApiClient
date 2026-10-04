@@ -1,5 +1,8 @@
 /** Local intent router for the in-app Pulse agent (no LLM). */
 
+import type { AgentCapability, AgentSettings } from "@/lib/agent-settings";
+import { AGENT_CAPABILITIES, loadAgentSettings } from "@/lib/agent-settings";
+
 export type AgentIntent =
   | { kind: "help" }
   | { kind: "import_curl"; curl: string }
@@ -105,15 +108,45 @@ export function routeAgentInput(raw: string): AgentIntent {
   return { kind: "unknown", input };
 }
 
-export const AGENT_HELP_TEXT = `I understand these intents (local, no LLM yet):
+const HELP_LINES: Record<AgentCapability, string> = {
+  import_curl: "• **Import cURL** — paste a curl command → opens a request tab",
+  explain_response: "• **Explain last response** — summarize status, body, GraphQL errors",
+  explain_tests: "• **Explain test failures** — walk the last test run",
+  workspace_status: "• **Workspace status** — Git workspace root + pending mutations",
+  workspace_history:
+    "• **Agent history** — recent agent/MCP history from `.pulse/history.jsonl`",
+  run_collection: "• **Run active collection** — needs confirm (mutating requests)",
+  graphql_summarize:
+    "• **GraphQL summarize** — summarize introspection body on the active tab",
+  sse_parse: "• **Parse SSE** — paste an SSE document",
+};
 
-• **Import cURL** — paste a curl command → opens a request tab
-• **Explain last response** — summarize status, body, GraphQL errors
-• **Explain test failures** — walk the last test run
-• **Workspace status** — Git workspace root + pending mutations
-• **Agent history** — recent agent/MCP history from \`.pulse/history.jsonl\`
-• **Run active collection** — needs confirm (mutating requests)
-• **GraphQL summarize** — summarize introspection body on the active tab
-• **Parse SSE** — paste an SSE document
+export function buildAgentHelpText(settings: AgentSettings = loadAgentSettings()): string {
+  if (!settings.enabled) {
+    return "The in-app agent is **turned off**. Enable it in **Settings → Agent / LLM**.";
+  }
+  const lines = AGENT_CAPABILITIES.filter((id) => settings.capabilities[id]).map(
+    (id) => HELP_LINES[id],
+  );
+  if (lines.length === 0) {
+    return "The agent is on, but every capability is disabled. Expand capabilities in **Settings → Agent / LLM**.";
+  }
+  return [
+    "I understand these intents (local, no LLM yet):",
+    "",
+    ...lines,
+    "",
+    "Or use the quick-action chips below.",
+  ].join("\n");
+}
 
-Or use the quick-action chips below.`;
+/** @deprecated Prefer buildAgentHelpText() so disabled capabilities stay hidden. */
+export const AGENT_HELP_TEXT = buildAgentHelpText({
+  enabled: true,
+  capabilities: Object.fromEntries(AGENT_CAPABILITIES.map((id) => [id, true])) as Record<
+    AgentCapability,
+    boolean
+  >,
+  provider: "none",
+  apiKey: "",
+});

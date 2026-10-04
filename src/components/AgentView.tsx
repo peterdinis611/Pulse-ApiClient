@@ -4,6 +4,7 @@ import { PageShell } from "@/components/PageShell";
 import { Button } from "@/components/ui/button";
 import { Panel, PanelBody, PanelHeader } from "@/components/ui/panel";
 import { Textarea } from "@/components/ui/textarea";
+import { useAgentSettings } from "@/hooks/useAgentSettings";
 import { useT } from "@/hooks/useLocale";
 import {
   confirmAgentAction,
@@ -13,6 +14,7 @@ import {
   type AgentConfirmKind,
 } from "@/lib/agent-actions";
 import { routeAgentInput } from "@/lib/agent-router";
+import type { AgentCapability } from "@/lib/agent-settings";
 import type { MessageKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/machines";
@@ -29,13 +31,17 @@ type ChatMessage = {
   busy?: boolean;
 };
 
-const QUICK_ACTIONS: Array<{ id: string; labelKey: MessageKey }> = [
-  { id: "quick:curl", labelKey: "agent.quick.curl" },
-  { id: "quick:explain", labelKey: "agent.quick.explain" },
-  { id: "quick:workspace", labelKey: "agent.quick.workspace" },
-  { id: "quick:run", labelKey: "agent.quick.run" },
-  { id: "quick:tests", labelKey: "agent.quick.tests" },
-  { id: "quick:history", labelKey: "agent.quick.history" },
+const QUICK_ACTIONS: Array<{
+  id: string;
+  labelKey: MessageKey;
+  capability: AgentCapability;
+}> = [
+  { id: "quick:curl", labelKey: "agent.quick.curl", capability: "import_curl" },
+  { id: "quick:explain", labelKey: "agent.quick.explain", capability: "explain_response" },
+  { id: "quick:workspace", labelKey: "agent.quick.workspace", capability: "workspace_status" },
+  { id: "quick:run", labelKey: "agent.quick.run", capability: "run_collection" },
+  { id: "quick:tests", labelKey: "agent.quick.tests", capability: "explain_tests" },
+  { id: "quick:history", labelKey: "agent.quick.history", capability: "workspace_history" },
 ];
 
 function renderAgentMarkdown(text: string) {
@@ -95,6 +101,7 @@ function nextId(prefix: string) {
 
 export function AgentView() {
   const t = useT();
+  const agentSettings = useAgentSettings();
   const {
     request,
     response,
@@ -111,6 +118,9 @@ export function AgentView() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [working, setWorking] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const quickActions = QUICK_ACTIONS.filter(
+    (action) => agentSettings.enabled && agentSettings.capabilities[action.capability],
+  );
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -200,6 +210,32 @@ export function AgentView() {
     setMainView("request");
   };
 
+  if (!agentSettings.enabled) {
+    return (
+      <PageShell resetKey="agent-off" width="wide">
+        <div className="docs-masthead" data-tour="agent">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+              <Bot className="size-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-caption text-muted-foreground">{t("agent.eyebrow")}</p>
+              <h1 className="text-display mt-1 text-balance">{t("agent.disabled.title")}</h1>
+              <p className="mt-2 max-w-3xl text-body text-muted-foreground">
+                {t("agent.disabled.description")}
+              </p>
+              <div className="mt-4">
+                <Button type="button" onClick={() => setMainView("settings")}>
+                  {t("agent.settings.nav")}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </PageShell>
+    );
+  }
+
   return (
     <PageShell resetKey="agent" width="wide">
       <div className="docs-masthead" data-tour="agent">
@@ -239,7 +275,7 @@ export function AgentView() {
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        {QUICK_ACTIONS.map((action) => (
+        {quickActions.map((action) => (
           <Button
             key={action.id}
             type="button"

@@ -210,6 +210,57 @@ def cmd_agent(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_agent_memory(args: argparse.Namespace) -> int:
+    from pulse.agent import run_agent
+    from pulse.memory import delete_fact, get_fact, list_facts, upsert_fact
+    from pulse.workspace import workspace_root
+
+    root = args.workspace or os.environ.get("PULSE_WORKSPACE") or workspace_root()
+    if not root:
+        print("No workspace root. Set PULSE_WORKSPACE or pass --workspace.", file=sys.stderr)
+        return 1
+    action = getattr(args, "memory_action", None) or "list"
+    try:
+        if action == "list":
+            if args.json:
+                print(json.dumps({"facts": list_facts(root)}, indent=2))
+            else:
+                result = run_agent("list memory", workspace=str(root), record_history=False)
+                print(result.get("markdown") or "")
+            return 0
+        if action == "get":
+            fact = get_fact(root, args.key)
+            if not fact:
+                print(f"No memory found for `{args.key}`", file=sys.stderr)
+                return 1
+            print(json.dumps(fact, indent=2) if args.json else f"{fact['key']}={fact['value']}")
+            return 0
+        if action == "set":
+            scope = "local" if args.local else "workspace"
+            fact = upsert_fact(
+                root,
+                key=args.key,
+                value=args.value,
+                scope=scope,
+                source="cli",
+                note=args.note,
+            )
+            print(json.dumps(fact, indent=2) if args.json else f"Remembered {fact['key']}={fact['value']}")
+            return 0
+        if action == "forget":
+            removed = delete_fact(root, args.key)
+            if args.json:
+                print(json.dumps({"key": args.key, "removed": removed}, indent=2))
+            else:
+                print(f"Forgot `{args.key}`." if removed else f"No memory found for `{args.key}`.")
+            return 0 if removed else 1
+    except Exception as error:  # noqa: BLE001
+        print(str(error), file=sys.stderr)
+        return 1
+    print(f"Unknown memory action: {action}", file=sys.stderr)
+    return 1
+
+
 def cmd_diff(args: argparse.Namespace) -> int:
     left_path = Path(args.left)
     right_path = Path(args.right)

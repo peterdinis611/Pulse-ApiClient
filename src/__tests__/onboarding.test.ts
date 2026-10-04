@@ -70,8 +70,8 @@ describe("onboarding", () => {
     expect(localStorage.getItem("pulse-api-client/onboarding-complete")).toBe("1");
   });
 
-  it("walks language, theme, then workspace", () => {
-    expect(ONBOARDING_STEPS).toEqual(["language", "theme", "workspace"]);
+  it("walks language, theme, workspace, then agent", () => {
+    expect(ONBOARDING_STEPS).toEqual(["language", "theme", "workspace", "agent"]);
   });
 
   it("replays from Settings or the command palette", () => {

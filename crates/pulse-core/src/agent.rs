@@ -6,6 +6,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::OnceLock;
 
+use crate::agent_memory::{
+    delete_fact, format_facts_markdown, get_fact, list_facts, parse_remember_pair, search_facts,
+    upsert_fact, MemoryScope, UpsertFactInput,
+};
 use crate::curl::curl_to_payload;
 use crate::graphql::summarize_schema;
 use crate::sse::parse_sse_text;
@@ -25,6 +29,14 @@ pub enum AgentIntent {
     RunCollection,
     GraphqlSummarize,
     SseParse { text: String },
+    Remember {
+        key: String,
+        value: String,
+        scope: String,
+    },
+    Recall { query: String },
+    Forget { key: String },
+    MemoryList,
     Unknown { input: String },
 }
 
@@ -63,6 +75,7 @@ pub const AGENT_HELP_TEXT: &str = "I understand these intents (local, no LLM):
 • **Import cURL** — paste a curl command → JSON request payload
 • **Workspace status** — Git workspace root + pending mutations
 • **Agent history** — recent entries from `.pulse/history.jsonl`
+• **Memory** — `remember key=value`, `recall key`, `forget key`, `list memory`
 • **GraphQL summarize** — pass introspection/response body via `--body` / `body`
 • **Parse SSE** — paste an SSE document (event/data blocks)
 
@@ -70,7 +83,7 @@ Desktop-only (use the in-app Agent view):
 • Explain last response / test failures
 • Run active collection (needs confirm)
 
-Examples: `pulse agent \"workspace status\"` · `pulse agent 'curl https://…'`";
+Examples: `pulse agent \"workspace status\"` · `pulse agent 'remember env=staging'`";
 
 fn kind_name(intent: &AgentIntent) -> String {
     match intent {
@@ -83,6 +96,10 @@ fn kind_name(intent: &AgentIntent) -> String {
         AgentIntent::RunCollection => "run_collection".into(),
         AgentIntent::GraphqlSummarize => "graphql_summarize".into(),
         AgentIntent::SseParse { .. } => "sse_parse".into(),
+        AgentIntent::Remember { .. } => "remember".into(),
+        AgentIntent::Recall { .. } => "recall".into(),
+        AgentIntent::Forget { .. } => "forget".into(),
+        AgentIntent::MemoryList => "memory_list".into(),
         AgentIntent::Unknown { .. } => "unknown".into(),
     }
 }
@@ -167,6 +184,36 @@ fn parse_sse_re() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"parse\s+sse").unwrap())
 }
 
+fn remember_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"^remember\s+(.+)$").unwrap())
+}
+
+fn recall_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"^(?:recall|what\s+do\s+you\s+remember\s+about)\s+(.+)$").unwrap())
+}
+
+fn forget_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"^forget\s+(.+)$").unwrap())
+}
+
+fn require_workspace<'a>(opts: &'a AgentExecuteOptions<'_>) -> Result<&'a str, String> {
+    opts.workspace_root
+        .filter(|item| !item.is_empty())
+        .ok_or_else(|| "No workspace root. Set PULSE_WORKSPACE or pass workspace.".to_string())
+}
+
+fn known_facts_block(root: &str) -> String {
+    let facts = list_facts(root, None).unwrap_or_default();
+    if facts.is_empty() {
+        return String::new();
+    }
+    let top: Vec<_> = facts.into_iter().take(8).collect();
+    format!("\n\n---\n{}", format_facts_markdown(&top, "Known facts"))
+}
+
 fn extract_curl(input: &str) -> Option<String> {
     if let Some(caps) = curl_block_re().captures(input) {
         let block = caps.get(1)?.as_str().trim();
@@ -238,6 +285,48 @@ pub fn route_agent_input(raw: &str) -> AgentIntent {
     }
     if graphql_summarize_re().is_match(&quick) || quick == "summarize schema" {
         return AgentIntent::GraphqlSummarize;
+    }
+    if quick == "quick:memory"
+        || quick == "list memory"
+        || quick == "memory list"
+        || quick == "show memory"
+    {
+        return AgentIntent::MemoryList;
+    }
+    if remember_re().is_match(&quick) {
+        let rest = input
+            .strip_prefix("remember")
+            .or_else(|| input.strip_prefix("Remember"))
+            .unwrap_or("")
+            .trim();
+        let mut scope = "workspace".to_string();
+        let body = rest
+            .split_whitespace()
+            .filter(|part| {
+                let p = part.to_ascii_lowercase();
+                if p == "--local" || p == "--scope=local" || p == "scope=local" {
+                    scope = "local".into();
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        if let Some((key, value)) = parse_remember_pair(&body) {
+            return AgentIntent::Remember { key, value, scope };
+        }
+        return AgentIntent::Unknown {
+            input: "Usage: remember key=value  (optional --local)".into(),
+        };
+    }
+    if let Some(caps) = recall_re().captures(&quick) {
+        let query = caps.get(1).map(|m| m.as_str().trim()).unwrap_or("").to_string();
+        return AgentIntent::Recall { query };
+    }
+    if let Some(caps) = forget_re().captures(&quick) {
+        let key = caps.get(1).map(|m| m.as_str().trim()).unwrap_or("").to_string();
+        return AgentIntent::Forget { key };
     }
 
     if let Some(curl) = extract_curl(input) {
@@ -423,9 +512,13 @@ CLI and MCP support offline intents: cURL import, SSE parse, workspace status/hi
                 lines.push(format!("…+{} more", pending.len() - 12));
             }
             lines.push(format!("**Agent history entries:** {}", history.len()));
+            let memory_count = list_facts(root, None).map(|f| f.len()).unwrap_or(0);
+            lines.push(format!("**Memory facts:** {memory_count}"));
+            let mut markdown = lines.join("\n");
+            markdown.push_str(&known_facts_block(root));
             Ok(AgentResult {
                 kind,
-                markdown: lines.join("\n"),
+                markdown,
                 data: Some(status),
             })
         }
@@ -551,6 +644,96 @@ CLI and MCP support offline intents: cURL import, SSE parse, workspace status/hi
                 kind,
                 markdown: lines.join("\n"),
                 data: Some(serde_json::to_value(&events).map_err(|e| e.to_string())?),
+            })
+        }
+        AgentIntent::Remember { key, value, scope } => {
+            let root = require_workspace(opts)?;
+            let scope = MemoryScope::parse(scope).unwrap_or(MemoryScope::Workspace);
+            let fact = upsert_fact(
+                root,
+                UpsertFactInput {
+                    key,
+                    value,
+                    scope,
+                    source: opts.source,
+                    tags: Vec::new(),
+                    note: None,
+                },
+            )?;
+            record_history(
+                opts,
+                "remember",
+                json!({ "key": fact.key, "scope": fact.scope.as_str() }),
+            );
+            Ok(AgentResult {
+                kind,
+                markdown: format!(
+                    "Remembered `{}` = {} (`{}`).",
+                    fact.key,
+                    fact.value,
+                    fact.scope.as_str()
+                ),
+                data: Some(serde_json::to_value(&fact).map_err(|e| e.to_string())?),
+            })
+        }
+        AgentIntent::Recall { query } => {
+            let root = require_workspace(opts)?;
+            let q = query.trim();
+            if q.is_empty() {
+                return Ok(AgentResult {
+                    kind,
+                    markdown: "Usage: recall <key or search>".into(),
+                    data: None,
+                });
+            }
+            if let Some(exact) = get_fact(root, q, None)? {
+                record_history(opts, "recall", json!({ "key": exact.key }));
+                return Ok(AgentResult {
+                    kind,
+                    markdown: format!(
+                        "**{}** = {} `[{}]`{}",
+                        exact.key,
+                        exact.value,
+                        exact.scope.as_str(),
+                        exact
+                            .note
+                            .as_deref()
+                            .map(|n| format!("\n_{n}_"))
+                            .unwrap_or_default()
+                    ),
+                    data: Some(serde_json::to_value(&exact).map_err(|e| e.to_string())?),
+                });
+            }
+            let found = search_facts(root, q)?;
+            record_history(opts, "recall", json!({ "query": q, "count": found.len() }));
+            Ok(AgentResult {
+                kind,
+                markdown: format_facts_markdown(&found, &format!("Recall “{q}”")),
+                data: Some(json!({ "count": found.len(), "facts": found })),
+            })
+        }
+        AgentIntent::Forget { key } => {
+            let root = require_workspace(opts)?;
+            let removed = delete_fact(root, key, None)?;
+            record_history(opts, "forget", json!({ "key": key, "removed": removed }));
+            Ok(AgentResult {
+                kind,
+                markdown: if removed {
+                    format!("Forgot `{key}`.")
+                } else {
+                    format!("No memory found for `{key}`.")
+                },
+                data: Some(json!({ "key": key, "removed": removed })),
+            })
+        }
+        AgentIntent::MemoryList => {
+            let root = require_workspace(opts)?;
+            let facts = list_facts(root, None)?;
+            record_history(opts, "memory_list", json!({ "count": facts.len() }));
+            Ok(AgentResult {
+                kind,
+                markdown: format_facts_markdown(&facts, "Agent memory"),
+                data: Some(json!({ "count": facts.len(), "facts": facts })),
             })
         }
     }

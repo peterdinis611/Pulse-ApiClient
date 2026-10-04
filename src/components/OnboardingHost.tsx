@@ -1,12 +1,19 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check } from "lucide-react";
+import { AgentCapabilitiesPanel } from "@/components/AgentCapabilitiesPanel";
+import { PulseLogoBadge } from "@/components/PulseLogo";
 import { ThemePicker } from "@/components/ThemePicker";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useI18n } from "@/hooks/useLocale";
 import { useApp } from "@/machines";
 import type { LocalePreference } from "@/lib/i18n";
+import {
+  loadAgentSettings,
+  saveAgentSettings,
+  type AgentSettings,
+} from "@/lib/agent-settings";
 import {
   HOME_VIEW_DEFAULT,
   type HomeView,
@@ -23,6 +30,7 @@ import {
 import { isScreenshotMode } from "@/lib/screenshot-demo";
 import { cn } from "@/lib/utils";
 import { getResolvedLocale } from "@/lib/i18n";
+import { APP_NAME } from "@/lib/app-config";
 import "@/styles/onboarding.css";
 
 const LOCALE_OPTIONS: LocalePreference[] = ["system", "en", "sk"];
@@ -35,12 +43,18 @@ export function OnboardingHost() {
   const [step, setStep] = useState(0);
   const [homeView, setHomeView] = useState<HomeView>(HOME_VIEW_DEFAULT);
   const [hideExplorer, setHideExplorer] = useState(false);
+  const [agentSettings, setAgentSettings] = useState<AgentSettings>(() => loadAgentSettings());
 
-  useEffect(() => {
-    if (isScreenshotMode()) return;
+  const hydrate = () => {
     const layout = loadLayoutPreferences();
     setHomeView(layout.homeView);
     setHideExplorer(layout.explorerCollapsed);
+    setAgentSettings(loadAgentSettings());
+  };
+
+  useEffect(() => {
+    if (isScreenshotMode()) return;
+    hydrate();
     if (shouldShowOnboarding()) {
       setForced(false);
       setOpen(true);
@@ -49,9 +63,7 @@ export function OnboardingHost() {
 
   useEffect(() => {
     const onReplay = () => {
-      const layout = loadLayoutPreferences();
-      setHomeView(layout.homeView);
-      setHideExplorer(layout.explorerCollapsed);
+      hydrate();
       setStep(0);
       setForced(true);
       setOpen(true);
@@ -68,8 +80,11 @@ export function OnboardingHost() {
   };
 
   const finish = () => {
-    saveLayoutPreferences({ homeView, explorerCollapsed: hideExplorer });
-    setMainView(homeView);
+    const savedAgent = saveAgentSettings(agentSettings);
+    const nextHome =
+      homeView === "agent" && !savedAgent.enabled ? HOME_VIEW_DEFAULT : homeView;
+    saveLayoutPreferences({ homeView: nextHome, explorerCollapsed: hideExplorer });
+    setMainView(nextHome);
     window.setTimeout(() => setExplorerCollapsed(hideExplorer), 0);
     markOnboardingComplete();
     setOpen(false);
@@ -103,7 +118,10 @@ export function OnboardingHost() {
         className="onboarding"
       >
         <header className="onboarding__stamp">
-          <p className="onboarding__kicker">{t("onboarding.kicker")}</p>
+          <div className="onboarding__brand">
+            <PulseLogoBadge className="onboarding__logo" title={APP_NAME} />
+            <p className="onboarding__kicker">{t("onboarding.kicker")}</p>
+          </div>
           <p className="onboarding__progress">
             {t("onboarding.step", { current: step + 1, total })}
           </p>
@@ -195,6 +213,22 @@ export function OnboardingHost() {
                   <span className="onboarding__choice-label">{t("onboarding.home.request")}</span>
                   <span className="onboarding__choice-hint">{t("onboarding.home.requestHint")}</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setHomeView("agent")}
+                  className={cn(
+                    "onboarding__choice onboarding__choice--wide",
+                    homeView === "agent" && "onboarding__choice--active",
+                  )}
+                >
+                  <span className="onboarding__choice-code">03</span>
+                  <span className="onboarding__choice-label">{t("onboarding.home.agent")}</span>
+                  <span className="onboarding__choice-hint">
+                    {agentSettings.enabled
+                      ? t("onboarding.home.agentHint")
+                      : t("onboarding.home.agentOff")}
+                  </span>
+                </button>
               </div>
               <label className="onboarding__check">
                 <Checkbox
@@ -206,6 +240,18 @@ export function OnboardingHost() {
                   <span className="onboarding__check-hint">{t("onboarding.explorerHint")}</span>
                 </span>
               </label>
+            </section>
+          )}
+
+          {current === "agent" && (
+            <section className="onboarding__panel">
+              <h3 className="onboarding__panel-title">{t("onboarding.agent.title")}</h3>
+              <p className="onboarding__panel-hint">{t("onboarding.agent.hint")}</p>
+              <AgentCapabilitiesPanel
+                settings={agentSettings}
+                onChange={setAgentSettings}
+                defaultOpen
+              />
             </section>
           )}
         </div>

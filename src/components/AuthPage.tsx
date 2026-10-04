@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { LoaderCircle, Send, Shield, Zap } from "lucide-react";
+import { LoaderCircle, Send, Shield } from "lucide-react";
 import { useApp } from "@/machines";
 import {
   authErrorHint,
@@ -13,6 +13,7 @@ import {
 import { loadPersistedState } from "@/lib/storage";
 import { toast } from "@/lib/toast";
 import { APP_NAME } from "@/lib/app-config";
+import { PulseLogoBadge } from "@/components/PulseLogo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -88,9 +89,7 @@ export function AuthPage() {
     <div className="flex min-h-screen bg-background">
       <aside className="auth-brand-panel hidden w-[42%] max-w-xl flex-col justify-between border-r border-rail-border p-8 lg:flex">
         <div className="flex items-center gap-2.5">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-            <Zap className="size-4" />
-          </div>
+          <PulseLogoBadge className="size-8 rounded-lg shadow-sm" title={APP_NAME} />
           <span className="text-title">{APP_NAME}</span>
         </div>
 
@@ -126,9 +125,11 @@ export function AuthPage() {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="view-header flex h-11 items-center justify-between px-4 lg:px-6">
           <div className="flex items-center gap-2 lg:hidden">
-            <div className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <Zap className="size-3.5" />
-            </div>
+            <PulseLogoBadge
+              className="size-7 rounded-md shadow-none"
+              markClassName="size-3.5"
+              title={APP_NAME}
+            />
             <span className="text-body font-semibold">{APP_NAME}</span>
           </div>
           <div className="hidden lg:block" />
