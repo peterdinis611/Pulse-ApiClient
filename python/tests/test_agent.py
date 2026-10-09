@@ -39,6 +39,55 @@ class AgentRouterTests(unittest.TestCase):
         self.assertEqual(result["kind"], "import_curl")
         self.assertEqual(result["data"]["method"], "GET")
 
+    def test_memory_roundtrip(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            remembered = run_agent(
+                "remember preferred_base_url=https://staging.test",
+                workspace=tmp,
+                record_history=False,
+            )
+            self.assertEqual(remembered["kind"], "remember")
+            recalled = run_agent(
+                "recall preferred_base_url",
+                workspace=tmp,
+                record_history=False,
+            )
+            self.assertIn("https://staging.test", recalled["markdown"])
+            listed = run_agent("list memory", workspace=tmp, record_history=False)
+            self.assertEqual(listed["kind"], "memory_list")
+            forgot = run_agent(
+                "forget preferred_base_url",
+                workspace=tmp,
+                record_history=False,
+            )
+            self.assertIn("Forgot", forgot["markdown"])
+
+    def test_rag_intents(self) -> None:
+        import tempfile
+
+        self.assertEqual(route_agent_input("quick:rag"), {"kind": "rag_reindex"})
+        self.assertEqual(
+            route_agent_input("search history users list"),
+            {"kind": "rag_search", "query": "users list"},
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            run_agent(
+                "remember preferred_env=staging-users-api",
+                workspace=tmp,
+                record_history=False,
+            )
+            reindexed = run_agent("reindex rag", workspace=tmp, record_history=False)
+            self.assertEqual(reindexed["kind"], "rag_reindex")
+            searched = run_agent(
+                "search history staging-users",
+                workspace=tmp,
+                record_history=False,
+            )
+            self.assertEqual(searched["kind"], "rag_search")
+            self.assertIn("RAG", searched["markdown"])
+
 
 if __name__ == "__main__":
     unittest.main()

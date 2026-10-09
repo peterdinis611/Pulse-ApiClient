@@ -210,6 +210,96 @@ def cmd_agent(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_agent_memory(args: argparse.Namespace) -> int:
+    import os
+
+    from pulse.agent import run_agent
+    from pulse.memory import delete_fact, get_fact, list_facts, upsert_fact
+    from pulse.workspace import workspace_root
+
+    root = args.workspace or os.environ.get("PULSE_WORKSPACE") or workspace_root()
+    if not root:
+        print("No workspace root. Set PULSE_WORKSPACE or pass --workspace.", file=sys.stderr)
+        return 1
+    action = getattr(args, "memory_action", None) or "list"
+    try:
+        if action == "list":
+            if args.json:
+                print(json.dumps({"facts": list_facts(root)}, indent=2))
+            else:
+                result = run_agent("list memory", workspace=str(root), record_history=False)
+                print(result.get("markdown") or "")
+            return 0
+        if action == "get":
+            fact = get_fact(root, args.key)
+            if not fact:
+                print(f"No memory found for `{args.key}`", file=sys.stderr)
+                return 1
+            print(json.dumps(fact, indent=2) if args.json else f"{fact['key']}={fact['value']}")
+            return 0
+        if action == "set":
+            scope = "local" if args.local else "workspace"
+            fact = upsert_fact(
+                root,
+                key=args.key,
+                value=args.value,
+                scope=scope,
+                source="cli",
+                note=args.note,
+            )
+            print(json.dumps(fact, indent=2) if args.json else f"Remembered {fact['key']}={fact['value']}")
+            return 0
+        if action == "forget":
+            removed = delete_fact(root, args.key)
+            if args.json:
+                print(json.dumps({"key": args.key, "removed": removed}, indent=2))
+            else:
+                print(f"Forgot `{args.key}`." if removed else f"No memory found for `{args.key}`.")
+            return 0 if removed else 1
+    except Exception as error:  # noqa: BLE001
+        print(str(error), file=sys.stderr)
+        return 1
+    print(f"Unknown memory action: {action}", file=sys.stderr)
+    return 1
+
+
+def cmd_agent_rag(args: argparse.Namespace) -> int:
+    import os
+
+    from pulse.rag import format_rag_hits_markdown, rebuild_rag_index, search_rag
+    from pulse.workspace import workspace_root
+
+    root = args.workspace or os.environ.get("PULSE_WORKSPACE") or workspace_root()
+    if not root:
+        print("No workspace root. Set PULSE_WORKSPACE or pass --workspace.", file=sys.stderr)
+        return 1
+    action = getattr(args, "rag_action", None) or "search"
+    try:
+        if action == "search":
+            query = " ".join(args.query or []).strip()
+            if not query:
+                print("Usage: pulse agent-rag search <query>", file=sys.stderr)
+                return 1
+            hits = search_rag(root, query, limit=getattr(args, "limit", 8) or 8)
+            if args.json:
+                print(json.dumps({"query": query, "hits": hits}, indent=2))
+            else:
+                print(format_rag_hits_markdown(hits, query))
+            return 0
+        if action == "reindex":
+            count = rebuild_rag_index(root)
+            if args.json:
+                print(json.dumps({"count": count}, indent=2))
+            else:
+                print(f"Rebuilt RAG index with {count} documents (hashed n-gram TF-IDF).")
+            return 0
+    except Exception as error:  # noqa: BLE001
+        print(str(error), file=sys.stderr)
+        return 1
+    print(f"Unknown RAG action: {action}", file=sys.stderr)
+    return 1
+
+
 def cmd_diff(args: argparse.Namespace) -> int:
     left_path = Path(args.left)
     right_path = Path(args.right)
@@ -792,7 +882,7 @@ def cmd_help(_args: argparse.Namespace) -> int:
 
 
 def cmd_version(_args: argparse.Namespace) -> int:
-    print("pulse-cli 2.1.0")
+    print("pulse-cli 2.3.0")
     print(f"python {sys.version.split()[0]}")
     try:
         native = load_native()
@@ -914,7 +1004,7 @@ def main(argv: list[str] | None = None) -> int:
 
     agent = sub.add_parser(
         "agent",
-        help="Local intent router (no LLM): cURL, SSE, workspace status/history, GraphQL summarize",
+        help="Local intent router (no LLM): cURL, SSE, workspace status/history, memory, RAG, GraphQL summarize",
     )
     agent.add_argument(
         "utterance",
@@ -930,6 +1020,47 @@ def main(argv: list[str] | None = None) -> int:
     agent.add_argument("--show-data", action="store_true", help="Also print structured data after markdown")
     agent.add_argument("--no-history", action="store_true", help="Do not append to .pulse/history.jsonl")
     agent.set_defaults(func=cmd_agent)
+
+    agent_mem = sub.add_parser("agent-memory", help="Structured agent memory (facts/preferences)")
+    agent_mem_sub = agent_mem.add_subparsers(dest="memory_action", required=True)
+    mem_list = agent_mem_sub.add_parser("list", help="List remembered facts")
+    mem_list.add_argument("--workspace")
+    mem_list.add_argument("--json", action="store_true")
+    mem_list.set_defaults(func=cmd_agent_memory, memory_action="list")
+    mem_get = agent_mem_sub.add_parser("get", help="Get a fact by key")
+    mem_get.add_argument("key")
+    mem_get.add_argument("--workspace")
+    mem_get.add_argument("--json", action="store_true")
+    mem_get.set_defaults(func=cmd_agent_memory, memory_action="get")
+    mem_set = agent_mem_sub.add_parser("set", help="Remember key=value")
+    mem_set.add_argument("key")
+    mem_set.add_argument("value")
+    mem_set.add_argument("--workspace")
+    mem_set.add_argument("--local", action="store_true", help="Store in gitignored local memory")
+    mem_set.add_argument("--note")
+    mem_set.add_argument("--json", action="store_true")
+    mem_set.set_defaults(func=cmd_agent_memory, memory_action="set")
+    mem_forget = agent_mem_sub.add_parser("forget", help="Delete a fact by key")
+    mem_forget.add_argument("key")
+    mem_forget.add_argument("--workspace")
+    mem_forget.add_argument("--json", action="store_true")
+    mem_forget.set_defaults(func=cmd_agent_memory, memory_action="forget")
+
+    agent_rag = sub.add_parser(
+        "agent-rag",
+        help="RAG over history + facts (hashed n-gram TF-IDF, no PyTorch)",
+    )
+    agent_rag_sub = agent_rag.add_subparsers(dest="rag_action", required=True)
+    rag_search = agent_rag_sub.add_parser("search", help="Semantic search over indexed documents")
+    rag_search.add_argument("query", nargs="+", help="Search query")
+    rag_search.add_argument("--workspace")
+    rag_search.add_argument("--limit", type=int, default=8)
+    rag_search.add_argument("--json", action="store_true")
+    rag_search.set_defaults(func=cmd_agent_rag, rag_action="search")
+    rag_reindex = agent_rag_sub.add_parser("reindex", help="Rebuild .pulse/rag-index.json")
+    rag_reindex.add_argument("--workspace")
+    rag_reindex.add_argument("--json", action="store_true")
+    rag_reindex.set_defaults(func=cmd_agent_rag, rag_action="reindex")
 
     diff = sub.add_parser("diff", help="Unified diff between two JSON values or files")
     diff.add_argument("left")

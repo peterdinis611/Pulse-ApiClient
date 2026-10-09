@@ -76,11 +76,19 @@ import {
   saveLayoutPreferences,
   type HomeView,
 } from "@/lib/layout-preferences";
+import { AgentCapabilitiesPanel } from "@/components/AgentCapabilitiesPanel";
 import {
-  loadAgentLlmSettings,
-  saveAgentLlmSettings,
-  type AgentLlmSettings,
+  clearLocalAgentMemory,
+  listAgentMemory,
+  reindexAgentMemory,
+} from "@/lib/agent-memory";
+import { pruneAgentRag, reindexAgentRag } from "@/lib/agent-rag";
+import {
+  loadAgentSettings,
+  saveAgentSettings,
+  type AgentSettings,
 } from "@/lib/agent-settings";
+import { getGitWorkspaceRoot } from "@/lib/git-workspace";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/useLocale";
 import type { MessageKey } from "@/lib/i18n";
@@ -301,8 +309,31 @@ export function SettingsView() {
     path: "/",
   });
   const [editingCookieKey, setEditingCookieKey] = useState<string | null>(null);
-  const [agentLlm, setAgentLlm] = useState<AgentLlmSettings>(() => loadAgentLlmSettings());
+  const [agentSettings, setAgentSettings] = useState<AgentSettings>(() => loadAgentSettings());
+  const [memoryCount, setMemoryCount] = useState<number | null>(null);
+  const [memoryBusy, setMemoryBusy] = useState(false);
+  const [ragCount, setRagCount] = useState<number | null>(null);
+  const [ragBusy, setRagBusy] = useState(false);
   const [activeSection, setActiveSection] = useState<string>(SETTINGS_NAV[0].id);
+
+  const refreshMemoryCount = async () => {
+    const root = getGitWorkspaceRoot() || collectionsFolderPath.trim() || null;
+    if (!root) {
+      setMemoryCount(null);
+      return;
+    }
+    try {
+      const facts = await listAgentMemory(root);
+      setMemoryCount(facts.length);
+    } catch {
+      setMemoryCount(null);
+    }
+  };
+
+  useEffect(() => {
+    void refreshMemoryCount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh when folder path changes
+  }, [collectionsFolderPath]);
 
   const scrollToSection = (id: string) => {
     setActiveSection(id);
@@ -1225,16 +1256,154 @@ export function SettingsView() {
           title={t("agent.settings.title")}
           description={t("agent.settings.description")}
         >
+          <p className="text-xs text-muted-foreground">{t("agent.settings.languageHint")}</p>
+          <AgentCapabilitiesPanel
+            settings={agentSettings}
+            defaultOpen
+            onChange={(next) => {
+              setAgentSettings(next);
+              saveAgentSettings(next);
+              if (!next.enabled && mainView === "agent") {
+                setMainView(homeView === "agent" ? "overview" : homeView);
+              }
+              if (!next.enabled && homeView === "agent") {
+                setHomeViewState("overview");
+                saveLayoutPreferences({ homeView: "overview" });
+              }
+            }}
+          />
+          <div className="space-y-2 rounded-md border border-border p-3">
+            <p className="text-sm font-medium">{t("agent.memory.title")}</p>
+            <p className="text-xs text-muted-foreground">{t("agent.memory.description")}</p>
+            <p className="text-xs text-muted-foreground">
+              {memoryCount == null
+                ? t("agent.memory.none")
+                : t("agent.memory.count", { count: memoryCount })}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={memoryBusy}
+                onClick={() => {
+                  const root = getGitWorkspaceRoot() || collectionsFolderPath.trim();
+                  if (!root) {
+                    toast.error(t("agent.memory.none"));
+                    return;
+                  }
+                  setMemoryBusy(true);
+                  void reindexAgentMemory(root)
+                    .then((count) => {
+                      setMemoryCount(count);
+                      toast.success(t("agent.memory.count", { count }));
+                    })
+                    .catch((error) =>
+                      toast.error(error instanceof Error ? error.message : String(error)),
+                    )
+                    .finally(() => setMemoryBusy(false));
+                }}
+              >
+                {t("agent.memory.refresh")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={memoryBusy}
+                onClick={() => {
+                  const root = getGitWorkspaceRoot() || collectionsFolderPath.trim();
+                  if (!root) {
+                    toast.error(t("agent.memory.none"));
+                    return;
+                  }
+                  setMemoryBusy(true);
+                  void clearLocalAgentMemory(root)
+                    .then((count) => {
+                      toast.success(t("agent.memory.cleared", { count }));
+                      return refreshMemoryCount();
+                    })
+                    .catch((error) =>
+                      toast.error(error instanceof Error ? error.message : String(error)),
+                    )
+                    .finally(() => setMemoryBusy(false));
+                }}
+              >
+                {t("agent.memory.clearLocal")}
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-2 rounded-md border border-border p-3">
+            <p className="text-sm font-medium">{t("agent.rag.title")}</p>
+            <p className="text-xs text-muted-foreground">{t("agent.rag.description")}</p>
+            <p className="text-xs text-muted-foreground">
+              {ragCount == null
+                ? t("agent.rag.none")
+                : t("agent.rag.count", { count: ragCount })}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={ragBusy}
+                onClick={() => {
+                  const root = getGitWorkspaceRoot() || collectionsFolderPath.trim();
+                  if (!root) {
+                    toast.error(t("agent.rag.none"));
+                    return;
+                  }
+                  setRagBusy(true);
+                  void reindexAgentRag(root)
+                    .then((count) => {
+                      setRagCount(count);
+                      toast.success(t("agent.rag.count", { count }));
+                    })
+                    .catch((error) =>
+                      toast.error(error instanceof Error ? error.message : String(error)),
+                    )
+                    .finally(() => setRagBusy(false));
+                }}
+              >
+                {t("agent.rag.refresh")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={ragBusy}
+                onClick={() => {
+                  const root = getGitWorkspaceRoot() || collectionsFolderPath.trim();
+                  if (!root) {
+                    toast.error(t("agent.rag.none"));
+                    return;
+                  }
+                  setRagBusy(true);
+                  void pruneAgentRag(root)
+                    .then((count) => {
+                      setRagCount(count);
+                      toast.success(t("agent.rag.pruned", { count }));
+                    })
+                    .catch((error) =>
+                      toast.error(error instanceof Error ? error.message : String(error)),
+                    )
+                    .finally(() => setRagBusy(false));
+                }}
+              >
+                {t("agent.rag.prune")}
+              </Button>
+            </div>
+          </div>
           <SettingRow
             title={t("agent.settings.provider")}
             description={t("agent.settings.providerSoon")}
           >
             <Select
-              value={agentLlm.provider}
+              value={agentSettings.provider}
               onValueChange={(value) =>
-                setAgentLlm((prev) => ({
+                setAgentSettings((prev) => ({
                   ...prev,
-                  provider: value as AgentLlmSettings["provider"],
+                  provider: value as AgentSettings["provider"],
                 }))
               }
             >
@@ -1260,9 +1429,9 @@ export function SettingsView() {
               type="password"
               autoComplete="off"
               className="max-w-md"
-              value={agentLlm.apiKey}
+              value={agentSettings.apiKey}
               onChange={(event) =>
-                setAgentLlm((prev) => ({ ...prev, apiKey: event.target.value }))
+                setAgentSettings((prev) => ({ ...prev, apiKey: event.target.value }))
               }
               placeholder="sk-…"
             />
@@ -1270,11 +1439,11 @@ export function SettingsView() {
           <Button
             type="button"
             onClick={() => {
-              saveAgentLlmSettings(agentLlm);
+              saveAgentSettings(agentSettings);
               toast.success(t("agent.settings.saved"));
             }}
           >
-            Save agent settings
+            {t("agent.settings.save")}
           </Button>
         </SettingsSection>
 
@@ -1287,8 +1456,26 @@ export function SettingsView() {
             <p className="text-sm font-medium">{t("onboarding.workspace.title")}</p>
             <p className="text-xs text-muted-foreground">{t("onboarding.workspace.hint")}</p>
             <div className="grid grid-cols-2 gap-2">
-              {(["overview", "request"] as const).map((view) => {
+              {(
+                [
+                  "overview",
+                  "request",
+                  ...(agentSettings.enabled ? (["agent"] as const) : []),
+                ] as HomeView[]
+              ).map((view) => {
                 const active = homeView === view;
+                const labelKey =
+                  view === "overview"
+                    ? "onboarding.home.overview"
+                    : view === "request"
+                      ? "onboarding.home.request"
+                      : "onboarding.home.agent";
+                const hintKey =
+                  view === "overview"
+                    ? "onboarding.home.overviewHint"
+                    : view === "request"
+                      ? "onboarding.home.requestHint"
+                      : "onboarding.home.agentHint";
                 return (
                   <button
                     key={view}
@@ -1304,13 +1491,9 @@ export function SettingsView() {
                         : "border-border/80 hover:border-primary/35",
                     )}
                   >
-                    <span className="block text-sm font-medium">
-                      {view === "overview" ? t("onboarding.home.overview") : t("onboarding.home.request")}
-                    </span>
+                    <span className="block text-sm font-medium">{t(labelKey)}</span>
                     <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                      {view === "overview"
-                        ? t("onboarding.home.overviewHint")
-                        : t("onboarding.home.requestHint")}
+                      {t(hintKey)}
                     </span>
                   </button>
                 );

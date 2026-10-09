@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Globe2, LoaderCircle, PanelLeftClose, PanelLeftOpen, Plus, X } from "lucide-react";
+import { LanguageToggle } from "@/components/LanguageToggle";
 import { RequestTabsMenu } from "@/components/RequestTabsMenu";
 import { TabScrollStrip } from "@/components/TabScrollStrip";
 import { TooltipIconButton, TooltipWrap } from "@/components/TooltipIconButton";
@@ -202,7 +203,12 @@ export function ViewHeader() {
   return (
     <header className="view-header flex h-11 shrink-0 items-center gap-3 px-4 sm:px-5">
       <h1 className="text-title">{t(meta.titleKey)}</h1>
-      <p className="hidden truncate text-body text-topbar-muted sm:block">{t(meta.descriptionKey)}</p>
+      <p className="hidden min-w-0 flex-1 truncate text-body text-topbar-muted sm:block">
+        {t(meta.descriptionKey)}
+      </p>
+      <div className="ml-auto flex shrink-0 items-center">
+        <LanguageToggle />
+      </div>
     </header>
   );
 }

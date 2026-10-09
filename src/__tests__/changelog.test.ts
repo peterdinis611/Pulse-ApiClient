@@ -45,8 +45,10 @@ describe("changelog", () => {
     expect(latestRelease("0.3.0")?.title.en).toMatch(/git/i);
     expect(latestRelease("2.0.0")?.title.en).toMatch(/2\.0/);
     expect(latestRelease("2.1.0")?.title.en).toMatch(/round-trip/i);
+    expect(latestRelease("2.3.0")?.title.en).toMatch(/memory|RAG|language/i);
     expect(unseenReleases("0.3.0", "2.0.0").map((release) => release.version)).toEqual(["2.0.0"]);
     expect(unseenReleases("2.0.0", "2.1.0").map((release) => release.version)).toEqual(["2.1.0"]);
+    expect(unseenReleases("2.1.0", "2.3.0").map((release) => release.version)).toEqual(["2.3.0"]);
     expect(CHANGELOG[0]?.changes.length).toBeGreaterThan(4);
     expect(
       CHANGELOG.find((release) => release.version === "2.0.0")?.changes.some(
@@ -56,6 +58,11 @@ describe("changelog", () => {
     expect(
       CHANGELOG.find((release) => release.version === "2.1.0")?.changes.some(
         (change) => change.id === "bruno-insomnia-export",
+      ),
+    ).toBe(true);
+    expect(
+      CHANGELOG.find((release) => release.version === "2.3.0")?.changes.some(
+        (change) => change.id === "app-language",
       ),
     ).toBe(true);
   });

@@ -52,11 +52,20 @@ describe("layout-preferences", () => {
     expect(loadLayoutPreferences().homeView).toBe("request");
   });
 
-  it("accepts only overview and request as a start view", () => {
+  it("accepts only overview, request, and agent as a start view", () => {
     expect(isHomeView("overview")).toBe(true);
     expect(isHomeView("request")).toBe(true);
+    expect(isHomeView("agent")).toBe(true);
     expect(isHomeView("settings")).toBe(false);
     expect(isHomeView("")).toBe(false);
+  });
+
+  it("persists agent as the start view", () => {
+    saveLayoutPreferences({
+      ...defaultLayoutPreferences(),
+      homeView: "agent",
+    });
+    expect(loadLayoutPreferences().homeView).toBe("agent");
   });
 
   it("falls back when storage has an unknown start view", () => {

@@ -51,10 +51,24 @@
 
 .onboarding__stamp {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
   padding: 1.35rem 1.4rem 0.7rem 1.55rem;
+}
+
+.onboarding__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.onboarding__logo {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.65rem;
+  box-shadow: none;
 }
 
 .onboarding__kicker,

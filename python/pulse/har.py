@@ -124,7 +124,7 @@ def _post_data(request: dict) -> dict | None:
     return {"mimeType": "text/plain", "text": str(request.get("body") or "")}
 
 
-def history_to_har(entries: list[dict], *, creator: str = "Pulse", version: str = "2.1.0") -> dict:
+def history_to_har(entries: list[dict], *, creator: str = "Pulse", version: str = "2.3.0") -> dict:
     """Build a HAR 1.2 log from Pulse history / collection request entries."""
     har_entries = []
     for entry in entries:

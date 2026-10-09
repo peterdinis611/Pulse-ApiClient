@@ -6,13 +6,14 @@ import {
   Plug,
   Send,
   Settings,
-  Zap,
 } from "lucide-react";
+import { PulseLogoBadge } from "@/components/PulseLogo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { UserAuthAvatar } from "@/components/UserAuthAvatar";
 import { TooltipWrap } from "@/components/TooltipIconButton";
 import { APP_NAME } from "@/lib/app-config";
+import { useAgentSettings } from "@/hooks/useAgentSettings";
 import { useApp } from "@/machines";
 import { useT } from "@/hooks/useLocale";
 import { cn } from "@/lib/utils";
@@ -35,6 +36,7 @@ const NAV_ITEMS: Array<{
 
 export function AppRail() {
   const { mainView, setMainView, explorerCollapsed, toggleExplorerCollapsed } = useApp();
+  const agentSettings = useAgentSettings();
   const t = useT();
 
   const goToRequest = () => {
@@ -46,16 +48,20 @@ export function AppRail() {
     setMainView("request");
   };
 
+  const items = NAV_ITEMS.filter(
+    (item) => item.view !== "agent" || agentSettings.enabled,
+  );
+
   return (
     <aside data-tour="rail" className="relative flex w-[52px] shrink-0 flex-col items-center border-r border-rail-border bg-rail py-3">
       <TooltipWrap label={APP_NAME}>
-        <div className="mb-4 flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/25">
-          <Zap className="size-4" />
+        <div className="mb-4">
+          <PulseLogoBadge title={APP_NAME} />
         </div>
       </TooltipWrap>
 
       <nav className="flex flex-col items-center gap-1.5">
-        {NAV_ITEMS.map(({ view, icon: Icon, labelKey }) => {
+        {items.map(({ view, icon: Icon, labelKey }) => {
           const label = t(labelKey);
           const active =
             view === "request" ? mainView === "request" : mainView === view;

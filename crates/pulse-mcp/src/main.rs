@@ -645,12 +645,12 @@ fn tools() -> Value {
         },
         {
             "name": "pulse_agent",
-            "description": "Local intent router (no LLM). Offline-safe: help, parse curl/sse, workspace status/history, GraphQL summarize from body.",
+            "description": "Local intent router (no LLM). Offline-safe: help, parse curl/sse, workspace status/history, memory (remember/recall/forget/list memory), RAG (search history / reindex rag), GraphQL summarize from body.",
             "inputSchema": {
                 "type": "object",
                 "required": ["input"],
                 "properties": {
-                    "input": { "type": "string", "description": "Natural utterance or pasted curl/SSE" },
+                    "input": { "type": "string", "description": "Natural utterance, pasted curl/SSE, memory, or RAG command" },
                     "body": { "type": "string", "description": "GraphQL introspection/response JSON for summarize" },
                     "workspace": { "type": "string", "description": "Override PULSE_WORKSPACE" },
                     "historyLimit": { "type": "integer", "default": 15 }

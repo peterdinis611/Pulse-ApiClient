@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState, type ReactNode } from "react";
 import { useApp } from "@/machines";
 import { AppRail } from "./AppRail";
 import { CommandPalette } from "./CommandPalette";
@@ -6,47 +6,86 @@ import { GitWorkspaceSync } from "./GitWorkspaceSync";
 import { WhatsNewHost } from "./WhatsNewHost";
 import { OnboardingHost } from "./OnboardingHost";
 import { ExplorerPanel } from "./ExplorerPanel";
+import { DeferredFallback } from "./DeferredFallback";
 import { LoadingScreen } from "./LoadingScreen";
 import { ResizableConsole } from "./ResizableConsole";
 import { ResizableExplorer } from "./ResizableExplorer";
 import { StatusBar } from "./StatusBar";
 import { ViewHeader } from "./ViewHeader";
+import { AgentView } from "./AgentView";
+import { DocsView } from "./DocsView";
+import { EnvironmentsView } from "./EnvironmentsView";
+import { McpView } from "./McpView";
+import { OverviewView } from "./OverviewView";
+import { RequestWorkspace } from "./RequestWorkspace";
+import { SettingsView } from "./SettingsView";
 import { APP_NAME } from "@/lib/app-config";
+import { useAgentSettings } from "@/hooks/useAgentSettings";
 import { useWorkspaceHotkeys } from "@/hooks/useWorkspaceHotkeys";
 import { useI18n } from "@/hooks/useLocale";
 import { getCurrentWindowLabel, setWindowTitle } from "@/lib/window-manager";
+import { cn } from "@/lib/utils";
+import type { MainView } from "@/types";
 
+/** Console stays lazy — toggled less often than rail views. */
 const ConsolePanel = lazy(() =>
   import("./ConsolePanel").then((module) => ({ default: module.ConsolePanel })),
 );
-const DocsView = lazy(() =>
-  import("./DocsView").then((module) => ({ default: module.DocsView })),
-);
-const McpView = lazy(() =>
-  import("./McpView").then((module) => ({ default: module.McpView })),
-);
-const AgentView = lazy(() =>
-  import("./AgentView").then((module) => ({ default: module.AgentView })),
-);
-const EnvironmentsView = lazy(() =>
-  import("./EnvironmentsView").then((module) => ({ default: module.EnvironmentsView })),
-);
-const OverviewView = lazy(() =>
-  import("./OverviewView").then((module) => ({ default: module.OverviewView })),
-);
-const RequestWorkspace = lazy(() =>
-  import("./RequestWorkspace").then((module) => ({ default: module.RequestWorkspace })),
-);
-const SettingsView = lazy(() =>
-  import("./SettingsView").then((module) => ({ default: module.SettingsView })),
-);
+
+const VIEW_ORDER: MainView[] = [
+  "overview",
+  "request",
+  "environments",
+  "docs",
+  "agent",
+  "mcp",
+  "settings",
+];
+
+function ViewSlot({
+  view,
+  active,
+  children,
+}: {
+  view: MainView;
+  active: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      data-view={view}
+      className={cn("min-h-0 flex-1 flex-col overflow-hidden", active ? "flex" : "hidden")}
+      hidden={!active}
+      aria-hidden={!active}
+    >
+      {children}
+    </div>
+  );
+}
 
 export function ClientShell() {
-  const { mainView, consoleOpen, tabs, activeTabId } = useApp();
+  const { mainView, consoleOpen, tabs, activeTabId, setMainView } = useApp();
+  const agentSettings = useAgentSettings();
   const { t, version } = useI18n();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [visited, setVisited] = useState<ReadonlySet<MainView>>(() => new Set([mainView]));
 
   useWorkspaceHotkeys({ onCommandPalette: () => setPaletteOpen((open) => !open) });
+
+  useEffect(() => {
+    if (mainView === "agent" && !agentSettings.enabled) {
+      setMainView("overview");
+    }
+  }, [agentSettings.enabled, mainView, setMainView]);
+
+  useEffect(() => {
+    setVisited((prev) => {
+      if (prev.has(mainView)) return prev;
+      const next = new Set(prev);
+      next.add(mainView);
+      return next;
+    });
+  }, [mainView]);
 
   useEffect(() => {
     void (async () => {
@@ -78,6 +117,10 @@ export function ClientShell() {
   }, [tabs, activeTabId, mainView, t, version]);
 
   const showExplorer = mainView === "request";
+  const showAgent = agentSettings.enabled;
+  const visibleViews = VIEW_ORDER.filter(
+    (view) => visited.has(view) && (view !== "agent" || showAgent),
+  );
 
   return (
     <div className="app-shell flex h-screen">
@@ -90,18 +133,50 @@ export function ClientShell() {
       <div className="flex min-w-0 flex-1 flex-col bg-surface-0">
         <ViewHeader />
         <main className="workspace-content flex min-h-0 flex-1 flex-col overflow-hidden">
-          <Suspense fallback={<LoadingScreen variant="inline" label={t("loading.view")} />}>
-            {mainView === "overview" && <OverviewView />}
-            {mainView === "environments" && <EnvironmentsView />}
-            {mainView === "settings" && <SettingsView />}
-            {mainView === "docs" && <DocsView />}
-            {mainView === "agent" && <AgentView />}
-            {mainView === "mcp" && <McpView />}
-            {mainView === "request" && <RequestWorkspace />}
-          </Suspense>
+          {visibleViews.includes("overview") && (
+            <ViewSlot view="overview" active={mainView === "overview"}>
+              <OverviewView />
+            </ViewSlot>
+          )}
+          {visibleViews.includes("request") && (
+            <ViewSlot view="request" active={mainView === "request"}>
+              <RequestWorkspace />
+            </ViewSlot>
+          )}
+          {visibleViews.includes("environments") && (
+            <ViewSlot view="environments" active={mainView === "environments"}>
+              <EnvironmentsView />
+            </ViewSlot>
+          )}
+          {visibleViews.includes("docs") && (
+            <ViewSlot view="docs" active={mainView === "docs"}>
+              <DocsView />
+            </ViewSlot>
+          )}
+          {visibleViews.includes("agent") && (
+            <ViewSlot view="agent" active={mainView === "agent"}>
+              <AgentView />
+            </ViewSlot>
+          )}
+          {visibleViews.includes("mcp") && (
+            <ViewSlot view="mcp" active={mainView === "mcp"}>
+              <McpView />
+            </ViewSlot>
+          )}
+          {visibleViews.includes("settings") && (
+            <ViewSlot view="settings" active={mainView === "settings"}>
+              <SettingsView />
+            </ViewSlot>
+          )}
         </main>
         {consoleOpen && (
-          <Suspense fallback={<LoadingScreen variant="inline" label={t("loading.console")} />}>
+          <Suspense
+            fallback={
+              <DeferredFallback>
+                <LoadingScreen variant="inline" label={t("loading.console")} />
+              </DeferredFallback>
+            }
+          >
             <ResizableConsole>
               <ConsolePanel />
             </ResizableConsole>

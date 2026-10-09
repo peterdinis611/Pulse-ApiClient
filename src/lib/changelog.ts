@@ -328,6 +328,44 @@ export const CHANGELOG: ChangelogRelease[] = [
       },
     ],
   },
+  {
+    version: "2.3.0",
+    date: "2026-10-09",
+    title: {
+      en: "Agent memory, RAG & one app language",
+      sk: "Agent memory, RAG a jeden jazyk appky",
+    },
+    summary: {
+      en: "Local agent memory + hashed TF-IDF RAG, hybrid search and citations, faster view switching, and one UI locale for chrome and agent copy (EN/SK).",
+      sk: "Lokálna agent memory + hashed TF-IDF RAG, hybrid search a citácie, rýchlejšie prepínanie viewov a jeden UI locale pre chrome aj agent texty (EN/SK).",
+    },
+    changes: [
+      {
+        id: "agent-memory-rag",
+        title: { en: "Agent memory & RAG", sk: "Agent memory a RAG" },
+        detail: {
+          en: "Workspace-scoped facts and a local n-gram index over requests/history. Hybrid filters, incremental reindex, auto-context, TTL prune, and citation → open request.",
+          sk: "Fakty v workspace a lokálny n-gram index nad requestami/históriou. Hybrid filtre, inkrementálny reindex, auto-context, TTL prune a citácia → otvorenie requestu.",
+        },
+      },
+      {
+        id: "app-language",
+        title: { en: "One language for the whole app", sk: "Jeden jazyk pre celú appku" },
+        detail: {
+          en: "LocalePreference drives chrome and agent help/memory/RAG strings. LanguageToggle in the rail and ViewHeader; Settings → Agent points at the shared UI language.",
+          sk: "LocalePreference riadi chrome aj agent help/memory/RAG texty. LanguageToggle v raili a ViewHeaderi; Settings → Agent odkazuje na spoločný UI jazyk.",
+        },
+      },
+      {
+        id: "eager-views",
+        title: { en: "Snappier navigation", sk: "Rýchlejšia navigácia" },
+        detail: {
+          en: "Main views stay mounted with keep-alive so switching the rail no longer flashes a loading state.",
+          sk: "Hlavné viewy ostávajú namountované s keep-alive, takže prepínanie railu už neukazuje loading.",
+        },
+      },
+    ],
+  },
 ];
 
 export function parseSemver(version: string): [number, number, number] {

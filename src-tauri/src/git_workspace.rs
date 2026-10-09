@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 use notify::{recommended_watcher, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use pulse_core::types::SavedRequestDto;
 use pulse_core::workspace_fs::{
@@ -62,6 +62,11 @@ pub fn open_workspace(root: &str, name: &str) -> Result<GitWorkspacePayload, Str
     let mut payload = load_workspace(root)?;
     overlay_keychain(&mut payload);
     Ok(payload)
+}
+
+/// Reindex agent memory into the user SQLite DB when a workspace folder is attached.
+pub fn reindex_agent_memory(db: &crate::db::DbState, root: &str) -> Result<usize, String> {
+    db.with_user_conn(|conn| crate::agent_memory::reindex_workspace(conn, root))
 }
 
 pub fn load(root: &str) -> Result<GitWorkspacePayload, String> {
@@ -178,8 +183,19 @@ pub fn current_root(state: &GitWatchState) -> Option<String> {
 }
 
 #[tauri::command]
-pub fn git_workspace_open(root: String, name: Option<String>) -> Result<GitWorkspacePayload, String> {
-    open_workspace(&root, name.as_deref().unwrap_or("Pulse"))
+pub fn git_workspace_open(
+    app: AppHandle,
+    root: String,
+    name: Option<String>,
+) -> Result<GitWorkspacePayload, String> {
+    let payload = open_workspace(&root, name.as_deref().unwrap_or("Pulse"))?;
+    if let Some(db) = app.try_state::<crate::db::DbState>() {
+        let _ = reindex_agent_memory(db.inner(), &root);
+        let _ = db.with_user_conn(|conn| {
+            crate::agent_rag::rebuild_with_request_history(conn, &root)
+        });
+    }
+    Ok(payload)
 }
 
 #[tauri::command]
@@ -241,5 +257,9 @@ pub fn git_workspace_append_agent_history(
     root: String,
     entry: serde_json::Value,
 ) -> Result<(), String> {
-    pulse_core::workspace_fs::append_agent_history(&root, &entry)
+    pulse_core::workspace_fs::append_agent_history(&root, &entry)?;
+    if let Some(doc) = pulse_core::doc_from_history_entry(&entry) {
+        let _ = pulse_core::upsert_rag_docs(&root, &[doc]);
+    }
+    Ok(())
 }
