@@ -18,6 +18,8 @@ export type AgentIntent =
   | { kind: "recall"; query: string }
   | { kind: "forget"; key: string }
   | { kind: "memory_list" }
+  | { kind: "rag_search"; query: string }
+  | { kind: "rag_reindex" }
   | { kind: "unknown"; input: string };
 
 const CURL_BLOCK = /```(?:bash|sh|shell|zsh)?\s*([\s\S]*?curl[\s\S]*?)```/i;
@@ -105,6 +107,20 @@ export function routeAgentInput(raw: string): AgentIntent {
   ) {
     return { kind: "memory_list" };
   }
+  if (
+    quick === "quick:rag" ||
+    quick === "reindex rag" ||
+    quick === "rag reindex" ||
+    quick === "rebuild rag"
+  ) {
+    return { kind: "rag_reindex" };
+  }
+  const ragMatch = quick.match(
+    /^(?:rag|search\s+history|find\s+in\s+history|search\s+memory)\s+(.+)$/,
+  );
+  if (ragMatch?.[1]) {
+    return { kind: "rag_search", query: ragMatch[1].trim() };
+  }
   if (/^remember\s+/.test(quick)) {
     const rest = input.replace(/^remember\s+/i, "").trim();
     let scope: "workspace" | "local" = "workspace";
@@ -161,6 +177,8 @@ const HELP_LINES: Record<AgentCapability, string> = {
   sse_parse: "• **Parse SSE** — paste an SSE document",
   memory:
     "• **Memory** — `remember key=value`, `recall key`, `forget key`, `list memory`",
+  memory_rag:
+    "• **RAG** — `search history …` / `rag …` (hashed n-gram TF-IDF; `reindex rag`)",
 };
 
 export function buildAgentHelpText(settings: AgentSettings = loadAgentSettings()): string {

@@ -15,6 +15,7 @@ export const AGENT_CAPABILITIES = [
   "graphql_summarize",
   "sse_parse",
   "memory",
+  "memory_rag",
 ] as const;
 
 export type AgentCapability = (typeof AGENT_CAPABILITIES)[number];
@@ -147,6 +148,9 @@ export function capabilityForIntent(
     kind === "memory_list"
   ) {
     return "memory";
+  }
+  if (kind === "rag_search" || kind === "rag_reindex") {
+    return "memory_rag";
   }
   if ((AGENT_CAPABILITIES as readonly string[]).includes(kind)) {
     return kind as AgentCapability;

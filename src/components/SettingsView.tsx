@@ -82,6 +82,7 @@ import {
   listAgentMemory,
   reindexAgentMemory,
 } from "@/lib/agent-memory";
+import { reindexAgentRag } from "@/lib/agent-rag";
 import {
   loadAgentSettings,
   saveAgentSettings,
@@ -311,6 +312,8 @@ export function SettingsView() {
   const [agentSettings, setAgentSettings] = useState<AgentSettings>(() => loadAgentSettings());
   const [memoryCount, setMemoryCount] = useState<number | null>(null);
   const [memoryBusy, setMemoryBusy] = useState(false);
+  const [ragCount, setRagCount] = useState<number | null>(null);
+  const [ragBusy, setRagBusy] = useState(false);
   const [activeSection, setActiveSection] = useState<string>(SETTINGS_NAV[0].id);
 
   const refreshMemoryCount = async () => {
@@ -1326,6 +1329,42 @@ export function SettingsView() {
                 }}
               >
                 {t("agent.memory.clearLocal")}
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-2 rounded-md border border-border p-3">
+            <p className="text-sm font-medium">{t("agent.rag.title")}</p>
+            <p className="text-xs text-muted-foreground">{t("agent.rag.description")}</p>
+            <p className="text-xs text-muted-foreground">
+              {ragCount == null
+                ? t("agent.rag.none")
+                : t("agent.rag.count", { count: ragCount })}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={ragBusy}
+                onClick={() => {
+                  const root = getGitWorkspaceRoot() || collectionsFolderPath.trim();
+                  if (!root) {
+                    toast.error(t("agent.rag.none"));
+                    return;
+                  }
+                  setRagBusy(true);
+                  void reindexAgentRag(root)
+                    .then((count) => {
+                      setRagCount(count);
+                      toast.success(t("agent.rag.count", { count }));
+                    })
+                    .catch((error) =>
+                      toast.error(error instanceof Error ? error.message : String(error)),
+                    )
+                    .finally(() => setRagBusy(false));
+                }}
+              >
+                {t("agent.rag.refresh")}
               </Button>
             </div>
           </div>

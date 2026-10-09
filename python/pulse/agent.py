@@ -18,6 +18,7 @@ from pulse.memory import (
     search_facts,
     upsert_fact,
 )
+from pulse.rag import format_rag_hits_markdown, rebuild_rag_index, search_rag
 from pulse.sse import parse_text as parse_sse_text
 from pulse.workspace import read_history, workspace_root, workspace_status
 
@@ -27,6 +28,7 @@ AGENT_HELP_TEXT = """I understand these intents (local, no LLM):
 • **Workspace status** — Git workspace root + pending mutations
 • **Agent history** — recent entries from `.pulse/history.jsonl`
 • **Memory** — `remember key=value`, `recall key`, `forget key`, `list memory`
+• **RAG** — `search history …` / `rag …` (hashed n-gram TF-IDF; `reindex rag`)
 • **GraphQL summarize** — pass introspection/response body via `--body` / `body`
 • **Parse SSE** — paste an SSE document (event/data blocks)
 
@@ -101,6 +103,13 @@ def route_agent_input(raw: str) -> dict[str, Any]:
         return {"kind": "graphql_summarize"}
     if quick in {"quick:memory", "list memory", "memory list", "show memory"}:
         return {"kind": "memory_list"}
+    if quick in {"quick:rag", "reindex rag", "rag reindex", "rebuild rag"}:
+        return {"kind": "rag_reindex"}
+    rag_match = re.match(
+        r"^(?:rag|search\s+history|find\s+in\s+history|search\s+memory)\s+(.+)$", quick
+    )
+    if rag_match:
+        return {"kind": "rag_search", "query": rag_match.group(1).strip()}
     remember_match = re.match(r"^remember\s+(.+)$", quick)
     if remember_match:
         rest = input_text.split(None, 1)[1] if " " in input_text else ""
@@ -323,6 +332,34 @@ def _execute_py(
             "kind": kind,
             "markdown": format_facts_markdown(facts, "Agent memory"),
             "data": {"count": len(facts), "facts": facts},
+        }
+    if kind == "rag_search":
+        if not workspace:
+            raise ValueError("No workspace root. Set PULSE_WORKSPACE or pass workspace.")
+        query = str(intent.get("query") or "").strip()
+        if not query:
+            return {
+                "kind": kind,
+                "markdown": "Usage: search history <query>  ·  rag <query>",
+                "data": None,
+            }
+        hits = search_rag(workspace, query, limit=8)
+        return {
+            "kind": kind,
+            "markdown": format_rag_hits_markdown(hits, query),
+            "data": {"query": query, "hits": hits},
+        }
+    if kind == "rag_reindex":
+        if not workspace:
+            raise ValueError("No workspace root. Set PULSE_WORKSPACE or pass workspace.")
+        count = rebuild_rag_index(workspace)
+        return {
+            "kind": kind,
+            "markdown": (
+                f"Rebuilt RAG index with **{count}** documents (history + facts).\n\n"
+                "_Embedding runtime: hashed n-gram TF-IDF_"
+            ),
+            "data": {"count": count},
         }
     return {"kind": kind, "markdown": AGENT_HELP_TEXT, "data": None}
 

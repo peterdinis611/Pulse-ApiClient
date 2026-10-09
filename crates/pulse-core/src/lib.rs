@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod agent_memory;
+pub mod agent_rag;
 pub mod collection_run;
 pub mod contract;
 pub mod curl;
@@ -29,6 +30,10 @@ pub use agent::{
 pub use agent_memory::{
     delete_fact, format_facts_markdown, get_fact, list_facts, parse_remember_pair, search_facts,
     upsert_fact, local_facts_path, workspace_facts_path, MemoryFact, MemoryScope, UpsertFactInput,
+};
+pub use agent_rag::{
+    docs_from_request_rows, format_rag_hits_markdown, rag_index_path, rebuild_rag_index,
+    search_documents, search_rag, RagDocument, RagHit,
 };
 pub use collection_run::{
     run_collection, run_collection_with_progress, CollectionRunInput, CollectionRunResult, CollectionRunStep,

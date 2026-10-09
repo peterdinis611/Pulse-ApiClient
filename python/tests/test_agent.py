@@ -64,6 +64,30 @@ class AgentRouterTests(unittest.TestCase):
             )
             self.assertIn("Forgot", forgot["markdown"])
 
+    def test_rag_intents(self) -> None:
+        import tempfile
+
+        self.assertEqual(route_agent_input("quick:rag"), {"kind": "rag_reindex"})
+        self.assertEqual(
+            route_agent_input("search history users list"),
+            {"kind": "rag_search", "query": "users list"},
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            run_agent(
+                "remember preferred_env=staging-users-api",
+                workspace=tmp,
+                record_history=False,
+            )
+            reindexed = run_agent("reindex rag", workspace=tmp, record_history=False)
+            self.assertEqual(reindexed["kind"], "rag_reindex")
+            searched = run_agent(
+                "search history staging-users",
+                workspace=tmp,
+                record_history=False,
+            )
+            self.assertEqual(searched["kind"], "rag_search")
+            self.assertIn("RAG", searched["markdown"])
+
 
 if __name__ == "__main__":
     unittest.main()

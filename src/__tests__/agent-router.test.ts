@@ -77,4 +77,17 @@ describe("agent-router", () => {
     expect(routeAgentInput("recall env")).toEqual({ kind: "recall", query: "env" });
     expect(routeAgentInput("forget env")).toEqual({ kind: "forget", key: "env" });
   });
+
+  it("routes RAG intents", () => {
+    expect(routeAgentInput("quick:rag")).toEqual({ kind: "rag_reindex" });
+    expect(routeAgentInput("reindex rag")).toEqual({ kind: "rag_reindex" });
+    expect(routeAgentInput("search history users list")).toEqual({
+      kind: "rag_search",
+      query: "users list",
+    });
+    expect(routeAgentInput("rag oauth token")).toEqual({
+      kind: "rag_search",
+      query: "oauth token",
+    });
+  });
 });

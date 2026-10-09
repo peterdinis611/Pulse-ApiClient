@@ -10,6 +10,7 @@ use crate::agent_memory::{
     delete_fact, format_facts_markdown, get_fact, list_facts, parse_remember_pair, search_facts,
     upsert_fact, MemoryScope, UpsertFactInput,
 };
+use crate::agent_rag::{format_rag_hits_markdown, rebuild_rag_index, search_rag};
 use crate::curl::curl_to_payload;
 use crate::graphql::summarize_schema;
 use crate::sse::parse_sse_text;
@@ -37,6 +38,8 @@ pub enum AgentIntent {
     Recall { query: String },
     Forget { key: String },
     MemoryList,
+    RagSearch { query: String },
+    RagReindex,
     Unknown { input: String },
 }
 
@@ -76,6 +79,7 @@ pub const AGENT_HELP_TEXT: &str = "I understand these intents (local, no LLM):
 • **Workspace status** — Git workspace root + pending mutations
 • **Agent history** — recent entries from `.pulse/history.jsonl`
 • **Memory** — `remember key=value`, `recall key`, `forget key`, `list memory`
+• **RAG** — `search history …` / `rag …` (hashed n-gram TF-IDF over history + facts; `reindex rag`)
 • **GraphQL summarize** — pass introspection/response body via `--body` / `body`
 • **Parse SSE** — paste an SSE document (event/data blocks)
 
@@ -100,6 +104,8 @@ fn kind_name(intent: &AgentIntent) -> String {
         AgentIntent::Recall { .. } => "recall".into(),
         AgentIntent::Forget { .. } => "forget".into(),
         AgentIntent::MemoryList => "memory_list".into(),
+        AgentIntent::RagSearch { .. } => "rag_search".into(),
+        AgentIntent::RagReindex => "rag_reindex".into(),
         AgentIntent::Unknown { .. } => "unknown".into(),
     }
 }
@@ -199,6 +205,14 @@ fn forget_re() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"^forget\s+(.+)$").unwrap())
 }
 
+fn rag_search_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"^(?:rag|search\s+history|find\s+in\s+history|search\s+memory)\s+(.+)$")
+            .unwrap()
+    })
+}
+
 fn require_workspace<'a>(opts: &'a AgentExecuteOptions<'_>) -> Result<&'a str, String> {
     opts.workspace_root
         .filter(|item| !item.is_empty())
@@ -292,6 +306,17 @@ pub fn route_agent_input(raw: &str) -> AgentIntent {
         || quick == "show memory"
     {
         return AgentIntent::MemoryList;
+    }
+    if quick == "quick:rag"
+        || quick == "reindex rag"
+        || quick == "rag reindex"
+        || quick == "rebuild rag"
+    {
+        return AgentIntent::RagReindex;
+    }
+    if let Some(caps) = rag_search_re().captures(&quick) {
+        let query = caps.get(1).map(|m| m.as_str().trim()).unwrap_or("").to_string();
+        return AgentIntent::RagSearch { query };
     }
     if remember_re().is_match(&quick) {
         let rest = input
@@ -734,6 +759,36 @@ CLI and MCP support offline intents: cURL import, SSE parse, workspace status/hi
                 kind,
                 markdown: format_facts_markdown(&facts, "Agent memory"),
                 data: Some(json!({ "count": facts.len(), "facts": facts })),
+            })
+        }
+        AgentIntent::RagSearch { query } => {
+            let root = require_workspace(opts)?;
+            let q = query.trim();
+            if q.is_empty() {
+                return Ok(AgentResult {
+                    kind,
+                    markdown: "Usage: search history <query>  ·  rag <query>".into(),
+                    data: None,
+                });
+            }
+            let hits = search_rag(root, q, 8)?;
+            record_history(opts, "rag_search", json!({ "query": q, "count": hits.len() }));
+            Ok(AgentResult {
+                kind,
+                markdown: format_rag_hits_markdown(&hits, q),
+                data: Some(json!({ "query": q, "hits": hits })),
+            })
+        }
+        AgentIntent::RagReindex => {
+            let root = require_workspace(opts)?;
+            let count = rebuild_rag_index(root, &[])?;
+            record_history(opts, "rag_reindex", json!({ "count": count }));
+            Ok(AgentResult {
+                kind,
+                markdown: format!(
+                    "Rebuilt RAG index with **{count}** documents (history + facts).\n\n_Embedding runtime: hashed n-gram TF-IDF_"
+                ),
+                data: Some(json!({ "count": count })),
             })
         }
     }

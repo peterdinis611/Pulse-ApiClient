@@ -9,6 +9,11 @@ import {
   upsertAgentMemory,
 } from "@/lib/agent-memory";
 import {
+  formatRagHitsMarkdown,
+  reindexAgentRag,
+  searchAgentRag,
+} from "@/lib/agent-rag";
+import {
   appendGitAgentHistory,
   getGitWorkspaceRoot,
   listGitAgentHistory,
@@ -387,6 +392,46 @@ export async function runAgentIntent(
       } catch (error) {
         return {
           markdown: `Memory list failed: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
+    }
+    case "rag_search": {
+      const root = getGitWorkspaceRoot();
+      if (!root) {
+        return { markdown: "No Git workspace attached — cannot search RAG index." };
+      }
+      const query = intent.query.trim();
+      if (!query) {
+        return { markdown: "Usage: search history <query>  ·  rag <query>" };
+      }
+      try {
+        const hits = await searchAgentRag(root, query, 8);
+        await recordAgentHistory("rag_search", { query, count: hits.length });
+        return {
+          markdown: formatRagHitsMarkdown(hits, query),
+          meta: { query, hits },
+        };
+      } catch (error) {
+        return {
+          markdown: `RAG search failed: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
+    }
+    case "rag_reindex": {
+      const root = getGitWorkspaceRoot();
+      if (!root) {
+        return { markdown: "No Git workspace attached — cannot rebuild RAG index." };
+      }
+      try {
+        const count = await reindexAgentRag(root);
+        await recordAgentHistory("rag_reindex", { count });
+        return {
+          markdown: `Rebuilt RAG index with **${count}** documents (history + facts).\n\n_Embedding runtime: hashed n-gram TF-IDF_`,
+          meta: { count },
+        };
+      } catch (error) {
+        return {
+          markdown: `RAG reindex failed: ${error instanceof Error ? error.message : String(error)}`,
         };
       }
     }

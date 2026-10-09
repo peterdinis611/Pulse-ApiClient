@@ -3,6 +3,7 @@
 mod http_integration;
 
 pub mod agent_memory;
+pub mod agent_rag;
 pub mod cache;
 pub mod collection_run;
 pub mod collections_folder;
@@ -35,6 +36,7 @@ use agent_memory::{
     agent_memory_clear_local, agent_memory_delete, agent_memory_get, agent_memory_list,
     agent_memory_reindex, agent_memory_upsert,
 };
+use agent_rag::{agent_rag_reindex, agent_rag_search, agent_rag_search_markdown};
 use cache::CacheConfig;
 use db::{DbState, DbUserSession};
 use engine::HttpEngineStats;
@@ -214,6 +216,7 @@ fn set_collections_folder(app: AppHandle, path: Option<String>) -> Result<AppSet
         git_workspace::open_workspace(folder, "Pulse")?;
         if let Some(db) = app.try_state::<DbState>() {
             let _ = git_workspace::reindex_agent_memory(db.inner(), folder);
+            let _ = db.with_user_conn(|conn| agent_rag::rebuild_with_request_history(conn, folder));
         }
     }
 
@@ -590,6 +593,9 @@ pub fn run() {
             agent_memory_upsert,
             agent_memory_delete,
             agent_memory_clear_local,
+            agent_rag_reindex,
+            agent_rag_search,
+            agent_rag_search_markdown,
             mock_server_start,
             mock_server_stop,
             secret_set,

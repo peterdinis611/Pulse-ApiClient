@@ -191,6 +191,9 @@ pub fn git_workspace_open(
     let payload = open_workspace(&root, name.as_deref().unwrap_or("Pulse"))?;
     if let Some(db) = app.try_state::<crate::db::DbState>() {
         let _ = reindex_agent_memory(db.inner(), &root);
+        let _ = db.with_user_conn(|conn| {
+            crate::agent_rag::rebuild_with_request_history(conn, &root)
+        });
     }
     Ok(payload)
 }

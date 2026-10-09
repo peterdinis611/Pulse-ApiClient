@@ -263,6 +263,43 @@ def cmd_agent_memory(args: argparse.Namespace) -> int:
     return 1
 
 
+def cmd_agent_rag(args: argparse.Namespace) -> int:
+    import os
+
+    from pulse.rag import format_rag_hits_markdown, rebuild_rag_index, search_rag
+    from pulse.workspace import workspace_root
+
+    root = args.workspace or os.environ.get("PULSE_WORKSPACE") or workspace_root()
+    if not root:
+        print("No workspace root. Set PULSE_WORKSPACE or pass --workspace.", file=sys.stderr)
+        return 1
+    action = getattr(args, "rag_action", None) or "search"
+    try:
+        if action == "search":
+            query = " ".join(args.query or []).strip()
+            if not query:
+                print("Usage: pulse agent-rag search <query>", file=sys.stderr)
+                return 1
+            hits = search_rag(root, query, limit=getattr(args, "limit", 8) or 8)
+            if args.json:
+                print(json.dumps({"query": query, "hits": hits}, indent=2))
+            else:
+                print(format_rag_hits_markdown(hits, query))
+            return 0
+        if action == "reindex":
+            count = rebuild_rag_index(root)
+            if args.json:
+                print(json.dumps({"count": count}, indent=2))
+            else:
+                print(f"Rebuilt RAG index with {count} documents (hashed n-gram TF-IDF).")
+            return 0
+    except Exception as error:  # noqa: BLE001
+        print(str(error), file=sys.stderr)
+        return 1
+    print(f"Unknown RAG action: {action}", file=sys.stderr)
+    return 1
+
+
 def cmd_diff(args: argparse.Namespace) -> int:
     left_path = Path(args.left)
     right_path = Path(args.right)
@@ -967,7 +1004,7 @@ def main(argv: list[str] | None = None) -> int:
 
     agent = sub.add_parser(
         "agent",
-        help="Local intent router (no LLM): cURL, SSE, workspace status/history, memory, GraphQL summarize",
+        help="Local intent router (no LLM): cURL, SSE, workspace status/history, memory, RAG, GraphQL summarize",
     )
     agent.add_argument(
         "utterance",
@@ -1008,6 +1045,22 @@ def main(argv: list[str] | None = None) -> int:
     mem_forget.add_argument("--workspace")
     mem_forget.add_argument("--json", action="store_true")
     mem_forget.set_defaults(func=cmd_agent_memory, memory_action="forget")
+
+    agent_rag = sub.add_parser(
+        "agent-rag",
+        help="RAG over history + facts (hashed n-gram TF-IDF, no PyTorch)",
+    )
+    agent_rag_sub = agent_rag.add_subparsers(dest="rag_action", required=True)
+    rag_search = agent_rag_sub.add_parser("search", help="Semantic search over indexed documents")
+    rag_search.add_argument("query", nargs="+", help="Search query")
+    rag_search.add_argument("--workspace")
+    rag_search.add_argument("--limit", type=int, default=8)
+    rag_search.add_argument("--json", action="store_true")
+    rag_search.set_defaults(func=cmd_agent_rag, rag_action="search")
+    rag_reindex = agent_rag_sub.add_parser("reindex", help="Rebuild .pulse/rag-index.json")
+    rag_reindex.add_argument("--workspace")
+    rag_reindex.add_argument("--json", action="store_true")
+    rag_reindex.set_defaults(func=cmd_agent_rag, rag_action="reindex")
 
     diff = sub.add_parser("diff", help="Unified diff between two JSON values or files")
     diff.add_argument("left")
