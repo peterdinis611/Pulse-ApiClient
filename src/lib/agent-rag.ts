@@ -3,6 +3,7 @@ import { runEffect } from "@/lib/effect/run";
 import { canUseTauriIpc } from "@/lib/tauri-runtime";
 import { createRequest } from "@/lib/helpers";
 import { t } from "@/lib/i18n";
+import type { HttpMethod } from "@/types";
 
 export type AgentRagHit = {
   id: string;
@@ -112,7 +113,7 @@ export function citationsFromRagHits(hits: AgentRagHit[]): AgentRagCitation[] {
   const out: AgentRagCitation[] = [];
   for (const hit of hits) {
     const url = hit.url?.trim();
-    const method = (hit.method || "GET").toUpperCase();
+    const method = (hit.method || "GET").toUpperCase() as HttpMethod;
     if (!url) continue;
     const name = hit.name?.trim() || `${method} ${url}`;
     out.push({

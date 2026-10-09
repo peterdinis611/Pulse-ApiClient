@@ -882,7 +882,7 @@ def cmd_help(_args: argparse.Namespace) -> int:
 
 
 def cmd_version(_args: argparse.Namespace) -> int:
-    print("pulse-cli 2.1.0")
+    print("pulse-cli 2.3.0")
     print(f"python {sys.version.split()[0]}")
     try:
         native = load_native()

@@ -531,7 +531,7 @@ export async function confirmAgentAction(
       const result: CollectionRunResult = await runCollectionAuto(
         collectionId,
         group.name,
-        saved.map((item) => item.request),
+        saved,
         ctx.environment,
       );
       const root = getGitWorkspaceRoot();

@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { prepareRequest } from "./http-client";
-import { createKeyValue, createRequest } from "./helpers";
+import { createKeyValue, createRequest, defaultAuth } from "./helpers";
 import { canUseTauriIpc } from "./tauri-runtime";
 import type { ApiRequest, AuthConfig, BodyKind, Environment, HttpMethod, KeyValue, MultipartField } from "@/types";
 
@@ -32,7 +32,8 @@ type NativeCurlPayload = {
 };
 
 function payloadToRequest(payload: NativeCurlPayload): ApiRequest {
-  const auth: Partial<AuthConfig> = {
+  const auth: AuthConfig = {
+    ...defaultAuth(),
     authType: (payload.auth?.authType as AuthConfig["authType"]) || "none",
     bearerToken: payload.auth?.bearerToken ?? "",
     basicUsername: payload.auth?.basicUsername ?? "",

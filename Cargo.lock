@@ -67,7 +67,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "api-client"
-version = "2.1.0"
+version = "2.3.0"
 dependencies = [
  "base64 0.22.1",
  "futures-util",
@@ -3600,7 +3600,7 @@ dependencies = [
 
 [[package]]
 name = "pulse-core"
-version = "2.1.0"
+version = "2.3.0"
 dependencies = [
  "base64 0.22.1",
  "boa_engine",
@@ -3616,7 +3616,7 @@ dependencies = [
 
 [[package]]
 name = "pulse-mcp"
-version = "2.1.0"
+version = "2.3.0"
 dependencies = [
  "pulse-core",
  "serde_json",
@@ -3625,7 +3625,7 @@ dependencies = [
 
 [[package]]
 name = "pulse-native"
-version = "2.1.0"
+version = "2.3.0"
 dependencies = [
  "pulse-core",
  "pyo3",
