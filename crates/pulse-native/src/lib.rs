@@ -501,6 +501,7 @@ fn agent_memory_upsert_json(
             source: &source_owned,
             tags: Vec::new(),
             note: note.as_deref(),
+            expires_at: None,
         },
     )
     .map_err(py_err)?;

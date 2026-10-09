@@ -1,6 +1,7 @@
 import { invokeEffect } from "@/lib/effect/tauri";
 import { runEffect } from "@/lib/effect/run";
 import { canUseTauriIpc } from "@/lib/tauri-runtime";
+import { t } from "@/lib/i18n";
 
 export type AgentMemoryFact = {
   id: string;
@@ -74,7 +75,7 @@ export async function clearLocalAgentMemory(workspaceRoot: string): Promise<numb
 }
 
 export function formatMemoryMarkdown(facts: AgentMemoryFact[], title: string): string {
-  if (facts.length === 0) return `**${title}**\n\n_(empty)_`;
+  if (facts.length === 0) return `**${title}**\n\n${t("agent.md.memoryEmpty")}`;
   const lines = [`**${title}** (${facts.length})`, ""];
   for (const fact of facts.slice(0, 40)) {
     const tags = fact.tags?.length ? ` · ${fact.tags.join(", ")}` : "";

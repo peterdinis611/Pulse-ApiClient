@@ -28,6 +28,7 @@ fn upsert_get_delete_workspace_roundtrip() {
             source: "test",
             tags: vec!["env".into(), "http".into()],
             note: Some("use staging"),
+            expires_at: None,
         },
     )
     .expect("upsert");
@@ -60,6 +61,7 @@ fn local_scope_stays_out_of_workspace_yaml() {
             source: "cli",
             tags: vec![],
             note: None,
+            expires_at: None,
         },
     )
     .unwrap();
@@ -85,6 +87,7 @@ fn search_and_overwrite() {
             source: "user",
             tags: vec!["deploy".into()],
             note: None,
+            expires_at: None,
         },
     )
     .unwrap();
@@ -97,6 +100,7 @@ fn search_and_overwrite() {
             source: "user",
             tags: vec!["deploy".into()],
             note: None,
+            expires_at: None,
         },
     )
     .unwrap();
@@ -123,4 +127,26 @@ fn parse_remember_pair_shapes() {
         parse_remember_pair("preferred base url is https://staging"),
         Some(("preferred base url".into(), "https://staging".into()))
     );
+}
+
+#[test]
+fn expired_facts_are_hidden_and_pruned() {
+    let root = temp_root("ttl");
+    let root_s = root.to_string_lossy().to_string();
+    upsert_fact(
+        &root_s,
+        UpsertFactInput {
+            key: "temp_token",
+            value: "x",
+            scope: MemoryScope::Local,
+            source: "test",
+            tags: vec![],
+            note: None,
+            expires_at: Some("1000000000.000Z"), // clearly in the past
+        },
+    )
+    .unwrap();
+    assert!(list_facts(&root_s, Some(MemoryScope::Local)).unwrap().is_empty());
+    let removed = prune_expired_facts(&root_s).unwrap();
+    assert!(removed >= 1);
 }

@@ -82,7 +82,7 @@ import {
   listAgentMemory,
   reindexAgentMemory,
 } from "@/lib/agent-memory";
-import { reindexAgentRag } from "@/lib/agent-rag";
+import { pruneAgentRag, reindexAgentRag } from "@/lib/agent-rag";
 import {
   loadAgentSettings,
   saveAgentSettings,
@@ -1256,6 +1256,7 @@ export function SettingsView() {
           title={t("agent.settings.title")}
           description={t("agent.settings.description")}
         >
+          <p className="text-xs text-muted-foreground">{t("agent.settings.languageHint")}</p>
           <AgentCapabilitiesPanel
             settings={agentSettings}
             defaultOpen
@@ -1365,6 +1366,31 @@ export function SettingsView() {
                 }}
               >
                 {t("agent.rag.refresh")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={ragBusy}
+                onClick={() => {
+                  const root = getGitWorkspaceRoot() || collectionsFolderPath.trim();
+                  if (!root) {
+                    toast.error(t("agent.rag.none"));
+                    return;
+                  }
+                  setRagBusy(true);
+                  void pruneAgentRag(root)
+                    .then((count) => {
+                      setRagCount(count);
+                      toast.success(t("agent.rag.pruned", { count }));
+                    })
+                    .catch((error) =>
+                      toast.error(error instanceof Error ? error.message : String(error)),
+                    )
+                    .finally(() => setRagBusy(false));
+                }}
+              >
+                {t("agent.rag.prune")}
               </Button>
             </div>
           </div>

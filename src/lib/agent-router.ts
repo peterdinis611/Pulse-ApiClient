@@ -3,6 +3,7 @@
 import { parseRememberPair } from "@/lib/agent-memory";
 import type { AgentCapability, AgentSettings } from "@/lib/agent-settings";
 import { AGENT_CAPABILITIES, loadAgentSettings } from "@/lib/agent-settings";
+import { t, type MessageKey } from "@/lib/i18n";
 
 export type AgentIntent =
   | { kind: "help" }
@@ -25,6 +26,19 @@ export type AgentIntent =
 const CURL_BLOCK = /```(?:bash|sh|shell|zsh)?\s*([\s\S]*?curl[\s\S]*?)```/i;
 const CURL_LINE = /((?:^|\n)\s*curl\b[\s\S]+)/i;
 
+const HELP_KEYS: Record<AgentCapability, MessageKey> = {
+  import_curl: "agent.md.cap.import_curl",
+  explain_response: "agent.md.cap.explain_response",
+  explain_tests: "agent.md.cap.explain_tests",
+  workspace_status: "agent.md.cap.workspace_status",
+  workspace_history: "agent.md.cap.workspace_history",
+  run_collection: "agent.md.cap.run_collection",
+  graphql_summarize: "agent.md.cap.graphql_summarize",
+  sse_parse: "agent.md.cap.sse_parse",
+  memory: "agent.md.cap.memory",
+  memory_rag: "agent.md.cap.memory_rag",
+};
+
 function extractCurl(input: string): string | null {
   const fenced = input.match(CURL_BLOCK);
   if (fenced?.[1]?.toLowerCase().includes("curl")) {
@@ -45,7 +59,6 @@ function extractSseDoc(input: string): string | null {
   if (fenced?.[1] && /(?:^|\n)\s*(?:data|event|id|retry):/i.test(fenced[1])) {
     return fenced[1].trim();
   }
-  // After trim(), trailing blank lines are gone — accept multi-line SSE field docs.
   if (
     /(?:^|\n)\s*(?:data|event|id|retry):/im.test(input) &&
     (input.includes("\n\n") || /\n\s*(?:data|event|id|retry):/im.test(input))
@@ -137,7 +150,7 @@ export function routeAgentInput(raw: string): AgentIntent {
       .join(" ");
     const pair = parseRememberPair(body);
     if (pair) return { kind: "remember", key: pair.key, value: pair.value, scope };
-    return { kind: "unknown", input: "Usage: remember key=value  (optional --local)" };
+    return { kind: "unknown", input: t("agent.md.usageRemember") };
   }
   if (/^(?:recall|what\s+do\s+you\s+remember\s+about)\s+/.test(quick)) {
     const query = input
@@ -152,52 +165,29 @@ export function routeAgentInput(raw: string): AgentIntent {
   const curl = extractCurl(input);
   if (curl || quick === "quick:curl" || /import\s+curl/.test(quick)) {
     if (curl) return { kind: "import_curl", curl };
-    return { kind: "unknown", input: "Paste a cURL command (or wrap it in a ```bash fence)." };
+    return { kind: "unknown", input: t("agent.md.pasteCurl") };
   }
 
   const sse = extractSseDoc(input);
   if (sse || /parse\s+sse/.test(quick)) {
     if (sse) return { kind: "sse_parse", text: sse };
-    return { kind: "unknown", input: "Paste an SSE document to parse (event/data blocks)." };
+    return { kind: "unknown", input: t("agent.md.pasteSse") };
   }
 
   return { kind: "unknown", input };
 }
 
-const HELP_LINES: Record<AgentCapability, string> = {
-  import_curl: "• **Import cURL** — paste a curl command → opens a request tab",
-  explain_response: "• **Explain last response** — summarize status, body, GraphQL errors",
-  explain_tests: "• **Explain test failures** — walk the last test run",
-  workspace_status: "• **Workspace status** — Git workspace root + pending mutations",
-  workspace_history:
-    "• **Agent history** — recent agent/MCP history from `.pulse/history.jsonl`",
-  run_collection: "• **Run active collection** — needs confirm (mutating requests)",
-  graphql_summarize:
-    "• **GraphQL summarize** — summarize introspection body on the active tab",
-  sse_parse: "• **Parse SSE** — paste an SSE document",
-  memory:
-    "• **Memory** — `remember key=value`, `recall key`, `forget key`, `list memory`",
-  memory_rag:
-    "• **RAG** — `search history …` / `rag …` (hashed n-gram TF-IDF; `reindex rag`)",
-};
-
 export function buildAgentHelpText(settings: AgentSettings = loadAgentSettings()): string {
   if (!settings.enabled) {
-    return "The in-app agent is **turned off**. Enable it in **Settings → Agent / LLM**.";
+    return t("agent.md.helpOff");
   }
   const lines = AGENT_CAPABILITIES.filter((id) => settings.capabilities[id]).map(
-    (id) => HELP_LINES[id],
+    (id) => t(HELP_KEYS[id]),
   );
   if (lines.length === 0) {
-    return "The agent is on, but every capability is disabled. Expand capabilities in **Settings → Agent / LLM**.";
+    return t("agent.md.helpNone");
   }
-  return [
-    "I understand these intents (local, no LLM yet):",
-    "",
-    ...lines,
-    "",
-    "Or use the quick-action chips below.",
-  ].join("\n");
+  return [t("agent.md.helpIntro"), "", ...lines, "", t("agent.md.helpFooter")].join("\n");
 }
 
 /** @deprecated Prefer buildAgentHelpText() so disabled capabilities stay hidden. */

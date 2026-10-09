@@ -18,7 +18,14 @@ from pulse.memory import (
     search_facts,
     upsert_fact,
 )
-from pulse.rag import format_rag_hits_markdown, rebuild_rag_index, search_rag
+from pulse.rag import (
+    format_rag_context_block,
+    format_rag_hits_markdown,
+    prune_rag_index,
+    rebuild_rag_index,
+    related_context,
+    search_rag,
+)
 from pulse.sse import parse_text as parse_sse_text
 from pulse.workspace import read_history, workspace_root, workspace_status
 
@@ -28,7 +35,7 @@ AGENT_HELP_TEXT = """I understand these intents (local, no LLM):
 • **Workspace status** — Git workspace root + pending mutations
 • **Agent history** — recent entries from `.pulse/history.jsonl`
 • **Memory** — `remember key=value`, `recall key`, `forget key`, `list memory`
-• **RAG** — `search history …` / `rag …` (hashed n-gram TF-IDF; `reindex rag`)
+• **RAG** — `search history …` / `rag method:POST status:4xx …` (TF-IDF + filters; `reindex rag`)
 • **GraphQL summarize** — pass introspection/response body via `--body` / `body`
 • **Parse SSE** — paste an SSE document (event/data blocks)
 
@@ -222,6 +229,8 @@ def _execute_py(
         markdown = "\n".join(lines)
         if facts:
             markdown += "\n\n---\n" + format_facts_markdown(facts, "Known facts")
+        seed = f"{status.get('name') or ''} preferred_base_url"
+        markdown += format_rag_context_block(related_context(root, seed, 5))
         return {"kind": kind, "markdown": markdown, "data": status}
     if kind == "workspace_history":
         root = workspace or workspace_root()
@@ -353,13 +362,15 @@ def _execute_py(
         if not workspace:
             raise ValueError("No workspace root. Set PULSE_WORKSPACE or pass workspace.")
         count = rebuild_rag_index(workspace)
+        pruned = prune_rag_index(workspace)
         return {
             "kind": kind,
             "markdown": (
-                f"Rebuilt RAG index with **{count}** documents (history + facts).\n\n"
-                "_Embedding runtime: hashed n-gram TF-IDF_"
+                f"Rebuilt RAG index with **{count}** documents (history + facts), "
+                f"**{pruned}** after prune.\n\n"
+                "_Embedding runtime: hashed n-gram TF-IDF · hybrid filters: `method:POST status:4xx`_"
             ),
-            "data": {"count": count},
+            "data": {"count": count, "afterPrune": pruned},
         }
     return {"kind": kind, "markdown": AGENT_HELP_TEXT, "data": None}
 

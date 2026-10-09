@@ -14,6 +14,7 @@ import {
   type AgentConfirmKind,
 } from "@/lib/agent-actions";
 import { routeAgentInput } from "@/lib/agent-router";
+import type { AgentRagCitation } from "@/lib/agent-rag";
 import type { AgentCapability } from "@/lib/agent-settings";
 import type { MessageKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,7 @@ type ChatMessage = {
   text: string;
   pendingConfirm?: AgentConfirmKind;
   openRequest?: ApiRequest;
+  citations?: AgentRagCitation[];
   busy?: boolean;
 };
 
@@ -147,6 +149,7 @@ export function AgentView() {
       text: result.markdown,
       pendingConfirm: result.needsConfirm,
       openRequest: result.openRequest,
+      citations: result.citations,
     };
     setMessages((prev) => {
       if (replaceId) {
@@ -320,7 +323,9 @@ export function AgentView() {
                     {renderAgentMarkdown(message.text)}
                   </div>
                 )}
-                {(message.pendingConfirm || message.openRequest) && (
+                {(message.pendingConfirm ||
+                  message.openRequest ||
+                  (message.citations && message.citations.length > 0)) && (
                   <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-2">
                     {message.pendingConfirm && (
                       <>
@@ -361,6 +366,17 @@ export function AgentView() {
                         {t("agent.openRequest")}
                       </Button>
                     )}
+                    {message.citations?.map((citation) => (
+                      <Button
+                        key={citation.id}
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleOpenRequest(citation.request)}
+                      >
+                        {citation.label}
+                      </Button>
+                    ))}
                   </div>
                 )}
               </div>

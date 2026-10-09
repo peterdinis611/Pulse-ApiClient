@@ -257,5 +257,9 @@ pub fn git_workspace_append_agent_history(
     root: String,
     entry: serde_json::Value,
 ) -> Result<(), String> {
-    pulse_core::workspace_fs::append_agent_history(&root, &entry)
+    pulse_core::workspace_fs::append_agent_history(&root, &entry)?;
+    if let Some(doc) = pulse_core::doc_from_history_entry(&entry) {
+        let _ = pulse_core::upsert_rag_docs(&root, &[doc]);
+    }
+    Ok(())
 }

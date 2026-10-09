@@ -7,10 +7,14 @@ use serde_json::{json, Value};
 use std::sync::OnceLock;
 
 use crate::agent_memory::{
-    delete_fact, format_facts_markdown, get_fact, list_facts, parse_remember_pair, search_facts,
-    upsert_fact, MemoryScope, UpsertFactInput,
+    delete_fact, format_facts_markdown, get_fact, list_facts, parse_remember_pair,
+    prune_expired_facts, search_facts, upsert_fact, MemoryScope, UpsertFactInput,
 };
-use crate::agent_rag::{format_rag_hits_markdown, rebuild_rag_index, search_rag};
+use crate::agent_rag::{
+    doc_from_history_entry, docs_from_memory_facts, format_rag_context_block,
+    format_rag_hits_markdown, prune_rag_index, rebuild_rag_index, related_context, search_rag,
+    upsert_rag_docs,
+};
 use crate::curl::curl_to_payload;
 use crate::graphql::summarize_schema;
 use crate::sse::parse_sse_text;
@@ -79,7 +83,7 @@ pub const AGENT_HELP_TEXT: &str = "I understand these intents (local, no LLM):
 • **Workspace status** — Git workspace root + pending mutations
 • **Agent history** — recent entries from `.pulse/history.jsonl`
 • **Memory** — `remember key=value`, `recall key`, `forget key`, `list memory`
-• **RAG** — `search history …` / `rag …` (hashed n-gram TF-IDF over history + facts; `reindex rag`)
+• **RAG** — `search history …` / `rag method:POST status:4xx …` (TF-IDF + filters; `reindex rag`)
 • **GraphQL summarize** — pass introspection/response body via `--body` / `body`
 • **Parse SSE** — paste an SSE document (event/data blocks)
 
@@ -226,6 +230,11 @@ fn known_facts_block(root: &str) -> String {
     }
     let top: Vec<_> = facts.into_iter().take(8).collect();
     format!("\n\n---\n{}", format_facts_markdown(&top, "Known facts"))
+}
+
+fn auto_context_block(root: &str, seed: &str) -> String {
+    let hits = related_context(root, seed, 5);
+    format_rag_context_block(&hits)
 }
 
 fn extract_curl(input: &str) -> Option<String> {
@@ -398,6 +407,9 @@ fn record_history(opts: &AgentExecuteOptions<'_>, kind: &str, meta: Value) {
         }
     }
     let _ = append_agent_history(root, &entry);
+    if let Some(doc) = doc_from_history_entry(&entry) {
+        let _ = upsert_rag_docs(root, &[doc]);
+    }
 }
 
 fn chrono_like_id() -> u128 {
@@ -541,6 +553,17 @@ CLI and MCP support offline intents: cURL import, SSE parse, workspace status/hi
             lines.push(format!("**Memory facts:** {memory_count}"));
             let mut markdown = lines.join("\n");
             markdown.push_str(&known_facts_block(root));
+            let seed = format!(
+                "{} preferred_base_url {}",
+                payload.name,
+                payload
+                    .environments
+                    .iter()
+                    .map(|e| e.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+            markdown.push_str(&auto_context_block(root, &seed));
             Ok(AgentResult {
                 kind,
                 markdown,
@@ -683,8 +706,10 @@ CLI and MCP support offline intents: cURL import, SSE parse, workspace status/hi
                     source: opts.source,
                     tags: Vec::new(),
                     note: None,
+                    expires_at: None,
                 },
             )?;
+            let _ = upsert_rag_docs(root, &docs_from_memory_facts(root));
             record_history(
                 opts,
                 "remember",
@@ -781,14 +806,20 @@ CLI and MCP support offline intents: cURL import, SSE parse, workspace status/hi
         }
         AgentIntent::RagReindex => {
             let root = require_workspace(opts)?;
+            let _ = prune_expired_facts(root);
             let count = rebuild_rag_index(root, &[])?;
-            record_history(opts, "rag_reindex", json!({ "count": count }));
+            let pruned = prune_rag_index(root, Some(30), Some(5_000)).unwrap_or(count);
+            record_history(
+                opts,
+                "rag_reindex",
+                json!({ "count": count, "afterPrune": pruned }),
+            );
             Ok(AgentResult {
                 kind,
                 markdown: format!(
-                    "Rebuilt RAG index with **{count}** documents (history + facts).\n\n_Embedding runtime: hashed n-gram TF-IDF_"
+                    "Rebuilt RAG index with **{count}** documents (history + facts), **{pruned}** after prune.\n\n_Embedding runtime: hashed n-gram TF-IDF · hybrid filters: `method:POST status:4xx`_"
                 ),
-                data: Some(json!({ "count": count })),
+                data: Some(json!({ "count": count, "afterPrune": pruned })),
             })
         }
     }

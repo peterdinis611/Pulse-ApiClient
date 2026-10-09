@@ -36,7 +36,7 @@ use agent_memory::{
     agent_memory_clear_local, agent_memory_delete, agent_memory_get, agent_memory_list,
     agent_memory_reindex, agent_memory_upsert,
 };
-use agent_rag::{agent_rag_reindex, agent_rag_search, agent_rag_search_markdown};
+use agent_rag::{agent_rag_prune, agent_rag_reindex, agent_rag_search, agent_rag_search_markdown};
 use cache::CacheConfig;
 use db::{DbState, DbUserSession};
 use engine::HttpEngineStats;
@@ -285,8 +285,14 @@ fn db_save_workspace(db: State<'_, Arc<DbState>>, payload: String) -> Result<(),
 }
 
 #[tauri::command]
-fn db_append_history(db: State<'_, Arc<DbState>>, entry: HistoryEntryPayload) -> Result<(), String> {
-    db.append_history_entry(entry)
+fn db_append_history(
+    app: tauri::AppHandle,
+    db: State<'_, Arc<DbState>>,
+    entry: HistoryEntryPayload,
+) -> Result<(), String> {
+    db.append_history_entry(entry.clone())?;
+    agent_rag::on_history_appended(&app, &entry);
+    Ok(())
 }
 
 #[tauri::command]
@@ -596,6 +602,7 @@ pub fn run() {
             agent_rag_reindex,
             agent_rag_search,
             agent_rag_search_markdown,
+            agent_rag_prune,
             mock_server_start,
             mock_server_stop,
             secret_set,

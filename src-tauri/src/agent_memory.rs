@@ -21,6 +21,7 @@ pub struct AgentMemoryFactDto {
     pub updated_at: String,
     pub source: String,
     pub note: Option<String>,
+    pub expires_at: Option<String>,
 }
 
 impl From<MemoryFact> for AgentMemoryFactDto {
@@ -35,6 +36,7 @@ impl From<MemoryFact> for AgentMemoryFactDto {
             updated_at: fact.updated_at,
             source: fact.source,
             note: fact.note,
+            expires_at: fact.expires_at,
         }
     }
 }
@@ -49,6 +51,7 @@ pub struct AgentMemoryUpsertInput {
     pub source: Option<String>,
     pub tags: Option<Vec<String>>,
     pub note: Option<String>,
+    pub expires_at: Option<String>,
 }
 
 pub fn migrate_agent_memory_table(conn: &Connection) -> Result<(), String> {
@@ -157,6 +160,7 @@ fn list_from_index(
                 note: row.get(6)?,
                 created_at: row.get(7)?,
                 updated_at: row.get(8)?,
+                expires_at: None,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -236,6 +240,7 @@ pub fn agent_memory_get(
                     note: row.get(6)?,
                     created_at: row.get(7)?,
                     updated_at: row.get(8)?,
+                    expires_at: None,
                 })
             },
         )
@@ -265,6 +270,7 @@ pub fn agent_memory_upsert(
             source: &source,
             tags: input.tags.unwrap_or_default(),
             note: input.note.as_deref(),
+            expires_at: input.expires_at.as_deref(),
         },
     )?;
     db.with_user_conn(|conn| fact_to_row(conn, &input.workspace_root, &fact))?;

@@ -68,3 +68,72 @@ fn rebuild_and_search_roundtrip() {
     assert!(!hits.is_empty());
     assert!(hits[0].text.to_ascii_lowercase().contains("users"));
 }
+
+#[test]
+fn hybrid_filters_method_and_status() {
+    let docs = vec![
+        RagDocument {
+            id: "1".into(),
+            kind: "request".into(),
+            text: "GET users https://api.test/users 200".into(),
+            meta: Some(serde_json::json!({"method":"GET","status":200,"url":"https://api.test/users"})),
+        },
+        RagDocument {
+            id: "2".into(),
+            kind: "request".into(),
+            text: "POST login https://api.test/auth/login 500".into(),
+            meta: Some(serde_json::json!({"method":"POST","status":500,"url":"https://api.test/auth/login"})),
+        },
+    ];
+    let hits = search_documents(&docs, "method:POST status:5xx login", 5);
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].id, "2");
+}
+
+#[test]
+fn upsert_is_incremental() {
+    let root = temp_root("upsert");
+    let root_s = root.to_string_lossy().to_string();
+    let count = upsert_rag_docs(
+        &root_s,
+        &[RagDocument {
+            id: "req:a".into(),
+            kind: "request".into(),
+            text: "GET health https://api.test/health 200".into(),
+            meta: None,
+        }],
+    )
+    .unwrap();
+    assert_eq!(count, 1);
+    let count = upsert_rag_docs(
+        &root_s,
+        &[RagDocument {
+            id: "req:b".into(),
+            kind: "request".into(),
+            text: "POST users https://api.test/users 201".into(),
+            meta: None,
+        }],
+    )
+    .unwrap();
+    assert_eq!(count, 2);
+    let hits = search_rag(&root_s, "users", 5).unwrap();
+    assert!(hits.iter().any(|h| h.id == "req:b"));
+}
+
+#[test]
+fn rich_request_doc_includes_graphql_op() {
+    let doc = doc_from_request_history(
+        "g1",
+        "2026-01-01T00:00:00Z",
+        "POST",
+        "GQL",
+        "https://api.test/graphql",
+        Some(200),
+        r#"{"method":"POST","bodyKind":"graphql","body":"query ListUsers { users { id } }"}"#,
+    );
+    assert!(
+        doc.text.to_ascii_lowercase().contains("listusers"),
+        "text={}",
+        doc.text
+    );
+}

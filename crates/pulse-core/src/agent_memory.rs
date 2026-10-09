@@ -42,6 +42,9 @@ pub struct MemoryFact {
     pub source: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// Optional expiry (`secs.msZ` or RFC3339). Expired facts are hidden by list/get.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -120,16 +123,58 @@ pub fn load_facts_for_scope(root: &str, scope: MemoryScope) -> Result<Vec<Memory
     Ok(file.facts)
 }
 
-pub fn list_facts(root: &str, scope: Option<MemoryScope>) -> Result<Vec<MemoryFact>, String> {
-    match scope {
-        Some(scope) => load_facts_for_scope(root, scope),
-        None => {
-            let mut out = load_facts_for_scope(root, MemoryScope::Workspace)?;
-            out.extend(load_facts_for_scope(root, MemoryScope::Local)?);
-            out.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-            Ok(out)
+fn is_expired(fact: &MemoryFact, now_secs: u64) -> bool {
+    let Some(raw) = fact.expires_at.as_deref() else {
+        return false;
+    };
+    let head = raw.split(|c| c == '.' || c == 'T' || c == 'Z').next().unwrap_or("");
+    if let Ok(secs) = head.parse::<u64>() {
+        // Epoch seconds (vs bare year-like numbers)
+        if secs >= 1_000_000_000 {
+            return secs <= now_secs;
         }
     }
+    false
+}
+
+fn now_epoch_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+pub fn list_facts(root: &str, scope: Option<MemoryScope>) -> Result<Vec<MemoryFact>, String> {
+    let now = now_epoch_secs();
+    let mut out = match scope {
+        Some(scope) => load_facts_for_scope(root, scope)?,
+        None => {
+            let mut all = load_facts_for_scope(root, MemoryScope::Workspace)?;
+            all.extend(load_facts_for_scope(root, MemoryScope::Local)?);
+            all
+        }
+    };
+    out.retain(|fact| !is_expired(fact, now));
+    out.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    Ok(out)
+}
+
+/// Remove expired facts from YAML stores. Returns number removed.
+pub fn prune_expired_facts(root: &str) -> Result<usize, String> {
+    let now = now_epoch_secs();
+    let mut removed = 0usize;
+    for scope in [MemoryScope::Workspace, MemoryScope::Local] {
+        let path = path_for_scope(root, scope);
+        let mut file = load_file(&path)?;
+        let before = file.facts.len();
+        file.facts.retain(|fact| !is_expired(fact, now));
+        let delta = before.saturating_sub(file.facts.len());
+        if delta > 0 {
+            removed += delta;
+            save_file(&path, &file)?;
+        }
+    }
+    Ok(removed)
 }
 
 pub fn get_fact(root: &str, key: &str, scope: Option<MemoryScope>) -> Result<Option<MemoryFact>, String> {
@@ -186,6 +231,7 @@ pub struct UpsertFactInput<'a> {
     pub source: &'a str,
     pub tags: Vec<String>,
     pub note: Option<&'a str>,
+    pub expires_at: Option<&'a str>,
 }
 
 pub fn upsert_fact(root: &str, input: UpsertFactInput<'_>) -> Result<MemoryFact, String> {
@@ -208,12 +254,18 @@ pub fn upsert_fact(root: &str, input: UpsertFactInput<'_>) -> Result<MemoryFact,
         .filter(|t| !t.is_empty())
         .collect();
 
+    let expires_at = input
+        .expires_at
+        .map(|n| n.trim().to_string())
+        .filter(|n| !n.is_empty());
+
     if let Some(existing) = file.facts.iter_mut().find(|item| item.key == key) {
         existing.value = value.to_string();
         existing.tags = tags;
         existing.updated_at = now.clone();
         existing.source = input.source.to_string();
         existing.note = input.note.map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
+        existing.expires_at = expires_at;
         existing.scope = input.scope;
         let out = existing.clone();
         save_file(&path, &file)?;
@@ -230,6 +282,7 @@ pub fn upsert_fact(root: &str, input: UpsertFactInput<'_>) -> Result<MemoryFact,
         updated_at: now,
         source: input.source.to_string(),
         note: input.note.map(|n| n.trim().to_string()).filter(|n| !n.is_empty()),
+        expires_at,
     };
     file.facts.push(fact.clone());
     save_file(&path, &file)?;
