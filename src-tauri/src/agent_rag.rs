@@ -225,6 +225,7 @@ pub fn agent_rag_prune(
 }
 
 /// Best-effort incremental RAG upsert after desktop history append.
+/// Runs off the IPC thread and coalesces bursts so rapid sends do not block UI.
 pub fn on_history_appended(app: &AppHandle, entry: &HistoryEntryPayload) {
     let Some(watch) = app.try_state::<GitWatchState>() else {
         return;
@@ -232,5 +233,11 @@ pub fn on_history_appended(app: &AppHandle, entry: &HistoryEntryPayload) {
     let Some(root) = git_workspace::current_root(&watch) else {
         return;
     };
-    let _ = upsert_history_entry(&root, entry);
+    let root = root.to_string();
+    let entry = entry.clone();
+    std::thread::spawn(move || {
+        // Small settle delay coalesces back-to-back history writes from collection runs.
+        std::thread::sleep(std::time::Duration::from_millis(80));
+        let _ = upsert_history_entry(&root, &entry);
+    });
 }

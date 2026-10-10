@@ -250,7 +250,13 @@ def search_documents(docs: list[dict[str, Any]], query: str, limit: int = 8) -> 
     query_tokens = tokenize(free)
     if not query_tokens:
         return []
-    doc_tokens = [tokenize(str(d.get("text") or "")) for d in filtered]
+    doc_tokens = []
+    for d in filtered:
+        cached = d.get("tokens")
+        if isinstance(cached, list) and cached:
+            doc_tokens.append([str(t) for t in cached])
+        else:
+            doc_tokens.append(tokenize(str(d.get("text") or "")))
     n = float(len(filtered))
     df: Counter[str] = Counter()
     for tokens in doc_tokens:
@@ -365,13 +371,23 @@ def _save_index(root: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
+def _ensure_tokens(doc: dict[str, Any]) -> dict[str, Any]:
+    tokens = doc.get("tokens")
+    if isinstance(tokens, list) and tokens:
+        return doc
+    text = str(doc.get("text") or "")
+    if text:
+        return {**doc, "tokens": tokenize(text)}
+    return doc
+
+
 def rebuild_rag_index(root: str | Path, extra_docs: list[dict[str, Any]] | None = None) -> int:
     root_p = Path(root)
     by_id: dict[str, dict[str, Any]] = {}
     for doc in _docs_from_history(root_p) + _docs_from_facts(root_p) + (extra_docs or []):
         doc_id = str(doc.get("id") or "")
         if doc_id:
-            by_id[doc_id] = doc
+            by_id[doc_id] = _ensure_tokens(dict(doc))
     docs = list(by_id.values())
     _save_index(
         root_p,
@@ -392,7 +408,7 @@ def upsert_rag_docs(root: str | Path, docs: list[dict[str, Any]]) -> int:
     for doc in docs:
         doc_id = str(doc.get("id") or "")
         if doc_id:
-            by_id[doc_id] = doc
+            by_id[doc_id] = _ensure_tokens(dict(doc))
     docs_out = list(by_id.values())
     _save_index(
         root_p,

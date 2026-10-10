@@ -24,6 +24,9 @@ pub struct RagDocument {
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub meta: Option<Value>,
+    /// Cached `tokenize(text)` filled on upsert/rebuild so search skips re-tokenization.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tokens: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -340,6 +343,20 @@ fn doc_matches_filters(doc: &RagDocument, filters: &HybridFilters) -> bool {
     true
 }
 
+fn ensure_tokens(doc: &mut RagDocument) {
+    if doc.tokens.is_empty() && !doc.text.is_empty() {
+        doc.tokens = tokenize(&doc.text);
+    }
+}
+
+fn doc_tokens(doc: &RagDocument) -> Vec<String> {
+    if !doc.tokens.is_empty() {
+        doc.tokens.clone()
+    } else {
+        tokenize(&doc.text)
+    }
+}
+
 fn search_tfidf(docs: &[RagDocument], query: &str, limit: usize) -> Vec<RagHit> {
     let query_tokens = tokenize(query);
     if docs.is_empty() {
@@ -360,7 +377,7 @@ fn search_tfidf(docs: &[RagDocument], query: &str, limit: usize) -> Vec<RagHit> 
             .collect();
     }
 
-    let doc_tokens: Vec<Vec<String>> = docs.iter().map(|d| tokenize(&d.text)).collect();
+    let doc_tokens: Vec<Vec<String>> = docs.iter().map(doc_tokens).collect();
     let n = docs.len() as f32;
 
     let mut df: HashMap<String, f32> = HashMap::new();
@@ -541,12 +558,15 @@ pub fn doc_from_history_entry(entry: &Value) -> Option<RagDocument> {
         return None;
     }
 
-    Some(RagDocument {
+    let mut doc = RagDocument {
         id: format!("hist:{id}"),
         kind: "history".into(),
         text,
         meta: Some(entry.clone()),
-    })
+        tokens: Vec::new(),
+    };
+    ensure_tokens(&mut doc);
+    Some(doc)
 }
 
 pub fn docs_from_agent_history(root: &str) -> Vec<RagDocument> {
@@ -569,12 +589,15 @@ pub fn docs_from_memory_facts(root: &str) -> Vec<RagDocument> {
                 fact.tags.join(" "),
                 fact.note.as_deref().unwrap_or("")
             );
-            RagDocument {
+            let mut doc = RagDocument {
                 id: format!("fact:{}", fact.id),
                 kind: "fact".into(),
                 text,
                 meta: serde_json::to_value(&fact).ok(),
-            }
+                tokens: Vec::new(),
+            };
+            ensure_tokens(&mut doc);
+            doc
         })
         .collect()
 }
@@ -586,7 +609,7 @@ pub fn docs_from_request_rows(
         .map(|(id, sent_at, method, name, url, status)| {
             let status_s = status.map(|s| s.to_string()).unwrap_or_default();
             let text = format!("{method} {name} {url} {status_s} {sent_at}");
-            RagDocument {
+            let mut doc = RagDocument {
                 id: format!("req:{id}"),
                 kind: "request".into(),
                 text,
@@ -598,7 +621,10 @@ pub fn docs_from_request_rows(
                     "url": url,
                     "status": status,
                 })),
-            }
+                tokens: Vec::new(),
+            };
+            ensure_tokens(&mut doc);
+            doc
         })
         .collect()
 }
@@ -644,12 +670,15 @@ pub fn doc_from_request_history(
         }
         meta["request"] = req;
     }
-    RagDocument {
+    let mut doc = RagDocument {
         id: format!("req:{id}"),
         kind: "request".into(),
         text: collect_text_parts(&parts),
         meta: Some(meta),
-    }
+        tokens: Vec::new(),
+    };
+    ensure_tokens(&mut doc);
+    doc
 }
 
 fn load_index_file(path: &Path) -> Result<RagIndexFile, String> {
@@ -678,7 +707,8 @@ pub fn rebuild_rag_index(root: &str, extra_docs: &[RagDocument]) -> Result<usize
     docs.extend(extra_docs.iter().cloned());
 
     let mut by_id: HashMap<String, RagDocument> = HashMap::new();
-    for doc in docs {
+    for mut doc in docs {
+        ensure_tokens(&mut doc);
         by_id.insert(doc.id.clone(), doc);
     }
     let docs: Vec<_> = by_id.into_values().collect();
@@ -710,7 +740,9 @@ pub fn upsert_rag_docs(root: &str, docs: &[RagDocument]) -> Result<usize, String
         if doc.id.is_empty() {
             continue;
         }
-        by_id.insert(doc.id.clone(), doc.clone());
+        let mut next = doc.clone();
+        ensure_tokens(&mut next);
+        by_id.insert(next.id.clone(), next);
     }
     file.docs = by_id.into_values().collect();
     file.updated_at = now_iso();

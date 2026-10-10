@@ -101,14 +101,6 @@ pub fn start_watch(app: AppHandle, state: &GitWatchState, root: &str) -> Result<
         if event.kind.is_access() {
             return;
         }
-        {
-            let mut last = last.lock().unwrap_or_else(|e| e.into_inner());
-            let now = Instant::now();
-            if !watch_debounce_elapsed(*last, now, Duration::from_millis(250)) {
-                return;
-            }
-            *last = now;
-        }
         let path = event
             .paths
             .first()
@@ -116,6 +108,15 @@ pub fn start_watch(app: AppHandle, state: &GitWatchState, root: &str) -> Result<
             .unwrap_or_default();
         if should_ignore(Path::new(&path)) {
             return;
+        }
+        // Trailing-ish debounce: ignore bursts, emit at most every 750ms.
+        {
+            let mut last = last.lock().unwrap_or_else(|e| e.into_inner());
+            let now = Instant::now();
+            if !watch_debounce_elapsed(*last, now, Duration::from_millis(750)) {
+                return;
+            }
+            *last = now;
         }
         let kind = format!("{:?}", event.kind);
         let _ = handle.emit(
@@ -142,9 +143,37 @@ pub fn stop_watch(state: &GitWatchState) -> Result<(), String> {
 }
 
 fn should_ignore(path: &Path) -> bool {
+    let file_name = path
+        .file_name()
+        .map(|n| n.to_string_lossy())
+        .unwrap_or_default();
+    if matches!(
+        file_name.as_ref(),
+        "rag-index.json" | "Cargo.lock" | "package-lock.json" | "bun.lock" | "bun.lockb"
+    ) {
+        return true;
+    }
+    if file_name.ends_with(".pyc") || file_name.ends_with(".swp") || file_name.ends_with('~') {
+        return true;
+    }
     path.components().any(|part| {
         let name = part.as_os_str().to_string_lossy();
-        name == ".git" || name == ".pulse" || name == "node_modules"
+        matches!(
+            name.as_ref(),
+            ".git"
+                | ".pulse"
+                | "node_modules"
+                | "target"
+                | "dist"
+                | "build"
+                | ".venv"
+                | "venv"
+                | "__pycache__"
+                | ".next"
+                | "coverage"
+                | ".turbo"
+                | ".cache"
+        )
     })
 }
 
@@ -162,6 +191,9 @@ mod tests {
     fn ignores_git_and_pulse_dirs() {
         assert!(should_ignore(Path::new("/repo/.git/HEAD")));
         assert!(should_ignore(Path::new("/repo/.pulse/pending/x.json")));
+        assert!(should_ignore(Path::new("/repo/target/debug/api-client")));
+        assert!(should_ignore(Path::new("/repo/node_modules/x/index.js")));
+        assert!(should_ignore(Path::new("/repo/.pulse/rag-index.json")));
         assert!(!should_ignore(Path::new("/repo/collections/a.pulse.yaml")));
     }
 

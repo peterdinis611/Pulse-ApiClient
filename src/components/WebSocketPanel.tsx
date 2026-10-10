@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowDownLeft, ArrowUpRight, Plug, Radio, Unplug } from "lucide-react";
 import { useApp } from "@/machines";
+import { MAX_WS_MESSAGES } from "@/machines/appMachine";
 import { isSseProtocol } from "@/lib/protocol";
 import { prettyJson } from "@/lib/helpers";
 import { cn } from "@/lib/utils";
@@ -104,6 +105,8 @@ export function WebSocketPanel() {
   const canSend = ws.status === "open" && draft.trim().length > 0;
   const activeSubscriptionId = ws.graphqlSubscriptionIds?.[ws.graphqlSubscriptionIds.length - 1];
 
+  const MESSAGE_RENDER_WINDOW = 150;
+
   const filteredMessages = useMemo(() => {
     const needle = eventFilter.trim().toLowerCase();
     if (!needle) return ws.messages;
@@ -112,6 +115,13 @@ export function WebSocketPanel() {
       return hay.includes(needle) || message.data.toLowerCase().includes(needle);
     });
   }, [eventFilter, ws.messages]);
+
+  const visibleMessages = useMemo(() => {
+    if (filteredMessages.length <= MESSAGE_RENDER_WINDOW) return filteredMessages;
+    return filteredMessages.slice(-MESSAGE_RENDER_WINDOW);
+  }, [filteredMessages]);
+
+  const hiddenMessageCount = filteredMessages.length - visibleMessages.length;
 
   const sendSubscribe = () => {
     let variables: unknown;
@@ -315,7 +325,15 @@ export function WebSocketPanel() {
                   description={`Nothing matches “${eventFilter.trim()}”. Clear the filter to see all events.`}
                 />
               )}
-              {filteredMessages.map((message) => (
+              {hiddenMessageCount > 0 && (
+                <p className="text-center text-xs text-muted-foreground">
+                  Showing last {visibleMessages.length} of {filteredMessages.length} messages
+                  {ws.messages.length >= MAX_WS_MESSAGES
+                    ? ` (buffer capped at ${MAX_WS_MESSAGES})`
+                    : ""}
+                </p>
+              )}
+              {visibleMessages.map((message) => (
                 <div
                   key={message.id}
                   className={cn(

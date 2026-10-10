@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useApp } from "@/machines";
+import { AppMachineContext } from "@/machines/AppProvider";
 import {
   getGitWorkspaceRoot,
   listGitAgentHistory,
@@ -15,21 +15,30 @@ import { toast } from "@/lib/toast";
 import type { HistoryEntry } from "@/types";
 import { normalizeRequest } from "@/lib/helpers";
 
+const RELOAD_DEBOUNCE_MS = 450;
+
 export function GitWorkspaceSync() {
-  const { collections, tabs, loadGitWorkspaceState } = useApp();
+  const actorRef = AppMachineContext.useActorRef();
   const [conflict, setConflict] = useState<{ disk: string; editor: string; filePath: string } | null>(
     null,
   );
   const [pending, setPending] = useState<string[]>([]);
   const lastDisk = useRef(new Map<string, string>());
+  const reloadTimer = useRef(0);
 
   useEffect(() => {
     let mounted = true;
     let unlisten: (() => void) | undefined;
-    void listenGitWorkspaceChanges(async () => {
+
+    const reload = async () => {
       const root = getGitWorkspaceRoot();
       if (!root || !mounted) return;
       try {
+        const ctx = actorRef.getSnapshot().context;
+        const { collections, tabs } = {
+          collections: ctx.persisted.collections,
+          tabs: ctx.tabs,
+        };
         const payload = await loadGitWorkspace(root);
         const mapped = mapGitWorkspace(payload);
         const active = tabs.find((tab) => tab.savedRequestId);
@@ -68,19 +77,29 @@ export function GitWorkspaceSync() {
         }
         const nextPending = await listGitPending(root).catch(() => []);
         if (mounted) setPending(nextPending);
-        loadGitWorkspaceState(mapped);
+        actorRef.send({ type: "LOAD_GIT_WORKSPACE", ...mapped });
       } catch (error) {
         console.warn("Git workspace reload failed:", error);
       }
+    };
+
+    void listenGitWorkspaceChanges(async () => {
+      if (!mounted) return;
+      window.clearTimeout(reloadTimer.current);
+      reloadTimer.current = window.setTimeout(() => {
+        void reload();
+      }, RELOAD_DEBOUNCE_MS);
     }).then((fn) => {
       if (!mounted) fn();
       else unlisten = fn;
     });
+
     return () => {
       mounted = false;
+      window.clearTimeout(reloadTimer.current);
       unlisten?.();
     };
-  }, [collections, loadGitWorkspaceState, tabs]);
+  }, [actorRef]);
 
   if (!conflict && pending.length === 0) return null;
 
@@ -121,16 +140,18 @@ export function GitWorkspaceSync() {
               type="button"
               size="sm"
               onClick={() => {
+                setConflict(null);
                 const root = getGitWorkspaceRoot();
                 if (!root) return;
-                void loadGitWorkspace(root).then((payload) => {
-                  loadGitWorkspaceState(mapGitWorkspace(payload));
-                  setConflict(null);
-                  toast.success("Reloaded from disk");
-                });
+                void loadGitWorkspace(root)
+                  .then((payload) => {
+                    actorRef.send({ type: "LOAD_GIT_WORKSPACE", ...mapGitWorkspace(payload) });
+                    toast.success("Reloaded from disk");
+                  })
+                  .catch(() => toast.error("Reload failed"));
               }}
             >
-              Load disk
+              Reload from disk
             </Button>
           </div>
         </div>

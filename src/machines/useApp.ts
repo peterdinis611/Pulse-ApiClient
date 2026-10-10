@@ -35,8 +35,8 @@ import {
 
 export function useApp() {
   const actorRef = AppMachineContext.useActorRef();
-  const snapshot = AppMachineContext.useSelector((state) => state);
-  const context = snapshot.context;
+  // Subscribe to context only (not full snapshot / state value) with ref equality.
+  const context = AppMachineContext.useSelector((state) => state.context);
   const activeTab = selectActiveTab(context);
   const activeEnvironment = selectActiveEnvironment(context);
   const workspaceEnvironment = selectWorkspaceEnvironment(context);

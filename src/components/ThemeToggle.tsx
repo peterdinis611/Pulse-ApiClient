@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Settings2 } from "lucide-react";
-import { useApp } from "@/machines";
-import { getThemeIcon } from "@/lib/theme";
+import { useAppSelector, useAppSend } from "@/machines";
+import { getThemeIcon, type ThemeMode } from "@/lib/theme";
 import { ThemePicker } from "@/components/ThemePicker";
 import { TooltipWrap } from "@/components/TooltipIconButton";
 import { Button } from "@/components/ui/button";
@@ -13,13 +13,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export function ThemeToggle() {
-  const { theme, setTheme, setMainView } = useApp();
+  const theme = useAppSelector((state) => state.context.theme);
+  const send = useAppSend();
   const t = useT();
   const [open, setOpen] = useState(false);
   const Icon = getThemeIcon(theme);
 
-  const handleThemeChange = (mode: typeof theme) => {
-    setTheme(mode);
+  const handleThemeChange = (mode: ThemeMode) => {
+    send({ type: "SET_THEME", theme: mode });
     setOpen(false);
   };
 
@@ -48,7 +49,7 @@ export function ThemeToggle() {
             className="h-8 w-full justify-start gap-2 text-xs text-muted-foreground"
             onClick={() => {
               setOpen(false);
-              setMainView("settings");
+              send({ type: "SET_MAIN_VIEW", view: "settings" });
             }}
           >
             <Settings2 className="size-3.5" />

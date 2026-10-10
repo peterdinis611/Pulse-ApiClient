@@ -152,15 +152,21 @@ function collectionForTab(context: AppMachineContext, tab: RequestTabState | und
   return context.persisted.collectionGroups.find((group) => group.id === collectionId) ?? null;
 }
 
+/** Cap stream buffers so busy SSE/WS sessions cannot grow unbounded. */
+export const MAX_WS_MESSAGES = 500;
+
 function appendWsMessage(
   tab: RequestTabState,
   message: WebSocketMessage,
 ): RequestTabState {
+  const messages = tab.ws.messages.length >= MAX_WS_MESSAGES
+    ? [...tab.ws.messages.slice(-(MAX_WS_MESSAGES - 1)), message]
+    : [...tab.ws.messages, message];
   return {
     ...tab,
     ws: {
       ...tab.ws,
-      messages: [...tab.ws.messages, message],
+      messages,
     },
   };
 }

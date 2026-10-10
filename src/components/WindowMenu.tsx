@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AppWindow, CopyPlus, LayoutGrid, SquareStack } from "lucide-react";
-import { useApp } from "@/machines";
+import { AppMachineContext } from "@/machines/AppProvider";
+import { selectActiveTab } from "@/machines/appMachine";
 import {
   createAppWindow,
   focusAppWindow,
@@ -23,9 +24,10 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { createRequest } from "@/lib/helpers";
 
 export function WindowMenu({ compact = false }: { compact?: boolean }) {
-  const { request } = useApp();
+  const actorRef = AppMachineContext.useActorRef();
   const [windows, setWindows] = useState<AppWindowInfo[]>([]);
   const [currentLabel, setCurrentLabel] = useState("main");
 
@@ -38,12 +40,6 @@ export function WindowMenu({ compact = false }: { compact?: boolean }) {
       setWindows([]);
     }
   };
-
-  useEffect(() => {
-    void refresh();
-    const interval = window.setInterval(() => void refresh(), 3000);
-    return () => window.clearInterval(interval);
-  }, []);
 
   const handleNewWindow = async () => {
     try {
@@ -124,6 +120,8 @@ export function WindowMenu({ compact = false }: { compact?: boolean }) {
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => {
+            const tab = selectActiveTab(actorRef.getSnapshot().context);
+            const request = tab?.request ?? createRequest();
             void openRequestInNewWindow(request)
               .then(() => toast.success("Opened active request in new window"))
               .catch(() => toast.error("Failed to pop out request"));

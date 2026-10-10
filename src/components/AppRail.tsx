@@ -14,7 +14,7 @@ import { UserAuthAvatar } from "@/components/UserAuthAvatar";
 import { TooltipWrap } from "@/components/TooltipIconButton";
 import { APP_NAME } from "@/lib/app-config";
 import { useAgentSettings } from "@/hooks/useAgentSettings";
-import { useApp } from "@/machines";
+import { shallowEqualAppSlice, useAppSelector, useAppSend } from "@/machines";
 import { useT } from "@/hooks/useLocale";
 import { cn } from "@/lib/utils";
 import type { MainView } from "@/types";
@@ -35,17 +35,24 @@ const NAV_ITEMS: Array<{
 ];
 
 export function AppRail() {
-  const { mainView, setMainView, explorerCollapsed, toggleExplorerCollapsed } = useApp();
+  const { mainView, explorerCollapsed } = useAppSelector(
+    (state) => ({
+      mainView: state.context.mainView,
+      explorerCollapsed: state.context.explorerCollapsed,
+    }),
+    shallowEqualAppSlice,
+  );
+  const send = useAppSend();
   const agentSettings = useAgentSettings();
   const t = useT();
 
   const goToRequest = () => {
     if (mainView !== "request") {
-      setMainView("request");
-      if (explorerCollapsed) toggleExplorerCollapsed();
+      send({ type: "SET_MAIN_VIEW", view: "request" });
+      if (explorerCollapsed) send({ type: "TOGGLE_EXPLORER_COLLAPSED" });
       return;
     }
-    setMainView("request");
+    send({ type: "SET_MAIN_VIEW", view: "request" });
   };
 
   const items = NAV_ITEMS.filter(
@@ -77,7 +84,7 @@ export function AppRail() {
                     goToRequest();
                     return;
                   }
-                  setMainView(view);
+                  send({ type: "SET_MAIN_VIEW", view });
                 }}
                 className={cn(
                   "relative flex size-10 items-center justify-center rounded-xl transition-all",

@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useState, type ReactNode } from "react";
-import { useApp } from "@/machines";
+import { shallowEqualAppSlice, useAppSelector, useAppSend } from "@/machines";
 import { AppRail } from "./AppRail";
 import { CommandPalette } from "./CommandPalette";
 import { GitWorkspaceSync } from "./GitWorkspaceSync";
@@ -25,6 +25,7 @@ import { useWorkspaceHotkeys } from "@/hooks/useWorkspaceHotkeys";
 import { useI18n } from "@/hooks/useLocale";
 import { getCurrentWindowLabel, setWindowTitle } from "@/lib/window-manager";
 import { cn } from "@/lib/utils";
+import type { MessageKey } from "@/lib/i18n";
 import type { MainView } from "@/types";
 
 /** Console stays lazy — toggled less often than rail views. */
@@ -32,15 +33,8 @@ const ConsolePanel = lazy(() =>
   import("./ConsolePanel").then((module) => ({ default: module.ConsolePanel })),
 );
 
-const VIEW_ORDER: MainView[] = [
-  "overview",
-  "request",
-  "environments",
-  "docs",
-  "agent",
-  "mcp",
-  "settings",
-];
+/** Request stays mounted after first visit; other views unmount when hidden. */
+const KEEP_ALIVE_VIEWS = new Set<MainView>(["request"]);
 
 function ViewSlot({
   view,
@@ -63,50 +57,67 @@ function ViewSlot({
   );
 }
 
+function viewTitleKey(view: MainView): MessageKey | null {
+  switch (view) {
+    case "overview":
+      return "window.overview";
+    case "settings":
+      return "window.settings";
+    case "environments":
+      return "window.environments";
+    case "docs":
+      return "window.docs";
+    case "mcp":
+      return "window.mcp";
+    case "agent":
+      return "window.agent";
+    default:
+      return null;
+  }
+}
+
 export function ClientShell() {
-  const { mainView, consoleOpen, tabs, activeTabId, setMainView } = useApp();
+  const { mainView, consoleOpen, activeTabId, activeTabTitle } = useAppSelector(
+    (state) => {
+      const tab = state.context.tabs.find((item) => item.id === state.context.activeTabId);
+      const name = tab?.request.name.trim() || tab?.request.method || "";
+      return {
+        mainView: state.context.mainView,
+        consoleOpen: state.context.consoleOpen,
+        activeTabId: state.context.activeTabId,
+        activeTabTitle: name,
+      };
+    },
+    shallowEqualAppSlice,
+  );
+  const send = useAppSend();
   const agentSettings = useAgentSettings();
   const { t, version } = useI18n();
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [visited, setVisited] = useState<ReadonlySet<MainView>>(() => new Set([mainView]));
+  const [requestVisited, setRequestVisited] = useState(() => mainView === "request");
 
   useWorkspaceHotkeys({ onCommandPalette: () => setPaletteOpen((open) => !open) });
 
   useEffect(() => {
     if (mainView === "agent" && !agentSettings.enabled) {
-      setMainView("overview");
+      send({ type: "SET_MAIN_VIEW", view: "overview" });
     }
-  }, [agentSettings.enabled, mainView, setMainView]);
+  }, [agentSettings.enabled, mainView, send]);
 
   useEffect(() => {
-    setVisited((prev) => {
-      if (prev.has(mainView)) return prev;
-      const next = new Set(prev);
-      next.add(mainView);
-      return next;
-    });
+    if (mainView === "request") setRequestVisited(true);
   }, [mainView]);
 
   useEffect(() => {
     void (async () => {
       const label = await getCurrentWindowLabel();
-      const activeTab = tabs.find((tab) => tab.id === activeTabId);
+      const titleKey = viewTitleKey(mainView);
       const title =
-        mainView === "request" && activeTab
-          ? `${activeTab.request.name.trim() || activeTab.request.method} · ${APP_NAME}`
-          : mainView === "overview"
-            ? `${t("window.overview")} · ${APP_NAME}`
-            : mainView === "settings"
-              ? `${t("window.settings")} · ${APP_NAME}`
-              : mainView === "environments"
-                ? `${t("window.environments")} · ${APP_NAME}`
-                : mainView === "docs"
-                  ? `${t("window.docs")} · ${APP_NAME}`
-                  : mainView === "mcp"
-                    ? `${t("window.mcp")} · ${APP_NAME}`
-                    : mainView === "agent"
-                      ? `${t("window.agent")} · ${APP_NAME}`
-                      : APP_NAME;
+        mainView === "request" && activeTabTitle
+          ? `${activeTabTitle} · ${APP_NAME}`
+          : titleKey
+            ? `${t(titleKey)} · ${APP_NAME}`
+            : APP_NAME;
 
       try {
         await setWindowTitle(label, title);
@@ -114,13 +125,16 @@ export function ClientShell() {
         // ignore when not running inside Tauri
       }
     })();
-  }, [tabs, activeTabId, mainView, t, version]);
+  }, [activeTabId, activeTabTitle, mainView, t, version]);
 
   const showExplorer = mainView === "request";
   const showAgent = agentSettings.enabled;
-  const visibleViews = VIEW_ORDER.filter(
-    (view) => visited.has(view) && (view !== "agent" || showAgent),
-  );
+
+  const mountView = (view: MainView) => {
+    if (view === "agent" && !showAgent) return false;
+    if (mainView === view) return true;
+    return KEEP_ALIVE_VIEWS.has(view) && requestVisited;
+  };
 
   return (
     <div className="app-shell flex h-screen">
@@ -133,37 +147,37 @@ export function ClientShell() {
       <div className="flex min-w-0 flex-1 flex-col bg-surface-0">
         <ViewHeader />
         <main className="workspace-content flex min-h-0 flex-1 flex-col overflow-hidden">
-          {visibleViews.includes("overview") && (
+          {mountView("overview") && (
             <ViewSlot view="overview" active={mainView === "overview"}>
               <OverviewView />
             </ViewSlot>
           )}
-          {visibleViews.includes("request") && (
+          {mountView("request") && (
             <ViewSlot view="request" active={mainView === "request"}>
               <RequestWorkspace />
             </ViewSlot>
           )}
-          {visibleViews.includes("environments") && (
+          {mountView("environments") && (
             <ViewSlot view="environments" active={mainView === "environments"}>
               <EnvironmentsView />
             </ViewSlot>
           )}
-          {visibleViews.includes("docs") && (
+          {mountView("docs") && (
             <ViewSlot view="docs" active={mainView === "docs"}>
               <DocsView />
             </ViewSlot>
           )}
-          {visibleViews.includes("agent") && (
+          {mountView("agent") && (
             <ViewSlot view="agent" active={mainView === "agent"}>
               <AgentView />
             </ViewSlot>
           )}
-          {visibleViews.includes("mcp") && (
+          {mountView("mcp") && (
             <ViewSlot view="mcp" active={mainView === "mcp"}>
               <McpView />
             </ViewSlot>
           )}
-          {visibleViews.includes("settings") && (
+          {mountView("settings") && (
             <ViewSlot view="settings" active={mainView === "settings"}>
               <SettingsView />
             </ViewSlot>

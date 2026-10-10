@@ -29,18 +29,21 @@ fn ranks_related_history_higher() {
             kind: "request".into(),
             text: "GET health https://api.test/health 200".into(),
             meta: None,
+            tokens: vec![],
         },
         RagDocument {
             id: "2".into(),
             kind: "request".into(),
             text: "POST login https://api.test/auth/login 401".into(),
             meta: None,
+            tokens: vec![],
         },
         RagDocument {
             id: "3".into(),
             kind: "fact".into(),
             text: "fact preferred_base_url https://staging.test".into(),
             meta: None,
+            tokens: vec![],
         },
     ];
     let hits = search_documents(&docs, "auth login 401", 3);
@@ -77,12 +80,14 @@ fn hybrid_filters_method_and_status() {
             kind: "request".into(),
             text: "GET users https://api.test/users 200".into(),
             meta: Some(serde_json::json!({"method":"GET","status":200,"url":"https://api.test/users"})),
+            tokens: vec![],
         },
         RagDocument {
             id: "2".into(),
             kind: "request".into(),
             text: "POST login https://api.test/auth/login 500".into(),
             meta: Some(serde_json::json!({"method":"POST","status":500,"url":"https://api.test/auth/login"})),
+            tokens: vec![],
         },
     ];
     let hits = search_documents(&docs, "method:POST status:5xx login", 5);
@@ -101,6 +106,7 @@ fn upsert_is_incremental() {
             kind: "request".into(),
             text: "GET health https://api.test/health 200".into(),
             meta: None,
+            tokens: vec![],
         }],
     )
     .unwrap();
@@ -112,6 +118,7 @@ fn upsert_is_incremental() {
             kind: "request".into(),
             text: "POST users https://api.test/users 201".into(),
             meta: None,
+            tokens: vec![],
         }],
     )
     .unwrap();
