@@ -7,8 +7,52 @@ on:
   workflow_dispatch:
 
 jobs:
+  fast:
+    name: fast (typecheck + unit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "."
+          shared-key: fast
+
+      - name: Frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Unit tests (JS)
+        run: bun run test
+
+      - name: Unit tests (Rust)
+        run: cargo test --workspace --exclude pulse-native
+        env:
+          CARGO_TERM_COLOR: always
+
+      - name: Unit tests (Python satellite)
+        run: python3 -m unittest discover -s python/tests -p "test_*.py"
+
+      - name: YAML workspace contracts
+        run: cargo run -q -p pulse-core --bin pulse-contract -- python/examples/git-workspace
+
+      - name: Playwright smoke (web)
+        run: |
+          bunx playwright install chromium
+          bun run test:e2e
+
   tauri-build:
     name: ${{ matrix.platform }}
+    needs: fast
     runs-on: ${{ matrix.platform }}
     timeout-minutes: 60
     strategy:
@@ -44,23 +88,6 @@ jobs:
 
       - name: Frontend dependencies
         run: bun install --frozen-lockfile
-
-      - name: Unit tests (JS)
-        run: bun run test
-
-      - name: Typecheck
-        run: bun run typecheck
-
-      - name: Unit tests (Rust)
-        run: cargo test --workspace --exclude pulse-native
-        env:
-          CARGO_TERM_COLOR: always
-
-      - name: Unit tests (Python satellite)
-        run: python3 -m unittest discover -s python/tests -p "test_*.py"
-
-      - name: YAML workspace contracts
-        run: cargo run -q -p pulse-core --bin pulse-contract -- python/examples/git-workspace
 
       - uses: tauri-apps/tauri-action@v0
         env:

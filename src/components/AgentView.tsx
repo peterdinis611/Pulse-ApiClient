@@ -18,7 +18,8 @@ import type { AgentRagCitation } from "@/lib/agent-rag";
 import type { AgentCapability } from "@/lib/agent-settings";
 import type { MessageKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { useApp } from "@/machines";
+import { shallowEqualAppSlice, useAppActions, useAppSelector } from "@/machines";
+import { selectActiveEnvironment, selectActiveTab } from "@/machines/appMachine";
 import type { ApiRequest } from "@/types";
 
 type ChatRole = "user" | "assistant";
@@ -43,6 +44,8 @@ const QUICK_ACTIONS: Array<{
   { id: "quick:workspace", labelKey: "agent.quick.workspace", capability: "workspace_status" },
   { id: "quick:run", labelKey: "agent.quick.run", capability: "run_collection" },
   { id: "quick:tests", labelKey: "agent.quick.tests", capability: "explain_tests" },
+  { id: "quick:draft-tests", labelKey: "agent.quick.draftTests", capability: "explain_tests" },
+  { id: "quick:draft-prerequest", labelKey: "agent.quick.draftPreRequest", capability: "explain_response" },
   { id: "quick:history", labelKey: "agent.quick.history", capability: "workspace_history" },
   { id: "quick:memory", labelKey: "agent.quick.memory", capability: "memory" },
   { id: "quick:rag", labelKey: "agent.quick.rag", capability: "memory_rag" },
@@ -114,9 +117,19 @@ export function AgentView() {
     collectionGroups,
     collections,
     activeEnvironment,
-    openRequestTab,
-    setMainView,
-  } = useApp();
+  } = useAppSelector((state) => {
+    const tab = selectActiveTab(state.context);
+    return {
+      request: tab?.request ?? null,
+      response: tab?.response ?? null,
+      testResults: tab?.testResults ?? null,
+      activeCollectionId: state.context.persisted.activeCollectionId,
+      collectionGroups: state.context.persisted.collectionGroups,
+      collections: state.context.persisted.collections,
+      activeEnvironment: selectActiveEnvironment(state.context),
+    };
+  }, shallowEqualAppSlice);
+  const { openRequestTab, setMainView, updateRequest, sendCurrentRequest } = useAppActions();
 
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -143,6 +156,9 @@ export function AgentView() {
   });
 
   const applyResult = (result: AgentActionResult, replaceId?: string) => {
+    if (result.applyToActive) {
+      updateRequest(result.applyToActive);
+    }
     const message: ChatMessage = {
       id: replaceId ?? nextId("assistant"),
       role: "assistant",
@@ -213,6 +229,13 @@ export function AgentView() {
   const handleOpenRequest = (apiRequest: ApiRequest) => {
     openRequestTab(apiRequest);
     setMainView("request");
+  };
+
+  const handleOpenAndSend = (apiRequest: ApiRequest) => {
+    openRequestTab(apiRequest);
+    setMainView("request");
+    // Defer send until the tab is active in the machine.
+    window.setTimeout(() => sendCurrentRequest(), 0);
   };
 
   if (!agentSettings.enabled) {
@@ -367,15 +390,26 @@ export function AgentView() {
                       </Button>
                     )}
                     {message.citations?.map((citation) => (
-                      <Button
-                        key={citation.id}
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleOpenRequest(citation.request)}
-                      >
-                        {citation.label}
-                      </Button>
+                      <div key={citation.id} className="flex flex-wrap gap-1.5">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleOpenRequest(citation.request)}
+                        >
+                          {citation.label}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => handleOpenAndSend(citation.request)}
+                          title={t("agent.sendCitation")}
+                        >
+                          <Send className="size-3.5" />
+                          {t("agent.send")}
+                        </Button>
+                      </div>
                     ))}
                   </div>
                 )}

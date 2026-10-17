@@ -1412,12 +1412,8 @@ export function SettingsView() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">{t("agent.settings.providerNone")}</SelectItem>
-                <SelectItem value="openai" disabled>
-                  OpenAI ({t("agent.settings.providerSoon")})
-                </SelectItem>
-                <SelectItem value="anthropic" disabled>
-                  Anthropic ({t("agent.settings.providerSoon")})
-                </SelectItem>
+                <SelectItem value="openai">OpenAI</SelectItem>
+                <SelectItem value="anthropic">Anthropic</SelectItem>
               </SelectContent>
             </Select>
           </SettingRow>

@@ -21,6 +21,8 @@ export type AgentIntent =
   | { kind: "memory_list" }
   | { kind: "rag_search"; query: string }
   | { kind: "rag_reindex" }
+  | { kind: "draft_tests" }
+  | { kind: "draft_pre_request" }
   | { kind: "unknown"; input: string };
 
 const CURL_BLOCK = /```(?:bash|sh|shell|zsh)?\s*([\s\S]*?curl[\s\S]*?)```/i;
@@ -86,6 +88,20 @@ export function routeAgentInput(raw: string): AgentIntent {
     /test\s+failures/.test(quick)
   ) {
     return { kind: "explain_tests" };
+  }
+  if (
+    quick === "quick:draft-tests" ||
+    /^draft\s+tests?/.test(quick) ||
+    /^generate\s+tests?/.test(quick)
+  ) {
+    return { kind: "draft_tests" };
+  }
+  if (
+    quick === "quick:draft-prerequest" ||
+    /^draft\s+pre-?request/.test(quick) ||
+    /^generate\s+pre-?request/.test(quick)
+  ) {
+    return { kind: "draft_pre_request" };
   }
   if (
     quick === "quick:workspace" ||

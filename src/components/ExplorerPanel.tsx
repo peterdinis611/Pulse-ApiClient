@@ -23,7 +23,10 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useApp } from "@/machines";
+import { shallowEqualAppSlice, useAppActions, useAppSelector } from "@/machines";
+import { selectActiveEnvironment, selectActiveTab, selectWorkspaceEnvironment } from "@/machines/appMachine";
+import { createRequest } from "@/lib/helpers";
+import { VirtualWindow } from "@/components/VirtualWindow";
 import { useHistory } from "@/hooks/useHistory";
 import { groupRequestsByFolder, requestsForCollection, requestsForFolder, countFolderRequests } from "@/lib/collections";
 import { runCollectionAuto, type CollectionRunResult } from "@/lib/collection-runner";
@@ -123,15 +126,33 @@ function requestDisplayName(request: ApiRequest): string | null {
 export function ExplorerPanel() {
   const {
     sidebarSearch,
-    setSidebarSearch,
-    setMainView,
-    toggleExplorerCollapsed,
     collectionGroups,
     collections,
     globals,
     environments,
     activeEnvironmentId,
     workspaceEnvironment,
+    activeEnvironment,
+    request,
+  } = useAppSelector((state) => {
+    const ctx = state.context;
+    const tab = selectActiveTab(ctx);
+    return {
+      sidebarSearch: ctx.sidebarSearch,
+      collectionGroups: ctx.persisted.collectionGroups,
+      collections: ctx.persisted.collections,
+      globals: ctx.persisted.globals,
+      environments: ctx.persisted.environments,
+      activeEnvironmentId: ctx.persisted.activeEnvironmentId,
+      workspaceEnvironment: selectWorkspaceEnvironment(ctx),
+      activeEnvironment: selectActiveEnvironment(ctx),
+      request: tab?.request ?? createRequest(),
+    };
+  }, shallowEqualAppSlice);
+  const {
+    setSidebarSearch,
+    setMainView,
+    toggleExplorerCollapsed,
     setActiveEnvironmentId,
     loadSavedRequest,
     deleteSavedRequest,
@@ -147,10 +168,8 @@ export function ExplorerPanel() {
     deleteFolder,
     patchCollectionGroup,
     patchFolderConfig,
-    activeEnvironment,
-    request,
     newRequestTab,
-  } = useApp();
+  } = useAppActions();
 
   const {
     visibleEntries: historyEntries,
@@ -1354,6 +1373,7 @@ function HistoryList({
   onOpen: (entry: HistoryEntry) => void;
   onPreview: (entry: HistoryEntry) => void;
 }) {
+  const [expandedDays, setExpandedDays] = useState(false);
   const dayGroups = useMemo(() => groupHistoryByDay(entries), [entries]);
   const activeMarked = useMemo(() => {
     const match = entries.find((entry) => requestSignature(entry.request) === activeSignature);
@@ -1364,25 +1384,35 @@ function HistoryList({
 
   return (
     <div className="space-y-2.5">
-      {dayGroups.map((group) => {
-        const clusters = collapseConsecutiveHistory(group.entries);
-        return (
-          <div key={group.id} className="space-y-0.5">
-            <p className="explorer-history-day">{group.label}</p>
-            <div className="space-y-px">
-              {clusters.map((cluster) => (
-                <HistoryClusterRow
-                  key={cluster.entries[0]!.id}
-                  cluster={cluster}
-                  activeId={activeMarked}
-                  onOpen={onOpen}
-                  onPreview={onPreview}
-                />
-              ))}
+      <VirtualWindow
+        items={dayGroups}
+        limit={12}
+        expanded={expandedDays}
+        onShowMore={() => setExpandedDays(true)}
+        moreLabel={(n) => `Show ${n} more days`}
+        getKey={(group) => group.id}
+        renderItem={(group) => {
+          const clusters = collapseConsecutiveHistory(group.entries);
+          return (
+            <div className="space-y-0.5">
+              <p className="explorer-history-day">{group.label}</p>
+              <VirtualWindow
+                items={clusters}
+                limit={60}
+                getKey={(cluster) => cluster.entries[0]!.id}
+                renderItem={(cluster) => (
+                  <HistoryClusterRow
+                    cluster={cluster}
+                    activeId={activeMarked}
+                    onOpen={onOpen}
+                    onPreview={onPreview}
+                  />
+                )}
+              />
             </div>
-          </div>
-        );
-      })}
+          );
+        }}
+      />
     </div>
   );
 }

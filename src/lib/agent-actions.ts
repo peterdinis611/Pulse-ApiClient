@@ -17,6 +17,12 @@ import {
   type AgentRagCitation,
 } from "@/lib/agent-rag";
 import {
+  draftPreRequestFromResponse,
+  draftTestsFromResponse,
+  withDraftScripts,
+} from "@/lib/agent-draft";
+import { canUseAgentLlm, completeAgentLlm } from "@/lib/agent-llm";
+import {
   appendGitAgentHistory,
   getGitWorkspaceRoot,
   listGitAgentHistory,
@@ -60,10 +66,48 @@ export type AgentActionResult = {
   /** When set, UI should show Confirm before calling `confirmAgentAction`. */
   needsConfirm?: AgentConfirmKind;
   openRequest?: ApiRequest;
+  /** Apply these fields to the active request (draft tests / pre-request). */
+  applyToActive?: Partial<ApiRequest>;
   /** RAG citations that can open as request tabs. */
   citations?: AgentRagCitation[];
   meta?: Record<string, unknown>;
 };
+
+async function maybeEnrichWithLlm(
+  localMarkdown: string,
+  userPrompt: string,
+  ragBlock = "",
+): Promise<string> {
+  const settings = loadAgentSettings();
+  if (!canUseAgentLlm(settings.provider, settings.apiKey) || settings.provider === "none") {
+    return localMarkdown;
+  }
+  try {
+    const text = await completeAgentLlm({
+      provider: settings.provider,
+      apiKey: settings.apiKey,
+      messages: [
+        {
+          role: "user",
+          content: [
+            userPrompt,
+            "",
+            "Local summary:",
+            localMarkdown,
+            "",
+            "RAG context:",
+            ragBlock.trim() || "(none)",
+          ].join("\n"),
+        },
+      ],
+    });
+    return `${text}\n\n---\n_${t("agent.md.llmLocalFooter")}_\n\n${localMarkdown}`;
+  } catch (error) {
+    return `${localMarkdown}\n\n---\n_${t("agent.md.llmFailed", {
+      error: error instanceof Error ? error.message : String(error),
+    })}_`;
+  }
+}
 
 function collectionRequests(
   collectionId: string | null,
@@ -156,10 +200,26 @@ export async function runAgentIntent(
   switch (intent.kind) {
     case "help":
       return { markdown: buildAgentHelpText(settings) };
-    case "unknown":
-      return {
-        markdown: `${intent.input}\n\n---\n${buildAgentHelpText(settings)}`,
-      };
+    case "unknown": {
+      const help = buildAgentHelpText(settings);
+      const local = `${intent.input}\n\n---\n${help}`;
+      const root = getGitWorkspaceRoot();
+      let ragBlock = "";
+      if (root) {
+        try {
+          const hits = await searchAgentRag(root, intent.input, 5);
+          ragBlock = formatRagContextBlock(hits);
+        } catch {
+          /* best-effort */
+        }
+      }
+      const markdown = await maybeEnrichWithLlm(
+        local,
+        `The user said something the local router did not match. Answer helpfully using Pulse agent capabilities and the RAG context. User input:\n${intent.input}`,
+        ragBlock,
+      );
+      return { markdown };
+    }
     case "import_curl": {
       try {
         const request = await curlToRequestAsync(intent.curl);
@@ -185,9 +245,10 @@ export async function runAgentIntent(
       await recordAgentHistory("explain_response", {
         response: { status: ctx.activeResponse.status },
       });
-      let markdown = summarizeHttpResponse(ctx.activeResponse);
+      let local = summarizeHttpResponse(ctx.activeResponse);
       const root = getGitWorkspaceRoot();
       let citations: AgentRagCitation[] | undefined;
+      let ragBlock = "";
       if (root && ctx.activeRequest) {
         const seed = [
           ctx.activeRequest.method,
@@ -199,12 +260,18 @@ export async function runAgentIntent(
           .join(" ");
         try {
           const hits = await searchAgentRag(root, seed, 5);
-          markdown += formatRagContextBlock(hits);
+          ragBlock = formatRagContextBlock(hits);
+          local += ragBlock;
           citations = citationsFromRagHits(hits);
         } catch {
           /* best-effort context */
         }
       }
+      const markdown = await maybeEnrichWithLlm(
+        local,
+        "Explain this HTTP response for an API client user. Call out status, timing, likely issues, and next steps.",
+        ragBlock,
+      );
       return { markdown, citations };
     }
     case "explain_tests": {
@@ -215,9 +282,10 @@ export async function runAgentIntent(
         passed: ctx.testResults.passed,
         failed: ctx.testResults.failed,
       });
-      let markdown = explainTests(ctx.testResults);
+      let local = explainTests(ctx.testResults);
       const root = getGitWorkspaceRoot();
       let citations: AgentRagCitation[] | undefined;
+      let ragBlock = "";
       if (root) {
         const failNames = ctx.testResults.results
           .filter((item) => !item.passed)
@@ -229,13 +297,45 @@ export async function runAgentIntent(
           .join(" ");
         try {
           const hits = await searchAgentRag(root, seed, 5);
-          markdown += formatRagContextBlock(hits);
+          ragBlock = formatRagContextBlock(hits);
+          local += ragBlock;
           citations = citationsFromRagHits(hits);
         } catch {
           /* best-effort */
         }
       }
+      const markdown = await maybeEnrichWithLlm(
+        local,
+        "Explain these Pulse test results. Focus on failures and how to fix them.",
+        ragBlock,
+      );
       return { markdown, citations };
+    }
+    case "draft_tests": {
+      if (!ctx.activeResponse || !ctx.activeRequest) {
+        return { markdown: t("agent.md.noResponse") };
+      }
+      const tests = draftTestsFromResponse(ctx.activeResponse);
+      const openRequest = withDraftScripts(ctx.activeRequest, { tests });
+      await recordAgentHistory("draft_tests", { status: ctx.activeResponse.status });
+      return {
+        markdown: `${t("agent.md.draftTests")}\n\n\`\`\`js\n${tests}\`\`\``,
+        openRequest,
+        applyToActive: { tests },
+      };
+    }
+    case "draft_pre_request": {
+      if (!ctx.activeResponse || !ctx.activeRequest) {
+        return { markdown: t("agent.md.noResponse") };
+      }
+      const preRequestScript = draftPreRequestFromResponse(ctx.activeResponse);
+      const openRequest = withDraftScripts(ctx.activeRequest, { preRequestScript });
+      await recordAgentHistory("draft_pre_request", { status: ctx.activeResponse.status });
+      return {
+        markdown: `${t("agent.md.draftPreRequest")}\n\n\`\`\`js\n${preRequestScript}\`\`\``,
+        openRequest,
+        applyToActive: { preRequestScript },
+      };
     }
     case "workspace_status": {
       const root = getGitWorkspaceRoot();

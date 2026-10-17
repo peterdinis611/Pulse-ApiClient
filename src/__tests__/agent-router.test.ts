@@ -90,4 +90,11 @@ describe("agent-router", () => {
       query: "oauth token",
     });
   });
+
+  it("routes draft intents", () => {
+    expect(routeAgentInput("quick:draft-tests")).toEqual({ kind: "draft_tests" });
+    expect(routeAgentInput("draft tests")).toEqual({ kind: "draft_tests" });
+    expect(routeAgentInput("quick:draft-prerequest")).toEqual({ kind: "draft_pre_request" });
+    expect(routeAgentInput("generate pre-request")).toEqual({ kind: "draft_pre_request" });
+  });
 });

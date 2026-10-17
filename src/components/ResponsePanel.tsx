@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { BookmarkPlus, Copy, Download, Send } from "lucide-react";
-import { useApp } from "@/machines";
+import { shallowEqualAppSlice, useAppActions, useAppSelector } from "@/machines";
+import { selectActiveEnvironment, selectActiveTab } from "@/machines/appMachine";
 import { downloadBytes } from "@/lib/download";
 import { formatModShortcut, PULSE_HOTKEYS } from "@/lib/hotkeys";
 import { formatBytes } from "@/lib/helpers";
@@ -33,20 +34,32 @@ import { Button } from "@/components/ui/button";
 import { ScrollAreaWithTop } from "@/components/ui/scroll-area-with-top";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+/** Cap pretty/raw text and tree size so huge payloads cannot freeze the UI. */
+const MAX_BODY_CHARS = 400_000;
+const MAX_DIFF_CHARS = 120_000;
+const MAX_JSON_TREE_CHARS = 200_000;
+
 export function ResponsePanel() {
-  const {
-    request,
-    response,
-    error,
-    loading,
-    testResults,
-    saveResponseExample,
-    upsertEnvironmentVariable,
-    activeEnvironment,
-  } = useApp();
+  const slice = useAppSelector((state) => {
+    const tab = selectActiveTab(state.context);
+    const activeEnvironment = selectActiveEnvironment(state.context);
+    return {
+      request: tab?.request ?? null,
+      response: tab?.response ?? null,
+      error: tab?.error ?? null,
+      loading: tab?.loading ?? false,
+      testResults: tab?.testResults ?? null,
+      activeEnvironmentName: activeEnvironment?.name ?? null,
+      hasActiveEnvironment: activeEnvironment != null,
+    };
+  }, shallowEqualAppSlice);
+  const { saveResponseExample, upsertEnvironmentVariable } = useAppActions();
+  const { request, response, error, loading, testResults, activeEnvironmentName, hasActiveEnvironment } =
+    slice;
   const [view, setView] = useState<"body" | "headers" | "tests" | "timing" | "diff">("body");
   const [bodyFormat, setBodyFormat] = useState<ResponseBodyFormat>("pretty");
   const [diffExampleId, setDiffExampleId] = useState<string>("");
+  const [forceFullBody, setForceFullBody] = useState(false);
 
   const previewKind = useMemo(
     () => (response ? previewKindForResponse(response) : "text"),
@@ -60,7 +73,12 @@ export function ResponsePanel() {
     return formatResponseBody(response.body, response.contentType, bodyFormat);
   }, [bodyFormat, response]);
 
-  const body = formattedBody.text;
+  const bodyTruncated =
+    !forceFullBody && formattedBody.text.length > MAX_BODY_CHARS
+      ? `${formattedBody.text.slice(0, MAX_BODY_CHARS)}\n… truncated (${formattedBody.text.length.toLocaleString()} chars)`
+      : formattedBody.text;
+  const body = bodyTruncated;
+  const bodyWasTruncated = !forceFullBody && formattedBody.text.length > MAX_BODY_CHARS;
 
   const graphqlErrors = useMemo(
     () =>
@@ -70,23 +88,31 @@ export function ResponsePanel() {
     [response],
   );
 
-  const examples = request.examples ?? [];
+  const examples = request?.examples ?? [];
   const diffRows = useMemo(() => {
-    if (!response) return [];
+    if (view !== "diff" || !response) return [];
     const example =
       examples.find((item) => item.id === diffExampleId) ?? examples[0] ?? null;
     if (!example) return [];
-    return unifiedLineDiff(
-      prettyMaybeJson(example.response.body),
-      prettyMaybeJson(response.body),
-    );
-  }, [diffExampleId, examples, response]);
+    const left = prettyMaybeJson(example.response.body);
+    const right = prettyMaybeJson(response.body);
+    if (left.length + right.length > MAX_DIFF_CHARS * 2) {
+      return unifiedLineDiff(left.slice(0, MAX_DIFF_CHARS), right.slice(0, MAX_DIFF_CHARS)).slice(
+        0,
+        2_000,
+      );
+    }
+    return unifiedLineDiff(left, right).slice(0, 2_000);
+  }, [diffExampleId, examples, response, view]);
 
   const jsonTree = useMemo(() => {
+    if (view !== "body") return null;
+    if (bodyFormat !== "pretty" && bodyFormat !== "json") return null;
     if (!response || response.bodyEncoding === "base64") return null;
+    if (response.body.length > MAX_JSON_TREE_CHARS) return null;
     const parsed = parseJsonBody(response.body);
     return parsed === undefined ? null : buildJsonTree(parsed);
-  }, [response]);
+  }, [bodyFormat, response, view]);
 
   const scrollResetKey = useMemo(
     () =>
@@ -96,6 +122,7 @@ export function ResponsePanel() {
 
   useEffect(() => {
     if (!response) return;
+    setForceFullBody(false);
     setBodyFormat(
       defaultResponseBodyFormat(response.body, response.contentType, response.bodyEncoding),
     );
@@ -300,12 +327,34 @@ export function ResponsePanel() {
                 {jsonTree && (bodyFormat === "pretty" || bodyFormat === "json") && (
                   <span className="text-[11px] text-muted-foreground">
                     Click a key to set{" "}
-                    {activeEnvironment
-                      ? `{{name}} in ${activeEnvironment.name}`
+                    {hasActiveEnvironment
+                      ? `{{name}} in ${activeEnvironmentName}`
                       : "an environment variable"}
                   </span>
                 )}
+                {!jsonTree &&
+                  (bodyFormat === "pretty" || bodyFormat === "json") &&
+                  response.body.length > MAX_JSON_TREE_CHARS && (
+                    <span className="text-[11px] text-muted-foreground">
+                      JSON tree skipped for large body — use Raw or Pretty text
+                    </span>
+                  )}
               </div>
+
+              {bodyWasTruncated && (
+                <div className="flex items-center justify-between rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+                  <span>Showing first {MAX_BODY_CHARS.toLocaleString()} characters</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7"
+                    onClick={() => setForceFullBody(true)}
+                  >
+                    Render full body
+                  </Button>
+                </div>
+              )}
 
               {bodyFormat === "preview" && isMediaPreview ? (
                 <ResponseMediaPreview response={response} kind={previewKind} />

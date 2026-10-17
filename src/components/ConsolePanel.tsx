@@ -1,7 +1,8 @@
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useEffect, useRef, useState } from "react";
 import { LoaderCircle, Trash2, X } from "lucide-react";
-import { useApp } from "@/machines";
+import { shallowEqualAppSlice, useAppActions, useAppSelector } from "@/machines";
+import { selectActiveTab } from "@/machines/appMachine";
 import { runConsoleInput } from "@/lib/console-eval";
 import { useConsoleLog, type ConsoleEntryKind } from "@/hooks/useConsoleLog";
 import { ScrollAreaWithTop } from "@/components/ui/scroll-area-with-top";
@@ -26,7 +27,17 @@ function entryClassName(kind: ConsoleEntryKind): string {
 }
 
 export function ConsolePanel() {
-  const { activeTabId, error, response, loading, testResults, setConsoleOpen } = useApp();
+  const { activeTabId, error, response, loading, testResults } = useAppSelector((state) => {
+    const tab = selectActiveTab(state.context);
+    return {
+      activeTabId: state.context.activeTabId,
+      error: tab?.error ?? null,
+      response: tab?.response ?? null,
+      loading: tab?.loading ?? false,
+      testResults: tab?.testResults ?? null,
+    };
+  }, shallowEqualAppSlice);
+  const { setConsoleOpen } = useAppActions();
   const { entries, clearConsole, logInput, logOutput } = useConsoleLog({
     tabId: activeTabId,
     loading,

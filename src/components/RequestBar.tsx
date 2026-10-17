@@ -11,15 +11,23 @@ import {
   Square,
   Unplug,
 } from "lucide-react";
-import { useApp } from "@/machines";
+import { shallowEqualAppSlice, useAppActions, useAppSelector } from "@/machines";
+import {
+  selectActiveEnvironment,
+  selectActiveTab,
+  selectWorkspaceEnvironment,
+} from "@/machines/appMachine";
 import { validateGraphqlRequest } from "@/lib/graphql";
 import { isStreamProtocol, isWebSocketProtocol, isSseProtocol, SSE_METHODS } from "@/lib/protocol";
-import { containsVariables } from "@/lib/env";
+import { containsVariables, mergeVariableLayers } from "@/lib/env";
+import { collectFolderVariables } from "@/lib/inherit";
 import { prepareRequest } from "@/lib/http-client";
 import { CODE_SNIPPETS, requestToSnippet, type CodeSnippetId } from "@/lib/code-snippets";
 import { resolveRequestForSend } from "@/lib/resolve-request";
 import { methodToneStyle } from "@/lib/method-colors";
 import { VariableField } from "@/components/VariableField";
+import { createRequest } from "@/lib/helpers";
+import { defaultWebSocketSession } from "@/lib/protocol";
 import { HTTP_METHODS } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,10 +54,49 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export function RequestBar() {
+  const slice = useAppSelector((state) => {
+    const ctx = state.context;
+    const tab = selectActiveTab(ctx);
+    const activeEnvironment = selectActiveEnvironment(ctx);
+    const workspaceEnvironment = selectWorkspaceEnvironment(ctx);
+    const activeCollection =
+      ctx.persisted.collectionGroups.find(
+        (group) => group.id === (tab?.collectionId ?? ctx.persisted.activeCollectionId),
+      ) ?? null;
+    const variableEnvironment = mergeVariableLayers([
+      ctx.persisted.globals,
+      activeCollection?.variables,
+      collectFolderVariables(activeCollection, tab?.folder),
+      activeEnvironment?.variables,
+      ctx.persisted.secrets,
+    ]);
+    return {
+      request: tab?.request ?? createRequest(),
+      loading: tab?.loading ?? false,
+      ws: tab?.ws ?? defaultWebSocketSession(),
+      activeCollectionId: ctx.persisted.activeCollectionId,
+      collectionGroups: ctx.persisted.collectionGroups,
+      activeEnvironment,
+      variableEnvironment,
+      globals: ctx.persisted.globals,
+      workspaceEnvironment,
+      tabCollectionId: tab?.collectionId ?? null,
+      tabFolder: tab?.folder ?? null,
+    };
+  }, shallowEqualAppSlice);
   const {
     request,
     loading,
     ws,
+    activeCollectionId,
+    collectionGroups,
+    activeEnvironment,
+    variableEnvironment,
+    globals,
+    tabCollectionId,
+    tabFolder,
+  } = slice;
+  const {
     cancelCurrentRequest,
     updateRequest,
     sendCurrentRequest,
@@ -57,15 +104,8 @@ export function RequestBar() {
     disconnectWebSocket,
     saveCurrentToCollection,
     openRequestTab,
-    activeCollectionId,
-    collectionGroups,
     setActiveCollectionId,
-    activeEnvironment,
-    variableEnvironment,
-    globals,
-    tabCollectionId,
-    tabFolder,
-  } = useApp();
+  } = useAppActions();
 
   const [saveFolder, setSaveFolder] = useState<string | undefined>();
   const curlImportRef = useRef<HTMLInputElement>(null);
