@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Pulse">
+  <defs>
+    <linearGradient id="pulse-bg" x1="64" y1="40" x2="448" y2="472" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#142028"/>
+      <stop offset="55%" stop-color="#0B1218"/>
+      <stop offset="100%" stop-color="#071016"/>
+    </linearGradient>
+    <linearGradient id="pulse-line" x1="72" y1="256" x2="440" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#5EEAD4"/>
+      <stop offset="45%" stop-color="#2DD4BF"/>
+      <stop offset="100%" stop-color="#F59E0B"/>
+    </linearGradient>
+    <filter id="pulse-glow" x="-20%" y="-40%" width="140%" height="180%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- App tile -->
+  <rect width="512" height="512" rx="112" fill="url(#pulse-bg)"/>
+  <rect x="18" y="18" width="476" height="476" rx="96" fill="none" stroke="#1E3A44" stroke-width="4" opacity="0.9"/>
+
+  <!-- Soft grid hint (API / terminal) -->
+  <g opacity="0.14" stroke="#7DD3C7" stroke-width="2">
+    <path d="M96 168h320M96 256h320M96 344h320"/>
+    <path d="M168 96v320M256 96v320M344 96v320"/>
+  </g>
+
+  <!-- Glow under the waveform -->
+  <path
+    d="M78 278 H168 L196 278 L236 148 L276 368 L316 248 L348 278 H434"
+    fill="none"
+    stroke="#2DD4BF"
+    stroke-width="28"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    opacity="0.22"
+    filter="url(#pulse-glow)"
+  />
+
+  <!-- Main pulse / request trace -->
+  <path
+    d="M78 278 H168 L196 278 L236 148 L276 368 L316 248 L348 278 H400"
+    fill="none"
+    stroke="url(#pulse-line)"
+    stroke-width="28"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- Arrow tip = outbound request -->
+  <path
+    d="M392 248 L444 278 L392 308"
+    fill="none"
+    stroke="#F59E0B"
+    stroke-width="28"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- Status pip -->
+  <circle cx="118" cy="188" r="14" fill="#2DD4BF"/>
+</svg>

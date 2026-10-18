@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Pulse">
+  <!-- Monochrome-friendly mark for light UI chrome -->
+  <path
+    d="M10 68 H36 L44 68 L56 28 L68 100 L80 60 L90 68 H104"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="10"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M98 52 L118 68 L98 84"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="10"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>
