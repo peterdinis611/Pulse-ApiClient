@@ -118,6 +118,18 @@ export async function listGitPending(root: string): Promise<string[]> {
   return runEffect(invokeEffect<string[]>("git_workspace_pending", { root }));
 }
 
+export type GitStatusPayload = {
+  branch: string;
+  dirty: boolean;
+  ahead: number;
+  behind: number;
+  conflicted: string[];
+};
+
+export async function getGitWorkspaceStatus(root: string): Promise<GitStatusPayload> {
+  return runEffect(invokeEffect<GitStatusPayload>("git_workspace_status", { root }));
+}
+
 export async function listGitAgentHistory(root: string): Promise<unknown[]> {
   return runEffect(invokeEffect<unknown[]>("git_workspace_agent_history", { root }));
 }

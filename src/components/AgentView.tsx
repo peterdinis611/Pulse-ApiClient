@@ -29,6 +29,7 @@ type ChatMessage = {
   role: ChatRole;
   text: string;
   pendingConfirm?: AgentConfirmKind;
+  confirmPayload?: { key?: string; value?: string; scope?: "workspace" | "local" };
   openRequest?: ApiRequest;
   citations?: AgentRagCitation[];
   busy?: boolean;
@@ -135,6 +136,7 @@ export function AgentView() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [working, setWorking] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const streamIdRef = useRef<string | null>(null);
   const quickActions = QUICK_ACTIONS.filter(
     (action) => agentSettings.enabled && agentSettings.capabilities[action.capability],
   );
@@ -143,7 +145,7 @@ export function AgentView() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, working]);
 
-  const buildContext = (): AgentActionContext => ({
+  const buildContext = (onStreamDelta?: (chunk: string) => void): AgentActionContext => ({
     activeRequest: request,
     activeResponse: response,
     testResults,
@@ -153,6 +155,8 @@ export function AgentView() {
     environment: activeEnvironment,
     openRequestTab,
     setMainView,
+    onStreamDelta,
+    sendActiveRequest: sendCurrentRequest,
   });
 
   const applyResult = (result: AgentActionResult, replaceId?: string) => {
@@ -164,6 +168,7 @@ export function AgentView() {
       role: "assistant",
       text: result.markdown,
       pendingConfirm: result.needsConfirm,
+      confirmPayload: result.confirmPayload,
       openRequest: result.openRequest,
       citations: result.citations,
     };
@@ -184,19 +189,38 @@ export function AgentView() {
       role: "user",
       text: trimmed,
     };
-    setMessages((prev) => [...prev, userMessage]);
+    const streamId = nextId("assistant");
+    streamIdRef.current = streamId;
+    setMessages((prev) => [
+      ...prev,
+      userMessage,
+      { id: streamId, role: "assistant", text: "", busy: true },
+    ]);
     setInput("");
     setWorking(true);
 
     try {
       const intent = routeAgentInput(trimmed);
-      const result = await runAgentIntent(intent, buildContext());
-      applyResult(result);
+      const result = await runAgentIntent(
+        intent,
+        buildContext((chunk) => {
+          setMessages((prev) =>
+            prev.map((item) =>
+              item.id === streamId ? { ...item, text: `${item.text}${chunk}`, busy: true } : item,
+            ),
+          );
+        }),
+      );
+      applyResult(result, streamId);
     } catch (error) {
-      applyResult({
-        markdown: `Agent error: ${error instanceof Error ? error.message : String(error)}`,
-      });
+      applyResult(
+        {
+          markdown: `Agent error: ${error instanceof Error ? error.message : String(error)}`,
+        },
+        streamId,
+      );
     } finally {
+      streamIdRef.current = null;
       setWorking(false);
     }
   };
@@ -212,7 +236,11 @@ export function AgentView() {
       { id: placeholderId, role: "assistant", text: t("agent.working"), busy: true },
     ]);
     try {
-      const result = await confirmAgentAction(message.pendingConfirm, buildContext());
+      const result = await confirmAgentAction(
+        message.pendingConfirm,
+        buildContext(),
+        message.confirmPayload,
+      );
       applyResult(result, placeholderId);
     } catch (error) {
       applyResult(

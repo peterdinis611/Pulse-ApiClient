@@ -295,3 +295,88 @@ pub fn git_workspace_append_agent_history(
     }
     Ok(())
 }
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitStatusDto {
+    pub branch: String,
+    pub dirty: bool,
+    pub ahead: i32,
+    pub behind: i32,
+    pub conflicted: Vec<String>,
+}
+
+#[tauri::command]
+pub fn git_workspace_status(root: String) -> Result<GitStatusDto, String> {
+    let dir = validate_root(&root)?;
+    let output = std::process::Command::new("git")
+        .args(["-C", &dir.to_string_lossy(), "status", "--porcelain=v1", "-b"])
+        .output()
+        .map_err(|e| format!("git status failed: {e}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("git status failed: {}", stderr.trim()));
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let mut branch = "HEAD".to_string();
+    let mut ahead = 0i32;
+    let mut behind = 0i32;
+    let mut dirty = false;
+    let mut conflicted = Vec::new();
+    for (index, line) in text.lines().enumerate() {
+        if index == 0 && line.starts_with("## ") {
+            let rest = &line[3..];
+            let (name, tracking) = rest
+                .split_once("...")
+                .map(|(a, b)| (a, Some(b)))
+                .unwrap_or((rest, None));
+            branch = name
+                .split_whitespace()
+                .next()
+                .unwrap_or("HEAD")
+                .to_string();
+            if let Some(track) = tracking {
+                if let Some(start) = track.find('[') {
+                    let bracket = &track[start..];
+                    if let Some(idx) = bracket.find("ahead ") {
+                        let slice = &bracket[idx + 6..];
+                        ahead = slice
+                            .chars()
+                            .take_while(|c| c.is_ascii_digit())
+                            .collect::<String>()
+                            .parse()
+                            .unwrap_or(0);
+                    }
+                    if let Some(idx) = bracket.find("behind ") {
+                        let slice = &bracket[idx + 7..];
+                        behind = slice
+                            .chars()
+                            .take_while(|c| c.is_ascii_digit())
+                            .collect::<String>()
+                            .parse()
+                            .unwrap_or(0);
+                    }
+                }
+            }
+            continue;
+        }
+        if line.len() < 2 {
+            continue;
+        }
+        dirty = true;
+        let xy = &line[..2];
+        if xy.contains('U') || xy == "AA" || xy == "DD" {
+            let path = line[3..].trim();
+            if !path.is_empty() {
+                conflicted.push(path.to_string());
+            }
+        }
+    }
+    Ok(GitStatusDto {
+        branch,
+        dirty,
+        ahead,
+        behind,
+        conflicted,
+    })
+}

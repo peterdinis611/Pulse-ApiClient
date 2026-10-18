@@ -21,7 +21,7 @@ import {
   draftTestsFromResponse,
   withDraftScripts,
 } from "@/lib/agent-draft";
-import { canUseAgentLlm, completeAgentLlm } from "@/lib/agent-llm";
+import { completeAgentLlm, streamAgentLlm, type AgentToolCall } from "@/lib/agent-llm";
 import {
   appendGitAgentHistory,
   getGitWorkspaceRoot,
@@ -31,10 +31,12 @@ import {
 import type { AgentIntent } from "@/lib/agent-router";
 import { buildAgentHelpText } from "@/lib/agent-router";
 import {
+  canUseCloudForJob,
   capabilityForIntent,
   isAgentCapabilityEnabled,
   isAgentEnabled,
   loadAgentSettings,
+  type AgentCloudJob,
 } from "@/lib/agent-settings";
 import { t } from "@/lib/i18n";
 import type {
@@ -57,14 +59,19 @@ export type AgentActionContext = {
   environment: Environment | null;
   openRequestTab: (request: ApiRequest) => void;
   setMainView: (view: MainView) => void;
+  /** Optional stream sink for cloud explain/unknown. */
+  onStreamDelta?: (chunk: string) => void;
+  sendActiveRequest?: () => void;
 };
 
-export type AgentConfirmKind = "run_collection";
+export type AgentConfirmKind = "run_collection" | "send_request" | "remember";
 
 export type AgentActionResult = {
   markdown: string;
   /** When set, UI should show Confirm before calling `confirmAgentAction`. */
   needsConfirm?: AgentConfirmKind;
+  /** Payload for remember confirm. */
+  confirmPayload?: { key?: string; value?: string; scope?: "workspace" | "local" };
   openRequest?: ApiRequest;
   /** Apply these fields to the active request (draft tests / pre-request). */
   applyToActive?: Partial<ApiRequest>;
@@ -76,37 +83,137 @@ export type AgentActionResult = {
 async function maybeEnrichWithLlm(
   localMarkdown: string,
   userPrompt: string,
+  job: AgentCloudJob,
   ragBlock = "",
+  onStreamDelta?: (chunk: string) => void,
 ): Promise<string> {
   const settings = loadAgentSettings();
-  if (!canUseAgentLlm(settings.provider, settings.apiKey) || settings.provider === "none") {
+  if (settings.provider === "none" || !canUseCloudForJob(job, settings)) {
     return localMarkdown;
   }
+  const messages = [
+    {
+      role: "user" as const,
+      content: [
+        userPrompt,
+        "",
+        "Local summary:",
+        localMarkdown,
+        "",
+        "RAG context:",
+        ragBlock.trim() || "(none)",
+      ].join("\n"),
+    },
+  ];
   try {
-    const text = await completeAgentLlm({
+    if (onStreamDelta) {
+      const text = await streamAgentLlm({
+        provider: settings.provider,
+        apiKey: settings.apiKey,
+        messages,
+        onDelta: onStreamDelta,
+      });
+      if (!text.trim()) return localMarkdown;
+      return `${text}\n\n---\n_${t("agent.md.llmLocalFooter")}_\n\n${localMarkdown}`;
+    }
+    const result = await completeAgentLlm({
       provider: settings.provider,
       apiKey: settings.apiKey,
-      messages: [
-        {
-          role: "user",
-          content: [
-            userPrompt,
-            "",
-            "Local summary:",
-            localMarkdown,
-            "",
-            "RAG context:",
-            ragBlock.trim() || "(none)",
-          ].join("\n"),
-        },
-      ],
+      messages,
     });
+    const text = result.text.trim();
+    if (!text) return localMarkdown;
     return `${text}\n\n---\n_${t("agent.md.llmLocalFooter")}_\n\n${localMarkdown}`;
   } catch (error) {
     return `${localMarkdown}\n\n---\n_${t("agent.md.llmFailed", {
       error: error instanceof Error ? error.message : String(error),
     })}_`;
   }
+}
+
+function toolCallsToConfirm(toolCalls: AgentToolCall[]): AgentActionResult | null {
+  const call = toolCalls[0];
+  if (!call) return null;
+  if (call.name === "run_active_collection") {
+    return {
+      markdown: t("agent.md.toolRunCollection"),
+      needsConfirm: "run_collection",
+    };
+  }
+  if (call.name === "send_active_request") {
+    return {
+      markdown: t("agent.md.toolSendRequest"),
+      needsConfirm: "send_request",
+    };
+  }
+  if (call.name === "remember_fact") {
+    try {
+      const args = JSON.parse(call.arguments) as {
+        key?: string;
+        value?: string;
+        scope?: string;
+      };
+      if (!args.key?.trim() || args.value == null) return null;
+      return {
+        markdown: t("agent.md.toolRemember", { key: args.key, value: String(args.value) }),
+        needsConfirm: "remember",
+        confirmPayload: {
+          key: args.key.trim(),
+          value: String(args.value),
+          scope: args.scope === "local" ? "local" : "workspace",
+        },
+      };
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+async function maybeToolCallFromUnknown(
+  input: string,
+  ragBlock: string,
+): Promise<AgentActionResult | null> {
+  const settings = loadAgentSettings();
+  if (settings.provider === "none" || !canUseCloudForJob("tools", settings)) {
+    return null;
+  }
+  try {
+    const result = await completeAgentLlm({
+      provider: settings.provider,
+      apiKey: settings.apiKey,
+      tools: true,
+      messages: [
+        {
+          role: "user",
+          content: [
+            "The user asked:",
+            input,
+            "",
+            "RAG context:",
+            ragBlock.trim() || "(none)",
+            "",
+            "If you can help by proposing send_active_request, run_active_collection, or remember_fact, call the tool. Otherwise answer briefly without tools.",
+          ].join("\n"),
+        },
+      ],
+    });
+    if (result.toolCalls.length > 0) {
+      const confirm = toolCallsToConfirm(result.toolCalls);
+      if (confirm) {
+        if (result.text.trim()) {
+          confirm.markdown = `${result.text.trim()}\n\n---\n${confirm.markdown}`;
+        }
+        return confirm;
+      }
+    }
+    if (result.text.trim()) {
+      return { markdown: result.text.trim() };
+    }
+  } catch {
+    /* fall through to local */
+  }
+  return null;
 }
 
 function collectionRequests(
@@ -213,10 +320,14 @@ export async function runAgentIntent(
           /* best-effort */
         }
       }
+      const toolResult = await maybeToolCallFromUnknown(intent.input, ragBlock);
+      if (toolResult) return toolResult;
       const markdown = await maybeEnrichWithLlm(
         local,
         `The user said something the local router did not match. Answer helpfully using Pulse agent capabilities and the RAG context. User input:\n${intent.input}`,
+        "unknown",
         ragBlock,
+        ctx.onStreamDelta,
       );
       return { markdown };
     }
@@ -270,7 +381,9 @@ export async function runAgentIntent(
       const markdown = await maybeEnrichWithLlm(
         local,
         "Explain this HTTP response for an API client user. Call out status, timing, likely issues, and next steps.",
+        "explain",
         ragBlock,
+        ctx.onStreamDelta,
       );
       return { markdown, citations };
     }
@@ -307,7 +420,9 @@ export async function runAgentIntent(
       const markdown = await maybeEnrichWithLlm(
         local,
         "Explain these Pulse test results. Focus on failures and how to fix them.",
+        "explain",
         ragBlock,
+        ctx.onStreamDelta,
       );
       return { markdown, citations };
     }
@@ -616,11 +731,54 @@ export async function runAgentIntent(
 export async function confirmAgentAction(
   kind: AgentConfirmKind,
   ctx: AgentActionContext,
+  payload?: { key?: string; value?: string; scope?: "workspace" | "local" },
 ): Promise<AgentActionResult> {
-  if (!isAgentEnabled() || (kind === "run_collection" && !isAgentCapabilityEnabled("run_collection"))) {
+  if (!isAgentEnabled()) {
     return { markdown: buildAgentHelpText() };
   }
+  if (kind === "send_request") {
+    if (!ctx.activeRequest) {
+      return { markdown: t("agent.md.noResponse") };
+    }
+    ctx.sendActiveRequest?.();
+    await recordAgentHistory("send_request", {
+      request: { method: ctx.activeRequest.method, url: ctx.activeRequest.url },
+    });
+    return { markdown: t("agent.md.sendStarted") };
+  }
+  if (kind === "remember") {
+    if (!isAgentCapabilityEnabled("memory")) {
+      return { markdown: t("agent.md.capabilityOff", { capability: "memory" }) };
+    }
+    const key = payload?.key?.trim();
+    const value = payload?.value ?? "";
+    if (!key) return { markdown: t("agent.md.usageRemember") };
+    const root = getGitWorkspaceRoot();
+    if (!root && payload?.scope !== "local") {
+      return { markdown: t("agent.md.noWorkspaceMemory") };
+    }
+    try {
+      const scope = payload?.scope ?? "workspace";
+      await upsertAgentMemory({
+        workspaceRoot: root ?? "",
+        key,
+        value,
+        scope,
+      });
+      await recordAgentHistory("remember", { key, scope });
+      return { markdown: t("agent.md.remembered", { key, value, scope }) };
+    } catch (error) {
+      return {
+        markdown: t("agent.md.rememberFailed", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      };
+    }
+  }
   if (kind === "run_collection") {
+    if (!isAgentCapabilityEnabled("run_collection")) {
+      return { markdown: buildAgentHelpText() };
+    }
     const collectionId = ctx.activeCollectionId;
     const group = ctx.collectionGroups.find((item) => item.id === collectionId);
     const saved = collectionRequests(collectionId, ctx.collections);

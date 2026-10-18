@@ -43,8 +43,8 @@ use engine::HttpEngineStats;
 use git_workspace::{
     git_workspace_agent_history, git_workspace_append_agent_history, git_workspace_load,
     git_workspace_migrate, git_workspace_open, git_workspace_pending, git_workspace_read_file,
-    git_workspace_save, git_workspace_save_request, git_workspace_unwatch, git_workspace_watch,
-    GitWatchState,
+    git_workspace_save, git_workspace_save_request, git_workspace_status, git_workspace_unwatch,
+    git_workspace_watch, GitWatchState,
 };
 use mock_server::{mock_server_start, mock_server_stop, MockServerState};
 use history::HistoryEntryPayload;
@@ -272,6 +272,13 @@ async fn exchange_oauth_token(
     request: oauth::OAuthTokenRequest,
 ) -> Result<oauth::OAuthTokenResponse, String> {
     oauth::exchange_oauth_token(request).await
+}
+
+#[tauri::command]
+async fn start_oauth_device_flow(
+    request: oauth::OAuthDeviceStartRequest,
+) -> Result<oauth::OAuthDeviceCodeStart, String> {
+    oauth::start_oauth_device_flow(request).await
 }
 
 #[tauri::command]
@@ -591,6 +598,7 @@ pub fn run() {
             git_workspace_unwatch,
             git_workspace_read_file,
             git_workspace_pending,
+            git_workspace_status,
             git_workspace_agent_history,
             git_workspace_append_agent_history,
             agent_memory_reindex,
@@ -612,6 +620,7 @@ pub fn run() {
             run_pre_request_script,
             run_collection,
             exchange_oauth_token,
+            start_oauth_device_flow,
             db_load_workspace,
             db_save_workspace,
             db_append_history,

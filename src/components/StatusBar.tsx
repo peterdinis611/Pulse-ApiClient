@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   AlertCircle,
+  GitBranch,
   Globe2,
   LayoutPanelTop,
   LoaderCircle,
@@ -10,6 +11,11 @@ import {
 import { shallowEqualAppSlice, useAppSelector, useAppSend } from "@/machines";
 import { selectActiveEnvironment, selectActiveTab } from "@/machines/appMachine";
 import { clearHttpCache, getHttpEngineStats } from "@/lib/http-client";
+import {
+  GIT_WORKSPACE_STATUS_EVENT,
+  getGitWorkspaceUiStatus,
+  type GitWorkspaceUiStatus,
+} from "@/lib/git-workspace-status";
 import { statusBadgeClass } from "@/lib/method-colors";
 import { toast } from "@/lib/toast";
 import type { HttpEngineStats } from "@/types";
@@ -51,8 +57,15 @@ export function StatusBar() {
     testFailed,
   } = slice;
   const [engineStats, setEngineStats] = useState<HttpEngineStats | null>(null);
+  const [gitStatus, setGitStatus] = useState<GitWorkspaceUiStatus>(() => getGitWorkspaceUiStatus());
   const hasTabOverride =
     tabEnvironmentOverrideId != null && tabEnvironmentOverrideId !== activeEnvironmentId;
+
+  useEffect(() => {
+    const sync = () => setGitStatus(getGitWorkspaceUiStatus());
+    window.addEventListener(GIT_WORKSPACE_STATUS_EVENT, sync);
+    return () => window.removeEventListener(GIT_WORKSPACE_STATUS_EVENT, sync);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -165,6 +178,40 @@ export function StatusBar() {
               </span>
             )}
           </button>
+        )}
+        {gitStatus.root && (
+          <span
+            className={cn(
+              "status-chip max-w-[220px]",
+              gitStatus.conflict || gitStatus.conflictedPaths.length > 0
+                ? "border-destructive/30 bg-destructive/10 text-destructive"
+                : gitStatus.dirty
+                  ? "border-warning/30 bg-warning/10 text-warning"
+                  : "status-chip--active",
+            )}
+            title={
+              gitStatus.conflict
+                ? `Conflict: ${gitStatus.conflict.filePath}`
+                : gitStatus.dirty
+                  ? "Workspace has uncommitted changes"
+                  : "Workspace clean"
+            }
+          >
+            {gitStatus.syncing ? (
+              <LoaderCircle className="size-3 shrink-0 animate-spin" />
+            ) : (
+              <GitBranch className="size-3 shrink-0" />
+            )}
+            <span className="truncate font-mono">{gitStatus.branch ?? "…"}</span>
+            {gitStatus.dirty && <span className="shrink-0">dirty</span>}
+            {!gitStatus.dirty && !gitStatus.syncing && <span className="shrink-0">synced</span>}
+            {(gitStatus.ahead > 0 || gitStatus.behind > 0) && (
+              <span className="shrink-0 tabular-nums">
+                {gitStatus.ahead > 0 ? `↑${gitStatus.ahead}` : ""}
+                {gitStatus.behind > 0 ? `↓${gitStatus.behind}` : ""}
+              </span>
+            )}
+          </span>
         )}
         <button
           type="button"

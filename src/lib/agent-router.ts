@@ -215,4 +215,6 @@ export const AGENT_HELP_TEXT = buildAgentHelpText({
   >,
   provider: "none",
   apiKey: "",
+  offlineOnly: false,
+  cloudJobs: { explain: true, unknown: true, tools: true },
 });

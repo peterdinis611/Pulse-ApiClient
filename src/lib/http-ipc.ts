@@ -133,6 +133,7 @@ export type OAuthTokenRequest = {
   redirectUri?: string | null;
   codeVerifier?: string | null;
   refreshToken?: string | null;
+  deviceCode?: string | null;
 };
 
 export type OAuthTokenResponse = {

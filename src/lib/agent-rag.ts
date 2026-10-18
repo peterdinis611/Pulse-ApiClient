@@ -1,9 +1,9 @@
 import { invokeEffect } from "@/lib/effect/tauri";
 import { runEffect } from "@/lib/effect/run";
 import { canUseTauriIpc } from "@/lib/tauri-runtime";
-import { createRequest } from "@/lib/helpers";
+import { createKeyValue, createRequest } from "@/lib/helpers";
 import { t } from "@/lib/i18n";
-import type { HttpMethod } from "@/types";
+import type { BodyKind, HttpMethod, KeyValue } from "@/types";
 
 export type AgentRagHit = {
   id: string;
@@ -15,6 +15,11 @@ export type AgentRagHit = {
   name?: string | null;
   status?: number | null;
   historyId?: string | null;
+  /** Optional structured request fragment from index meta. */
+  headers?: Array<{ key: string; value: string; enabled?: boolean }> | null;
+  body?: string | null;
+  bodyKind?: string | null;
+  query?: Array<{ key: string; value: string; enabled?: boolean }> | null;
 };
 
 export type AgentRagCitation = {
@@ -109,6 +114,19 @@ export function formatRagContextBlock(hits: AgentRagHit[]): string {
   return lines.join("\n");
 }
 
+function mapKv(
+  items: Array<{ key: string; value: string; enabled?: boolean }> | null | undefined,
+): KeyValue[] | undefined {
+  if (!items?.length) return undefined;
+  return items.map((item) =>
+    createKeyValue({
+      key: item.key,
+      value: item.value,
+      enabled: item.enabled ?? true,
+    }),
+  );
+}
+
 export function citationsFromRagHits(hits: AgentRagHit[]): AgentRagCitation[] {
   const out: AgentRagCitation[] = [];
   for (const hit of hits) {
@@ -116,6 +134,9 @@ export function citationsFromRagHits(hits: AgentRagHit[]): AgentRagCitation[] {
     const method = (hit.method || "GET").toUpperCase() as HttpMethod;
     if (!url) continue;
     const name = hit.name?.trim() || `${method} ${url}`;
+    const headers = mapKv(hit.headers);
+    const query = mapKv(hit.query);
+    const bodyKind = (hit.bodyKind as BodyKind | undefined) || undefined;
     out.push({
       id: hit.id,
       label: `${method} ${name}`.slice(0, 80),
@@ -123,6 +144,11 @@ export function citationsFromRagHits(hits: AgentRagHit[]): AgentRagCitation[] {
         method,
         url,
         name,
+        ...(headers ? { headers } : {}),
+        ...(query ? { query } : {}),
+        ...(hit.body != null && hit.body !== ""
+          ? { body: hit.body, bodyKind: bodyKind ?? "raw" }
+          : {}),
       }),
     });
   }
