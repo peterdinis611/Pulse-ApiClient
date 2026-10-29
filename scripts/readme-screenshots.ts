@@ -10,11 +10,31 @@ const BASE = `http://localhost:${PORT}`;
 const OUT = resolve(ROOT, "docs/screenshots");
 const PUBLIC_OUT = resolve(ROOT, "docs/site/public/screenshots");
 
-const SHOTS: Array<{ shot: string; file: string; wait: string }> = [
+type Shot = {
+  shot: string;
+  file: string;
+  wait: string;
+  /** Optional interaction after the page is ready (e.g. agent quick action). */
+  prepare?: (page: Page) => Promise<void>;
+};
+
+const SHOTS: Shot[] = [
   { shot: "auth", file: "auth.png", wait: "text=Your API workspace, locally." },
   { shot: "overview", file: "overview.png", wait: "text=Welcome back, Demo" },
   { shot: "request", file: "request.png", wait: "text=octocat" },
+  { shot: "environments", file: "environments.png", wait: "text=base_url" },
   { shot: "settings", file: "settings.png", wait: "text=Appearance" },
+  {
+    shot: "agent",
+    file: "agent.png",
+    wait: "text=Workspace status",
+    prepare: async (page) => {
+      await page.getByRole("button", { name: "Workspace status" }).click();
+      await page.waitForSelector("text=Pulse", { timeout: 10_000 });
+      await page.waitForTimeout(600);
+    },
+  },
+  { shot: "mcp", file: "mcp.png", wait: "text=One-time setup" },
 ];
 
 async function serverUp(): Promise<boolean> {
@@ -36,9 +56,11 @@ async function waitForServer(): Promise<void> {
 
 async function tidyChrome(page: Page): Promise<void> {
   await page.evaluate(() => {
-    document.querySelectorAll("[data-sonner-toaster], [data-sonner-toast], .whats-new-overlay").forEach((node) => {
-      node.remove();
-    });
+    document
+      .querySelectorAll("[data-sonner-toaster], [data-sonner-toast], .whats-new-overlay")
+      .forEach((node) => {
+        node.remove();
+      });
   });
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(200);
@@ -61,7 +83,19 @@ async function main(): Promise<void> {
 
   try {
     await waitForServer();
-    const browser = await chromium.launch();
+    const executablePath =
+      process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ||
+      [
+        `${process.env.HOME}/Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`,
+        `${process.env.HOME}/Library/Caches/ms-playwright/chromium-1228/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`,
+      ].find((path) => {
+        try {
+          return require("node:fs").existsSync(path);
+        } catch {
+          return false;
+        }
+      });
+    const browser = await chromium.launch(executablePath ? { executablePath } : undefined);
     try {
       for (const item of SHOTS) {
         const context = await browser.newContext({
@@ -77,6 +111,9 @@ async function main(): Promise<void> {
         const page = await context.newPage();
         await page.goto(`${BASE}/?shot=${item.shot}`, { waitUntil: "networkidle" });
         await page.waitForSelector(item.wait, { timeout: 15_000 });
+        if (item.prepare) {
+          await item.prepare(page);
+        }
         await tidyChrome(page);
         const dest = resolve(OUT, item.file);
         await page.screenshot({ path: dest, type: "png" });

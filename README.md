@@ -1,8 +1,10 @@
 # Pulse API Client
 
-Desktop API client **2.1** — Git YAML is the workspace, SQLite keeps history. Built with **Tauri**, **React**, **TypeScript**, **Tailwind CSS**, **shadcn/ui**, and **Rust** (reqwest).
+Desktop API client — Git YAML is the workspace, SQLite keeps history. Built with **Tauri**, **React**, **TypeScript**, **Tailwind CSS**, **shadcn/ui**, and **Rust** (reqwest).
 
-![Pulse request workspace](./docs/screenshots/request.png)
+<p align="center">
+  <img src="./docs/screenshots/request.png" alt="Pulse request workspace" width="900" />
+</p>
 
 ## Stack
 
@@ -53,11 +55,19 @@ See the full guide in [docs/FEATURES.md](./docs/FEATURES.md) (in-app under **Doc
 
 | Overview | Request workspace |
 | --- | --- |
-| ![Overview](./docs/screenshots/overview.png) | ![Request](./docs/screenshots/request.png) |
+| <img src="./docs/screenshots/overview.png" alt="Overview" width="440" /> | <img src="./docs/screenshots/request.png" alt="Request workspace" width="440" /> |
 
-| Settings & themes | Sign in |
+| Environments | Settings & themes |
 | --- | --- |
-| ![Settings](./docs/screenshots/settings.png) | ![Auth](./docs/screenshots/auth.png) |
+| <img src="./docs/screenshots/environments.png" alt="Environments" width="440" /> | <img src="./docs/screenshots/settings.png" alt="Settings" width="440" /> |
+
+| Agent | MCP |
+| --- | --- |
+| <img src="./docs/screenshots/agent.png" alt="Agent" width="440" /> | <img src="./docs/screenshots/mcp.png" alt="MCP" width="440" /> |
+
+| Sign in |
+| --- |
+| <img src="./docs/screenshots/auth.png" alt="Sign in" width="440" /> |
 
 ## Run
 

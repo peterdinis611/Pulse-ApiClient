@@ -317,154 +317,35 @@ pub struct GitStatusDto {
 
 #[tauri::command]
 pub fn git_workspace_status(root: String) -> Result<GitStatusDto, String> {
-    let dir = validate_root(&root)?;
-    let output = std::process::Command::new("git")
-        .args(["-C", &dir.to_string_lossy(), "status", "--porcelain=v1", "-b"])
-        .output()
-        .map_err(|e| format!("git status failed: {e}"))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("git status failed: {}", stderr.trim()));
-    }
-    let text = String::from_utf8_lossy(&output.stdout);
-    let mut branch = "HEAD".to_string();
-    let mut ahead = 0i32;
-    let mut behind = 0i32;
-    let mut dirty = false;
-    let mut conflicted = Vec::new();
-    let mut files = Vec::new();
-    for (index, line) in text.lines().enumerate() {
-        if index == 0 && line.starts_with("## ") {
-            let rest = &line[3..];
-            let (name, tracking) = rest
-                .split_once("...")
-                .map(|(a, b)| (a, Some(b)))
-                .unwrap_or((rest, None));
-            branch = name
-                .split_whitespace()
-                .next()
-                .unwrap_or("HEAD")
-                .to_string();
-            if let Some(track) = tracking {
-                if let Some(start) = track.find('[') {
-                    let bracket = &track[start..];
-                    if let Some(idx) = bracket.find("ahead ") {
-                        let slice = &bracket[idx + 6..];
-                        ahead = slice
-                            .chars()
-                            .take_while(|c| c.is_ascii_digit())
-                            .collect::<String>()
-                            .parse()
-                            .unwrap_or(0);
-                    }
-                    if let Some(idx) = bracket.find("behind ") {
-                        let slice = &bracket[idx + 7..];
-                        behind = slice
-                            .chars()
-                            .take_while(|c| c.is_ascii_digit())
-                            .collect::<String>()
-                            .parse()
-                            .unwrap_or(0);
-                    }
-                }
-            }
-            continue;
-        }
-        if line.len() < 2 {
-            continue;
-        }
-        dirty = true;
-        let xy = line[..2].to_string();
-        let path = line[3..].trim().to_string();
-        if path.is_empty() {
-            continue;
-        }
-        if xy.contains('U') || xy == "AA" || xy == "DD" {
-            conflicted.push(path.clone());
-        }
-        files.push(GitFileStatusDto { path, xy });
-    }
+    let status = pulse_core::git_status(&root)?;
     Ok(GitStatusDto {
-        branch,
-        dirty,
-        ahead,
-        behind,
-        conflicted,
-        files,
+        branch: status.branch,
+        dirty: status.dirty,
+        ahead: status.ahead,
+        behind: status.behind,
+        conflicted: status.conflicted,
+        files: status
+            .files
+            .into_iter()
+            .map(|f| GitFileStatusDto {
+                path: f.path,
+                xy: f.xy,
+            })
+            .collect(),
     })
 }
 
 #[tauri::command]
 pub fn git_workspace_add(root: String, paths: Vec<String>) -> Result<(), String> {
-    let dir = validate_root(&root)?;
-    if paths.is_empty() {
-        return Err("No paths to stage".into());
-    }
-    for path in &paths {
-        if path.contains("..") || path.contains('\0') {
-            return Err(format!("Invalid path: {path}"));
-        }
-    }
-    let mut args = vec![
-        "-C".to_string(),
-        dir.to_string_lossy().to_string(),
-        "add".to_string(),
-        "--".to_string(),
-    ];
-    args.extend(paths);
-    let output = std::process::Command::new("git")
-        .args(&args)
-        .output()
-        .map_err(|e| format!("git add failed: {e}"))?;
-    if !output.status.success() {
-        return Err(format!(
-            "git add failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        ));
-    }
-    Ok(())
+    pulse_core::git_add(&root, &paths)
 }
 
 #[tauri::command]
 pub fn git_workspace_commit(root: String, message: String) -> Result<String, String> {
-    let dir = validate_root(&root)?;
-    let message = message.trim();
-    if message.is_empty() {
-        return Err("Commit message is required".into());
-    }
-    let output = std::process::Command::new("git")
-        .args([
-            "-C",
-            &dir.to_string_lossy(),
-            "commit",
-            "-m",
-            message,
-        ])
-        .output()
-        .map_err(|e| format!("git commit failed: {e}"))?;
-    if !output.status.success() {
-        return Err(format!(
-            "git commit failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        ));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    pulse_core::git_commit(&root, &message)
 }
 
 #[tauri::command]
 pub fn git_workspace_diff_stat(root: String) -> Result<String, String> {
-    let dir = validate_root(&root)?;
-    let output = std::process::Command::new("git")
-        .args(["-C", &dir.to_string_lossy(), "diff", "--stat", "HEAD"])
-        .output()
-        .map_err(|e| format!("git diff failed: {e}"))?;
-    if !output.status.success() {
-        // Unborn HEAD / empty repo — fall back to staged+unstaged summary.
-        let fallback = std::process::Command::new("git")
-            .args(["-C", &dir.to_string_lossy(), "status", "--short"])
-            .output()
-            .map_err(|e| format!("git status failed: {e}"))?;
-        return Ok(String::from_utf8_lossy(&fallback.stdout).trim().to_string());
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    pulse_core::git_diff_stat(&root)
 }

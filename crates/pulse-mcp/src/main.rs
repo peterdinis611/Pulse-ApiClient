@@ -1,3 +1,5 @@
+#![recursion_limit = "512"]
+
 use std::io::{self, BufRead, Write};
 use std::sync::Mutex;
 
@@ -10,10 +12,23 @@ use pulse_core::build_graphql_body_raw;
 use pulse_core::AgentExecuteOptions;
 use pulse_core::run_agent;
 use pulse_core::curl_to_payload;
+use pulse_core::delete_fact;
 use pulse_core::diff_compare;
 use pulse_core::format_graphql_response;
+use pulse_core::format_rag_hits_markdown;
+use pulse_core::get_fact;
+use pulse_core::git_add;
+use pulse_core::git_commit;
+use pulse_core::git_diff_stat;
+use pulse_core::git_status;
+use pulse_core::list_facts;
 use pulse_core::list_graphql_operations;
+use pulse_core::rebuild_rag_index;
+use pulse_core::related_context;
+use pulse_core::search_facts;
+use pulse_core::search_rag;
 use pulse_core::summarize_graphql_schema;
+use pulse_core::upsert_fact;
 use pulse_core::INTROSPECTION_QUERY;
 use pulse_core::graphql_ws::{
     complete as gql_complete, connection_init, connection_init_payload_from_auth, parse_message,
@@ -44,10 +59,12 @@ use pulse_core::workspace_fs::{
     append_agent_history, delete_request, is_mutating_method, list_pending, load_workspace, read_agent_history,
     save_request, write_pending,
 };
-use pulse_core::{CollectionRunInput, MockRoute, MockServer};
+use pulse_core::{
+    CollectionRunInput, MemoryScope, MockRoute, MockServer, UpsertFactInput,
+};
 use serde_json::{json, Map, Value};
 
-use catalog::STREAM_AND_CONTRACT_TOOLS;
+use catalog::{GIT_MEMORY_RAG_TOOLS, STREAM_AND_CONTRACT_TOOLS};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -411,8 +428,133 @@ fn tools() -> Value {
         },
         {
             "name": "pulse_workspace_status",
-            "description": "Summarize PULSE_WORKSPACE counts and secret key names",
+            "description": "Summarize PULSE_WORKSPACE counts, secret key names, and git branch/dirty state",
             "inputSchema": { "type": "object", "properties": {} }
+        },
+        {
+            "name": "pulse_git_status",
+            "description": "Git porcelain status for PULSE_WORKSPACE (branch, dirty, ahead/behind, files)",
+            "inputSchema": { "type": "object", "properties": {} }
+        },
+        {
+            "name": "pulse_git_add",
+            "description": "Stage paths under PULSE_WORKSPACE (git add). Requires confirm=true.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["paths"],
+                "properties": {
+                    "paths": { "type": "array", "items": { "type": "string" } },
+                    "confirm": { "type": "boolean" }
+                }
+            }
+        },
+        {
+            "name": "pulse_git_commit",
+            "description": "Commit staged changes in PULSE_WORKSPACE. Requires confirm=true.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["message"],
+                "properties": {
+                    "message": { "type": "string" },
+                    "confirm": { "type": "boolean" }
+                }
+            }
+        },
+        {
+            "name": "pulse_git_diff_stat",
+            "description": "git diff --stat HEAD for PULSE_WORKSPACE (falls back to status --short)",
+            "inputSchema": { "type": "object", "properties": {} }
+        },
+        {
+            "name": "pulse_memory_list",
+            "description": "List agent memory facts (workspace and/or local scope)",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "scope": { "type": "string", "enum": ["workspace", "local"], "description": "Omit for both scopes" }
+                }
+            }
+        },
+        {
+            "name": "pulse_memory_get",
+            "description": "Get one memory fact by key",
+            "inputSchema": {
+                "type": "object",
+                "required": ["key"],
+                "properties": {
+                    "key": { "type": "string" },
+                    "scope": { "type": "string", "enum": ["workspace", "local"] }
+                }
+            }
+        },
+        {
+            "name": "pulse_memory_search",
+            "description": "Search memory facts by substring across key/value/tags",
+            "inputSchema": {
+                "type": "object",
+                "required": ["query"],
+                "properties": { "query": { "type": "string" } }
+            }
+        },
+        {
+            "name": "pulse_memory_upsert",
+            "description": "Create or update a memory fact. Requires confirm=true.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["key", "value"],
+                "properties": {
+                    "key": { "type": "string" },
+                    "value": { "type": "string" },
+                    "scope": { "type": "string", "enum": ["workspace", "local"], "default": "workspace" },
+                    "tags": { "type": "array", "items": { "type": "string" } },
+                    "note": { "type": "string" },
+                    "expiresAt": { "type": "string", "description": "ISO-8601 expiry" },
+                    "confirm": { "type": "boolean" }
+                }
+            }
+        },
+        {
+            "name": "pulse_memory_delete",
+            "description": "Delete a memory fact by key. Requires confirm=true.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["key"],
+                "properties": {
+                    "key": { "type": "string" },
+                    "scope": { "type": "string", "enum": ["workspace", "local"] },
+                    "confirm": { "type": "boolean" }
+                }
+            }
+        },
+        {
+            "name": "pulse_rag_search",
+            "description": "Hybrid search over the workspace RAG index (history, memory, requests)",
+            "inputSchema": {
+                "type": "object",
+                "required": ["query"],
+                "properties": {
+                    "query": { "type": "string" },
+                    "limit": { "type": "integer", "default": 8 },
+                    "markdown": { "type": "boolean", "default": true }
+                }
+            }
+        },
+        {
+            "name": "pulse_rag_reindex",
+            "description": "Rebuild the RAG index from history + memory + saved requests",
+            "inputSchema": { "type": "object", "properties": {} }
+        },
+        {
+            "name": "pulse_rag_related",
+            "description": "Find RAG docs related to a seed string (method URL, name, etc.)",
+            "inputSchema": {
+                "type": "object",
+                "required": ["seed"],
+                "properties": {
+                    "seed": { "type": "string" },
+                    "limit": { "type": "integer", "default": 6 }
+                }
+            }
         },
         {
             "name": "pulse_workspace_init",
@@ -629,12 +771,15 @@ fn tools() -> Value {
         },
         {
             "name": "pulse_mock_start",
-            "description": "Start the local mock on 127.0.0.1:4010 from workspace examples or explicit routes",
+            "description": "Start the local mock on 127.0.0.1:4010 from workspace examples or explicit routes. Each MockRoute may include matchQuery, matchHeaders, and matchBodyIncludes matchers.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "delayMs": { "type": "integer", "default": 0 },
-                    "routes": { "type": "array", "description": "Optional MockRoute[] JSON; otherwise load PULSE_WORKSPACE examples" }
+                    "routes": {
+                        "type": "array",
+                        "description": "Optional MockRoute[]: method, path, status, body, contentType, headers, exampleName, matchQuery[{key,value}], matchHeaders[{key,value}], matchBodyIncludes"
+                    }
                 }
             }
         },
@@ -671,6 +816,8 @@ fn workspace_resources(root: &str) -> Vec<Value> {
         json!({"uri": "pulse://workspace/environments", "name": "workspace-environments", "mimeType": "application/json"}),
         json!({"uri": "pulse://workspace/history", "name": "workspace-history", "mimeType": "application/json"}),
         json!({"uri": "pulse://workspace/pending", "name": "workspace-pending", "mimeType": "application/json"}),
+        json!({"uri": "pulse://workspace/memory", "name": "workspace-memory", "mimeType": "application/json"}),
+        json!({"uri": "pulse://workspace/git", "name": "workspace-git", "mimeType": "application/json"}),
     ];
     if let Ok(payload) = load_workspace(root) {
         for item in payload.collections.iter().take(50) {
@@ -686,10 +833,11 @@ fn workspace_resources(root: &str) -> Vec<Value> {
 
 fn read_workspace_resource(uri: &str) -> Result<Value, String> {
     let root = workspace_root()?;
-    let payload = load_workspace(&root)?;
     let contents = if uri == "pulse://workspace/requests" {
+        let payload = load_workspace(&root)?;
         serde_json::to_value(&payload.collections).unwrap_or(Value::Null)
     } else if uri == "pulse://workspace/environments" {
+        let payload = load_workspace(&root)?;
         serde_json::to_value(&payload.environments).unwrap_or(Value::Null)
     } else if uri == "pulse://workspace/history" {
         let mut history = read_agent_history(&root)?;
@@ -699,7 +847,12 @@ fn read_workspace_resource(uri: &str) -> Result<Value, String> {
         Value::Array(history)
     } else if uri == "pulse://workspace/pending" {
         json!(list_pending(&root)?)
+    } else if uri == "pulse://workspace/memory" {
+        serde_json::to_value(list_facts(&root, None)?).unwrap_or(Value::Null)
+    } else if uri == "pulse://workspace/git" {
+        serde_json::to_value(git_status(&root)?).unwrap_or(Value::Null)
     } else if let Some(id) = uri.strip_prefix("pulse://workspace/request/") {
+        let payload = load_workspace(&root)?;
         match find_saved(&payload, id) {
             Some(item) => serde_json::to_value(item).unwrap_or(Value::Null),
             None => return Err(format!("Resource not found: {uri}")),
@@ -714,6 +867,14 @@ fn read_workspace_resource(uri: &str) -> Result<Value, String> {
             "text": serde_json::to_string_pretty(&contents).unwrap_or_default()
         }]
     }))
+}
+
+fn parse_memory_scope(raw: &str) -> Option<MemoryScope> {
+    if raw.is_empty() {
+        None
+    } else {
+        MemoryScope::parse(raw)
+    }
 }
 
 async fn send_and_record(mut payload: HttpRequestPayload, request_meta: Value) -> Value {
@@ -790,6 +951,7 @@ async fn dispatch_tool(name: &str, arguments: &Value) -> Value {
                 "streamAndContractTools".into(),
                 json!(STREAM_AND_CONTRACT_TOOLS),
             );
+            catalog.insert("gitMemoryRagTools".into(), json!(GIT_MEMORY_RAG_TOOLS));
             catalog.insert(
                 "resources".into(),
                 json!(workspace_root()
@@ -959,6 +1121,8 @@ async fn dispatch_tool(name: &str, arguments: &Value) -> Value {
                             .to_string()
                     })
                     .collect();
+                let memory = list_facts(&root, None).map(|f| f.len()).unwrap_or(0);
+                let git = git_status(&root).ok();
                 Ok(json!({
                     "root": payload.root,
                     "name": payload.name,
@@ -966,12 +1130,190 @@ async fn dispatch_tool(name: &str, arguments: &Value) -> Value {
                     "environments": payload.environments.iter().map(|item| item.name.clone()).collect::<Vec<_>>(),
                     "pending": pending,
                     "history": history,
-                    "secretKeys": secret_keys
+                    "memoryFacts": memory,
+                    "secretKeys": secret_keys,
+                    "git": git
                 }))
             })
         }) {
             Ok(status) => json_text(&status, false),
             Err(error) => text(error, true),
+        },
+        "pulse_git_status" => match workspace_root().and_then(|root| git_status(&root)) {
+            Ok(status) => json_text(&serde_json::to_value(status).unwrap_or(Value::Null), false),
+            Err(error) => text(error, true),
+        },
+        "pulse_git_add" => {
+            if !confirmed(arguments) {
+                return text("git add requires confirm=true", true);
+            }
+            let paths: Vec<String> = arguments
+                .get("paths")
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default();
+            match workspace_root().and_then(|root| git_add(&root, &paths).map(|_| root)) {
+                Ok(_) => text("ok", false),
+                Err(error) => text(error, true),
+            }
+        },
+        "pulse_git_commit" => {
+            if !confirmed(arguments) {
+                return text("git commit requires confirm=true", true);
+            }
+            let message = arg_str(arguments, "message");
+            match workspace_root().and_then(|root| git_commit(&root, &message)) {
+                Ok(out) => text(if out.is_empty() { "ok".into() } else { out }, false),
+                Err(error) => text(error, true),
+            }
+        },
+        "pulse_git_diff_stat" => match workspace_root().and_then(|root| git_diff_stat(&root)) {
+            Ok(stat) => text(stat, false),
+            Err(error) => text(error, true),
+        },
+        "pulse_memory_list" => {
+            let scope = parse_memory_scope(&arg_str(arguments, "scope"));
+            match workspace_root().and_then(|root| list_facts(&root, scope)) {
+                Ok(facts) => json_text(&serde_json::to_value(facts).unwrap_or(Value::Null), false),
+                Err(error) => text(error, true),
+            }
+        },
+        "pulse_memory_get" => {
+            let key = arg_str(arguments, "key");
+            if key.is_empty() {
+                return text("key is required", true);
+            }
+            let scope = parse_memory_scope(&arg_str(arguments, "scope"));
+            match workspace_root().and_then(|root| get_fact(&root, &key, scope)) {
+                Ok(Some(fact)) => {
+                    json_text(&serde_json::to_value(fact).unwrap_or(Value::Null), false)
+                }
+                Ok(None) => text("Fact not found", true),
+                Err(error) => text(error, true),
+            }
+        },
+        "pulse_memory_search" => {
+            let query = arg_str(arguments, "query");
+            if query.is_empty() {
+                return text("query is required", true);
+            }
+            match workspace_root().and_then(|root| search_facts(&root, &query)) {
+                Ok(facts) => json_text(&serde_json::to_value(facts).unwrap_or(Value::Null), false),
+                Err(error) => text(error, true),
+            }
+        },
+        "pulse_memory_upsert" => {
+            if !confirmed(arguments) {
+                return text("memory upsert requires confirm=true", true);
+            }
+            let key = arg_str(arguments, "key");
+            let value = arg_str(arguments, "value");
+            let scope = parse_memory_scope(&arg_str(arguments, "scope")).unwrap_or(MemoryScope::Workspace);
+            let tags: Vec<String> = arguments
+                .get("tags")
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let note = arguments.get("note").and_then(|v| v.as_str());
+            let expires_at = arguments.get("expiresAt").and_then(|v| v.as_str());
+            match workspace_root().and_then(|root| {
+                upsert_fact(
+                    &root,
+                    UpsertFactInput {
+                        key: &key,
+                        value: &value,
+                        scope,
+                        source: "mcp",
+                        tags,
+                        note,
+                        expires_at,
+                    },
+                )
+            }) {
+                Ok(fact) => json_text(&serde_json::to_value(fact).unwrap_or(Value::Null), false),
+                Err(error) => text(error, true),
+            }
+        },
+        "pulse_memory_delete" => {
+            if !confirmed(arguments) {
+                return text("memory delete requires confirm=true", true);
+            }
+            let key = arg_str(arguments, "key");
+            if key.is_empty() {
+                return text("key is required", true);
+            }
+            let scope = parse_memory_scope(&arg_str(arguments, "scope"));
+            match workspace_root().and_then(|root| delete_fact(&root, &key, scope)) {
+                Ok(true) => text("ok", false),
+                Ok(false) => text("Fact not found", true),
+                Err(error) => text(error, true),
+            }
+        },
+        "pulse_rag_search" => {
+            let query = arg_str(arguments, "query");
+            if query.is_empty() {
+                return text("query is required", true);
+            }
+            let limit = arguments
+                .get("limit")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(8) as usize;
+            let as_markdown = arguments
+                .get("markdown")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+            match workspace_root().and_then(|root| search_rag(&root, &query, limit)) {
+                Ok(hits) if as_markdown => text(format_rag_hits_markdown(&hits, &query), false),
+                Ok(hits) => json_text(&serde_json::to_value(hits).unwrap_or(Value::Null), false),
+                Err(error) => text(error, true),
+            }
+        },
+        "pulse_rag_reindex" => match workspace_root().and_then(|root| {
+            let payload = load_workspace(&root).ok();
+            let extra: Vec<_> = payload
+                .map(|p| {
+                    p.collections
+                        .iter()
+                        .map(|item| {
+                            (
+                                item.id.clone(),
+                                String::new(),
+                                item.request.method.clone(),
+                                item.name.clone(),
+                                item.request.url.clone(),
+                                None::<i64>,
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let docs = pulse_core::docs_from_request_rows(&extra);
+            rebuild_rag_index(&root, &docs)
+        }) {
+            Ok(count) => json_text(&json!({ "documents": count }), false),
+            Err(error) => text(error, true),
+        },
+        "pulse_rag_related" => {
+            let seed = arg_str(arguments, "seed");
+            if seed.is_empty() {
+                return text("seed is required", true);
+            }
+            let limit = arguments
+                .get("limit")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(6) as usize;
+            match workspace_root().map(|root| related_context(&root, &seed, limit)) {
+                Ok(hits) => json_text(&serde_json::to_value(hits).unwrap_or(Value::Null), false),
+                Err(error) => text(error, true),
+            }
         },
         "pulse_workspace_init" => {
             let root = arguments

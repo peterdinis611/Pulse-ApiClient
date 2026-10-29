@@ -34,8 +34,21 @@ from .mcp_resources import (
     write_out_json,
     write_out_text,
 )
+from .memory import (
+    delete_fact as memory_delete_fact,
+    get_fact as memory_get_fact,
+    list_facts as memory_list_facts,
+    search_facts as memory_search_facts,
+    upsert_fact as memory_upsert_fact,
+)
 from .openapi import convert as convert_openapi
 from .openapi import export_spec, load_spec
+from .rag import (
+    format_rag_hits_markdown,
+    rebuild_rag_index,
+    related_context as rag_related_context,
+    search_rag,
+)
 from .report import summarize_run
 from .schema import validate_json
 from .snippet import SNIPPET_FORMATS
@@ -816,7 +829,241 @@ def tool_workspace_status(_arguments: dict) -> dict:
     root, error = _require_workspace()
     if error or root is None:
         return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
-    return _json(workspace_status(root))
+    status = workspace_status(root)
+    try:
+        status["git"] = _git_status(root)
+    except Exception:
+        status["git"] = None
+    try:
+        status["memoryFacts"] = len(memory_list_facts(root))
+    except Exception:
+        status["memoryFacts"] = 0
+    return _json(status)
+
+
+def _git_run(root: str, *args: str) -> tuple[int, str, str]:
+    import subprocess
+
+    proc = subprocess.run(
+        ["git", "-C", root, *args],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return proc.returncode, proc.stdout or "", proc.stderr or ""
+
+
+def _git_status(root: str) -> dict[str, Any]:
+    code, out, err = _git_run(root, "status", "--porcelain=v1", "-b")
+    if code != 0:
+        raise RuntimeError(err.strip() or "git status failed")
+    lines = out.splitlines()
+    branch = "HEAD"
+    ahead = 0
+    behind = 0
+    dirty = False
+    conflicted: list[str] = []
+    files: list[dict[str, str]] = []
+    for index, line in enumerate(lines):
+        if index == 0 and line.startswith("## "):
+            rest = line[3:]
+            name, _, tracking = rest.partition("...")
+            branch = name.split()[0] if name.split() else "HEAD"
+            if "[" in tracking:
+                bracket = tracking[tracking.find("[") :]
+                if "ahead " in bracket:
+                    digits = "".join(
+                        ch for ch in bracket.split("ahead ", 1)[1] if ch.isdigit()
+                    )
+                    ahead = int(digits or "0")
+                if "behind " in bracket:
+                    digits = "".join(
+                        ch for ch in bracket.split("behind ", 1)[1] if ch.isdigit()
+                    )
+                    behind = int(digits or "0")
+            continue
+        if len(line) < 2:
+            continue
+        dirty = True
+        xy = line[:2]
+        path = line[3:].strip()
+        if not path:
+            continue
+        if "U" in xy or xy in {"AA", "DD"}:
+            conflicted.append(path)
+        files.append({"path": path, "xy": xy})
+    return {
+        "branch": branch,
+        "dirty": dirty,
+        "ahead": ahead,
+        "behind": behind,
+        "conflicted": conflicted,
+        "files": files,
+    }
+
+
+def tool_git_status(_arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    try:
+        return _json(_git_status(root))
+    except Exception as exc:
+        return _text(str(exc), error=True)
+
+
+def tool_git_add(arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    if arguments.get("confirm") is not True:
+        return _text("git add requires confirm=true", error=True)
+    paths = [str(p) for p in (arguments.get("paths") or []) if p]
+    if not paths:
+        return _text("paths is required", error=True)
+    for path in paths:
+        if ".." in path or "\0" in path:
+            return _text(f"Invalid path: {path}", error=True)
+    code, _out, err = _git_run(root, "add", "--", *paths)
+    if code != 0:
+        return _text(err.strip() or "git add failed", error=True)
+    return _text("ok")
+
+
+def tool_git_commit(arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    if arguments.get("confirm") is not True:
+        return _text("git commit requires confirm=true", error=True)
+    message = str(arguments.get("message") or "").strip()
+    if not message:
+        return _text("message is required", error=True)
+    code, out, err = _git_run(root, "commit", "-m", message)
+    if code != 0:
+        return _text(err.strip() or "git commit failed", error=True)
+    return _text(out.strip() or "ok")
+
+
+def tool_git_diff_stat(_arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    code, out, _err = _git_run(root, "diff", "--stat", "HEAD")
+    if code != 0:
+        _code2, out2, err2 = _git_run(root, "status", "--short")
+        if _code2 != 0:
+            return _text(err2.strip() or "git diff failed", error=True)
+        return _text(out2.strip())
+    return _text(out.strip())
+
+
+def tool_memory_list(arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    scope = str(arguments.get("scope") or "").strip() or None
+    if scope and scope not in {"workspace", "local"}:
+        return _text("scope must be workspace or local", error=True)
+    return _json(memory_list_facts(root, scope))
+
+
+def tool_memory_get(arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    key = str(arguments.get("key") or "")
+    if not key:
+        return _text("key is required", error=True)
+    scope = str(arguments.get("scope") or "").strip() or None
+    fact = memory_get_fact(root, key, scope)
+    if fact is None:
+        return _text("Fact not found", error=True)
+    return _json(fact)
+
+
+def tool_memory_search(arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    query = str(arguments.get("query") or "")
+    if not query:
+        return _text("query is required", error=True)
+    return _json(memory_search_facts(root, query))
+
+
+def tool_memory_upsert(arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    if arguments.get("confirm") is not True:
+        return _text("memory upsert requires confirm=true", error=True)
+    key = str(arguments.get("key") or "")
+    value = str(arguments.get("value") or "")
+    scope = str(arguments.get("scope") or "workspace")
+    tags = [str(t) for t in (arguments.get("tags") or []) if t]
+    note = arguments.get("note")
+    try:
+        fact = memory_upsert_fact(
+            root,
+            key=key,
+            value=value,
+            scope=scope,
+            source="mcp",
+            tags=tags,
+            note=str(note) if note else None,
+        )
+    except ValueError as exc:
+        return _text(str(exc), error=True)
+    return _json(fact)
+
+
+def tool_memory_delete(arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    if arguments.get("confirm") is not True:
+        return _text("memory delete requires confirm=true", error=True)
+    key = str(arguments.get("key") or "")
+    if not key:
+        return _text("key is required", error=True)
+    scope = str(arguments.get("scope") or "").strip() or None
+    if memory_delete_fact(root, key, scope):
+        return _text("ok")
+    return _text("Fact not found", error=True)
+
+
+def tool_rag_search(arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    query = str(arguments.get("query") or "")
+    if not query:
+        return _text("query is required", error=True)
+    limit = int(arguments.get("limit") or 8)
+    hits = search_rag(root, query, limit)
+    if arguments.get("markdown") is False:
+        return _json(hits)
+    return _text(format_rag_hits_markdown(hits, query))
+
+
+def tool_rag_reindex(_arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    count = rebuild_rag_index(root)
+    return _json({"documents": count})
+
+
+def tool_rag_related(arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    seed = str(arguments.get("seed") or "")
+    if not seed:
+        return _text("seed is required", error=True)
+    limit = int(arguments.get("limit") or 6)
+    return _json(rag_related_context(root, seed, limit))
 
 
 def tool_workspace_import_openapi(arguments: dict) -> dict:
@@ -1052,6 +1299,18 @@ TOOLS: dict[str, Callable[[dict], dict]] = {
     "pulse_mock_start": tool_mock_start,
     "pulse_mock_stop": tool_mock_stop,
     "pulse_agent": tool_agent,
+    "pulse_git_status": tool_git_status,
+    "pulse_git_add": tool_git_add,
+    "pulse_git_commit": tool_git_commit,
+    "pulse_git_diff_stat": tool_git_diff_stat,
+    "pulse_memory_list": tool_memory_list,
+    "pulse_memory_get": tool_memory_get,
+    "pulse_memory_search": tool_memory_search,
+    "pulse_memory_upsert": tool_memory_upsert,
+    "pulse_memory_delete": tool_memory_delete,
+    "pulse_rag_search": tool_rag_search,
+    "pulse_rag_reindex": tool_rag_reindex,
+    "pulse_rag_related": tool_rag_related,
     "pulse_help": tool_help,
 }
 
@@ -1510,12 +1769,15 @@ TOOL_DEFS = [
     },
     {
         "name": "pulse_mock_start",
-        "description": "Start the local mock on 127.0.0.1:4010 from PULSE_WORKSPACE examples or explicit routes.",
+        "description": "Start the local mock on 127.0.0.1:4010 from PULSE_WORKSPACE examples or explicit routes. Routes may include matchQuery, matchHeaders, matchBodyIncludes.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "delayMs": {"type": "integer", "default": 0},
-                "routes": {"type": "array", "description": "Optional MockRoute[]"},
+                "routes": {
+                    "type": "array",
+                    "description": "Optional MockRoute[] with optional matchQuery/matchHeaders/matchBodyIncludes",
+                },
                 "workspace": {"type": "string", "description": "Override PULSE_WORKSPACE"},
             },
         },
@@ -1539,6 +1801,130 @@ TOOL_DEFS = [
                 "body": {"type": "string", "description": "GraphQL introspection/response JSON for summarize"},
                 "workspace": {"type": "string", "description": "Override PULSE_WORKSPACE"},
                 "historyLimit": {"type": "integer", "default": 15},
+            },
+        },
+    },
+    {
+        "name": "pulse_git_status",
+        "description": "Git porcelain status for PULSE_WORKSPACE (branch, dirty, ahead/behind, files).",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "pulse_git_add",
+        "description": "Stage paths under PULSE_WORKSPACE (git add). Requires confirm=true.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["paths"],
+            "properties": {
+                "paths": {"type": "array", "items": {"type": "string"}},
+                "confirm": {"type": "boolean"},
+            },
+        },
+    },
+    {
+        "name": "pulse_git_commit",
+        "description": "Commit staged changes in PULSE_WORKSPACE. Requires confirm=true.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["message"],
+            "properties": {
+                "message": {"type": "string"},
+                "confirm": {"type": "boolean"},
+            },
+        },
+    },
+    {
+        "name": "pulse_git_diff_stat",
+        "description": "git diff --stat HEAD for PULSE_WORKSPACE (falls back to status --short).",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "pulse_memory_list",
+        "description": "List agent memory facts (workspace and/or local scope).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "scope": {"type": "string", "enum": ["workspace", "local"]},
+            },
+        },
+    },
+    {
+        "name": "pulse_memory_get",
+        "description": "Get one memory fact by key.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["key"],
+            "properties": {
+                "key": {"type": "string"},
+                "scope": {"type": "string", "enum": ["workspace", "local"]},
+            },
+        },
+    },
+    {
+        "name": "pulse_memory_search",
+        "description": "Search memory facts by substring across key/value/tags.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["query"],
+            "properties": {"query": {"type": "string"}},
+        },
+    },
+    {
+        "name": "pulse_memory_upsert",
+        "description": "Create or update a memory fact. Requires confirm=true.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["key", "value"],
+            "properties": {
+                "key": {"type": "string"},
+                "value": {"type": "string"},
+                "scope": {"type": "string", "enum": ["workspace", "local"], "default": "workspace"},
+                "tags": {"type": "array", "items": {"type": "string"}},
+                "note": {"type": "string"},
+                "confirm": {"type": "boolean"},
+            },
+        },
+    },
+    {
+        "name": "pulse_memory_delete",
+        "description": "Delete a memory fact by key. Requires confirm=true.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["key"],
+            "properties": {
+                "key": {"type": "string"},
+                "scope": {"type": "string", "enum": ["workspace", "local"]},
+                "confirm": {"type": "boolean"},
+            },
+        },
+    },
+    {
+        "name": "pulse_rag_search",
+        "description": "Hybrid search over the workspace RAG index (history, memory, requests).",
+        "inputSchema": {
+            "type": "object",
+            "required": ["query"],
+            "properties": {
+                "query": {"type": "string"},
+                "limit": {"type": "integer", "default": 8},
+                "markdown": {"type": "boolean", "default": True},
+            },
+        },
+    },
+    {
+        "name": "pulse_rag_reindex",
+        "description": "Rebuild the RAG index from history + memory.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "pulse_rag_related",
+        "description": "Find RAG docs related to a seed string (method URL, name, etc.).",
+        "inputSchema": {
+            "type": "object",
+            "required": ["seed"],
+            "properties": {
+                "seed": {"type": "string"},
+                "limit": {"type": "integer", "default": 6},
             },
         },
     },

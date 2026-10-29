@@ -617,8 +617,11 @@ export const FEATURE_DOC_GROUP_BLURBS: Record<FeatureDocGroup, string> = {
 const FUMADOCS_SCREENSHOTS: Partial<Record<string, { src: string; alt: string }>> = {
   overview: { src: "/screenshots/overview.png", alt: "Pulse Overview — saved requests and history" },
   requests: { src: "/screenshots/request.png", alt: "Pulse request workspace" },
+  environments: { src: "/screenshots/environments.png", alt: "Pulse environments" },
   auth: { src: "/screenshots/auth.png", alt: "Pulse sign-in" },
   themes: { src: "/screenshots/settings.png", alt: "Pulse settings and themes" },
+  agent: { src: "/screenshots/agent.png", alt: "Pulse agent" },
+  mcp: { src: "/screenshots/mcp.png", alt: "Pulse MCP guide" },
 };
 
 export function featureDocsMarkdown(): string {

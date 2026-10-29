@@ -4,6 +4,7 @@ pub mod agent_rag;
 pub mod collection_run;
 pub mod contract;
 pub mod curl;
+pub mod git_cmd;
 pub mod graphql;
 pub mod graphql_ws;
 pub mod inherit;
@@ -42,6 +43,7 @@ pub use collection_run::{
     run_collection, run_collection_with_progress, CollectionRunInput, CollectionRunResult, CollectionRunStep,
 };
 pub use curl::{curl_to_payload, payload_to_curl};
+pub use git_cmd::{git_add, git_commit, git_diff_stat, git_status, GitFileStatus, GitStatus};
 pub use graphql::{
     build_body as build_graphql_body, build_body_raw as build_graphql_body_raw,
     format_response as format_graphql_response, list_operations as list_graphql_operations,
