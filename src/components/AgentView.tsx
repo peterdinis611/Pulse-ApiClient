@@ -15,7 +15,7 @@ import {
 } from "@/lib/agent-actions";
 import { routeAgentInput } from "@/lib/agent-router";
 import type { AgentRagCitation } from "@/lib/agent-rag";
-import type { AgentCapability } from "@/lib/agent-settings";
+import { hydrateAgentApiKey, type AgentCapability } from "@/lib/agent-settings";
 import type { MessageKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { shallowEqualAppSlice, useAppActions, useAppSelector } from "@/machines";
@@ -29,7 +29,7 @@ type ChatMessage = {
   role: ChatRole;
   text: string;
   pendingConfirm?: AgentConfirmKind;
-  confirmPayload?: { key?: string; value?: string; scope?: "workspace" | "local" };
+  confirmPayload?: AgentActionResult["confirmPayload"];
   openRequest?: ApiRequest;
   citations?: AgentRagCitation[];
   busy?: boolean;
@@ -145,6 +145,10 @@ export function AgentView() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, working]);
 
+  useEffect(() => {
+    void hydrateAgentApiKey().then(() => undefined);
+  }, []);
+
   const buildContext = (onStreamDelta?: (chunk: string) => void): AgentActionContext => ({
     activeRequest: request,
     activeResponse: response,
@@ -157,6 +161,7 @@ export function AgentView() {
     setMainView,
     onStreamDelta,
     sendActiveRequest: sendCurrentRequest,
+    updateActiveRequest: updateRequest,
   });
 
   const applyResult = (result: AgentActionResult, replaceId?: string) => {

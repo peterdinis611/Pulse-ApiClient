@@ -153,11 +153,19 @@ export type ApiRequest = {
   responseSchema?: string;
 };
 
+export type ExampleMatchers = {
+  query?: Array<{ key: string; value: string }>;
+  headers?: Array<{ key: string; value: string }>;
+  bodyIncludes?: string;
+};
+
 export type RequestExample = {
   id: string;
   name: string;
   savedAt: string;
   response: HttpResponse;
+  /** Optional mock-server matchers (beta). */
+  matchers?: ExampleMatchers;
 };
 
 export type HttpResponse = {

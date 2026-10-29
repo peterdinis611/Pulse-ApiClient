@@ -298,12 +298,21 @@ pub fn git_workspace_append_agent_history(
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GitFileStatusDto {
+    pub path: String,
+    pub xy: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GitStatusDto {
     pub branch: String,
     pub dirty: bool,
     pub ahead: i32,
     pub behind: i32,
     pub conflicted: Vec<String>,
+    #[serde(default)]
+    pub files: Vec<GitFileStatusDto>,
 }
 
 #[tauri::command]
@@ -323,6 +332,7 @@ pub fn git_workspace_status(root: String) -> Result<GitStatusDto, String> {
     let mut behind = 0i32;
     let mut dirty = false;
     let mut conflicted = Vec::new();
+    let mut files = Vec::new();
     for (index, line) in text.lines().enumerate() {
         if index == 0 && line.starts_with("## ") {
             let rest = &line[3..];
@@ -364,13 +374,15 @@ pub fn git_workspace_status(root: String) -> Result<GitStatusDto, String> {
             continue;
         }
         dirty = true;
-        let xy = &line[..2];
-        if xy.contains('U') || xy == "AA" || xy == "DD" {
-            let path = line[3..].trim();
-            if !path.is_empty() {
-                conflicted.push(path.to_string());
-            }
+        let xy = line[..2].to_string();
+        let path = line[3..].trim().to_string();
+        if path.is_empty() {
+            continue;
         }
+        if xy.contains('U') || xy == "AA" || xy == "DD" {
+            conflicted.push(path.clone());
+        }
+        files.push(GitFileStatusDto { path, xy });
     }
     Ok(GitStatusDto {
         branch,
@@ -378,5 +390,81 @@ pub fn git_workspace_status(root: String) -> Result<GitStatusDto, String> {
         ahead,
         behind,
         conflicted,
+        files,
     })
+}
+
+#[tauri::command]
+pub fn git_workspace_add(root: String, paths: Vec<String>) -> Result<(), String> {
+    let dir = validate_root(&root)?;
+    if paths.is_empty() {
+        return Err("No paths to stage".into());
+    }
+    for path in &paths {
+        if path.contains("..") || path.contains('\0') {
+            return Err(format!("Invalid path: {path}"));
+        }
+    }
+    let mut args = vec![
+        "-C".to_string(),
+        dir.to_string_lossy().to_string(),
+        "add".to_string(),
+        "--".to_string(),
+    ];
+    args.extend(paths);
+    let output = std::process::Command::new("git")
+        .args(&args)
+        .output()
+        .map_err(|e| format!("git add failed: {e}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "git add failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn git_workspace_commit(root: String, message: String) -> Result<String, String> {
+    let dir = validate_root(&root)?;
+    let message = message.trim();
+    if message.is_empty() {
+        return Err("Commit message is required".into());
+    }
+    let output = std::process::Command::new("git")
+        .args([
+            "-C",
+            &dir.to_string_lossy(),
+            "commit",
+            "-m",
+            message,
+        ])
+        .output()
+        .map_err(|e| format!("git commit failed: {e}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "git commit failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+#[tauri::command]
+pub fn git_workspace_diff_stat(root: String) -> Result<String, String> {
+    let dir = validate_root(&root)?;
+    let output = std::process::Command::new("git")
+        .args(["-C", &dir.to_string_lossy(), "diff", "--stat", "HEAD"])
+        .output()
+        .map_err(|e| format!("git diff failed: {e}"))?;
+    if !output.status.success() {
+        // Unborn HEAD / empty repo — fall back to staged+unstaged summary.
+        let fallback = std::process::Command::new("git")
+            .args(["-C", &dir.to_string_lossy(), "status", "--short"])
+            .output()
+            .map_err(|e| format!("git status failed: {e}"))?;
+        return Ok(String::from_utf8_lossy(&fallback.stdout).trim().to_string());
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }

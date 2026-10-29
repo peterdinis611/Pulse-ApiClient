@@ -4,6 +4,11 @@ export type GitDiskConflict = {
   editor: string;
 };
 
+export type GitFileUi = {
+  path: string;
+  xy: string;
+};
+
 export type GitWorkspaceUiStatus = {
   root: string | null;
   branch: string | null;
@@ -14,6 +19,7 @@ export type GitWorkspaceUiStatus = {
   conflictedPaths: string[];
   conflict: GitDiskConflict | null;
   pendingCount: number;
+  files: GitFileUi[];
 };
 
 export const GIT_WORKSPACE_STATUS_EVENT = "pulse:git-workspace-status";
@@ -28,6 +34,7 @@ const EMPTY: GitWorkspaceUiStatus = {
   conflictedPaths: [],
   conflict: null,
   pendingCount: 0,
+  files: [],
 };
 
 let current: GitWorkspaceUiStatus = { ...EMPTY };

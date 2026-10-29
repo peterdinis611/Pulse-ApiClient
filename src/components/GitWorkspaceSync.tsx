@@ -50,6 +50,7 @@ export function GitWorkspaceSync() {
           ahead: status.ahead,
           behind: status.behind,
           conflictedPaths: status.conflicted,
+          files: status.files ?? [],
         });
         return branchChanged;
       } catch {
@@ -61,6 +62,7 @@ export function GitWorkspaceSync() {
             ahead: 0,
             behind: 0,
             conflictedPaths: [],
+            files: [],
           });
         }
         return false;

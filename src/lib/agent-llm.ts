@@ -54,6 +54,44 @@ export const AGENT_TOOLS: AgentToolDefinition[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "apply_draft_tests",
+    description: "Propose drafting and applying test assertions from the last response (requires confirm).",
+    parameters: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "write_request_fields",
+    description:
+      "Propose updating the active request name/url/method/body (requires confirm). Pass only fields to change.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        url: { type: "string" },
+        method: { type: "string" },
+        body: { type: "string" },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "start_mock_server",
+    description: "Propose starting the local mock server from collection examples (requires confirm).",
+    parameters: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "propose_commit_message",
+    description:
+      "Propose a git commit message for dirty workspace files (requires confirm to stage+commit).",
+    parameters: {
+      type: "object",
+      properties: {
+        message: { type: "string", description: "Suggested commit message" },
+      },
+      required: ["message"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 function openaiTools() {

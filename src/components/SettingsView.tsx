@@ -84,19 +84,23 @@ import {
 } from "@/lib/agent-memory";
 import { pruneAgentRag, reindexAgentRag } from "@/lib/agent-rag";
 import {
+  hydrateAgentApiKey,
   loadAgentSettings,
   saveAgentSettings,
+  saveAgentSettingsAsync,
   type AgentCloudJob,
   type AgentSettings,
 } from "@/lib/agent-settings";
+import { checkWorkspaceContract } from "@/lib/contract";
 import { getGitWorkspaceRoot } from "@/lib/git-workspace";
 import {
-  loadReleaseChannel,
+  isBetaFeatureEnabled,
   saveReleaseChannel,
   type ReleaseChannel,
 } from "@/lib/release-channel";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/useLocale";
+import { useReleaseChannel } from "@/hooks/useReleaseChannel";
 import type { MessageKey } from "@/lib/i18n";
 
 function SettingsSection({
@@ -316,8 +320,16 @@ export function SettingsView() {
   });
   const [editingCookieKey, setEditingCookieKey] = useState<string | null>(null);
   const [agentSettings, setAgentSettings] = useState<AgentSettings>(() => loadAgentSettings());
-  const [releaseChannel, setReleaseChannel] = useState<ReleaseChannel>(() => loadReleaseChannel());
+  const releaseChannel = useReleaseChannel();
+  const [contractBusy, setContractBusy] = useState(false);
+  const [contractErrors, setContractErrors] = useState<string[] | null>(null);
   const [memoryCount, setMemoryCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    void hydrateAgentApiKey().then((key) => {
+      setAgentSettings((prev) => ({ ...prev, apiKey: key }));
+    });
+  }, []);
   const [memoryBusy, setMemoryBusy] = useState(false);
   const [ragCount, setRagCount] = useState<number | null>(null);
   const [ragBusy, setRagBusy] = useState(false);
@@ -693,9 +705,7 @@ export function SettingsView() {
             <Select
               value={releaseChannel}
               onValueChange={(value) => {
-                const next = value as ReleaseChannel;
-                setReleaseChannel(next);
-                saveReleaseChannel(next);
+                saveReleaseChannel(value as ReleaseChannel);
               }}
             >
               <SelectTrigger className="w-[180px]">
@@ -707,6 +717,12 @@ export function SettingsView() {
               </SelectContent>
             </Select>
           </SettingRow>
+          {releaseChannel === "beta" && (
+            <p className="text-xs text-muted-foreground">
+              Beta unlocks: git commit from StatusBar, workspace contract check, mock matchers, and
+              extra agent write tools.
+            </p>
+          )}
           <CustomThemeSettings />
         </SettingsSection>
 
@@ -1505,15 +1521,61 @@ export function SettingsView() {
               </label>
             ))}
           </div>
+          <p className="text-xs text-muted-foreground">
+            API key is stored in the OS keychain on desktop (not in localStorage).
+          </p>
           <Button
             type="button"
             onClick={() => {
-              saveAgentSettings(agentSettings);
-              toast.success(t("agent.settings.saved"));
+              void saveAgentSettingsAsync(agentSettings).then(() => {
+                toast.success(t("agent.settings.saved"));
+              });
             }}
           >
             {t("agent.settings.save")}
           </Button>
+          {isBetaFeatureEnabled("contract_panel", releaseChannel) && (
+            <div className="space-y-2 rounded-md border border-border p-3">
+              <p className="text-sm font-medium">Workspace contract</p>
+              <p className="text-xs text-muted-foreground">
+                Validate saved examples against responseSchema (and optional *.previous.json) in the
+                Git workspace.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={contractBusy}
+                onClick={() => {
+                  const root = getGitWorkspaceRoot() || collectionsFolderPath.trim();
+                  if (!root) {
+                    toast.error("Attach a Git workspace first");
+                    return;
+                  }
+                  setContractBusy(true);
+                  void checkWorkspaceContract(root)
+                    .then((report) => {
+                      setContractErrors(report.errors);
+                      if (report.ok) toast.success("Contract OK", "No schema violations");
+                      else toast.error("Contract issues", `${report.errors.length} error(s)`);
+                    })
+                    .catch((error) =>
+                      toast.error(error instanceof Error ? error.message : String(error)),
+                    )
+                    .finally(() => setContractBusy(false));
+                }}
+              >
+                {contractBusy ? "Checking…" : "Check workspace"}
+              </Button>
+              {contractErrors && contractErrors.length > 0 && (
+                <ul className="max-h-40 space-y-1 overflow-auto font-mono text-[11px] text-destructive">
+                  {contractErrors.map((error) => (
+                    <li key={error}>{error}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </SettingsSection>
 
         <SettingsSection

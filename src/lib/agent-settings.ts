@@ -1,4 +1,11 @@
 import { readStorageItem, writeStorageItem } from "@/lib/app-config";
+import { canUseTauriIpc } from "@/lib/tauri-runtime";
+import {
+  AGENT_LLM_SECRET_KEY,
+  deleteSecret,
+  getSecret,
+  setSecret,
+} from "@/lib/secrets-ipc";
 
 const KEY = "agent-settings-v1";
 const LEGACY_LLM_KEY = "agent-llm-v1";
@@ -29,6 +36,7 @@ export type AgentSettings = {
   enabled: boolean;
   capabilities: Record<AgentCapability, boolean>;
   provider: AgentLlmProvider;
+  /** In-memory / session value — never written to localStorage when keychain is available. */
   apiKey: string;
   /** When true, never call cloud APIs even if a key is set. */
   offlineOnly: boolean;
@@ -58,6 +66,10 @@ const DEFAULTS: AgentSettings = {
   offlineOnly: false,
   cloudJobs: { ...DEFAULT_CLOUD_JOBS },
 };
+
+/** Session cache for the LLM key (keychain or web fallback). */
+let apiKeyCache = "";
+let hydrated = false;
 
 function normalizeCapabilities(
   raw: Partial<Record<AgentCapability, boolean>> | undefined,
@@ -102,6 +114,19 @@ function parseSettings(raw: string | null): AgentSettings | null {
   }
 }
 
+function persistMeta(settings: AgentSettings): void {
+  const forDisk = {
+    enabled: settings.enabled,
+    capabilities: settings.capabilities,
+    provider: settings.provider,
+    // Never persist the real key when desktop keychain is available.
+    apiKey: canUseTauriIpc() ? "" : settings.apiKey,
+    offlineOnly: settings.offlineOnly,
+    cloudJobs: settings.cloudJobs,
+  };
+  writeStorageItem(KEY, JSON.stringify(forDisk));
+}
+
 export function defaultAgentSettings(): AgentSettings {
   return {
     enabled: DEFAULTS.enabled,
@@ -117,7 +142,8 @@ export function loadAgentSettings(): AgentSettings {
   try {
     const rawCurrent = readStorageItem(KEY);
     if (rawCurrent != null) {
-      return parseSettings(rawCurrent) ?? defaultAgentSettings();
+      const parsed = parseSettings(rawCurrent) ?? defaultAgentSettings();
+      return { ...parsed, apiKey: apiKeyCache || parsed.apiKey };
     }
 
     const legacyRaw = readStorageItem(LEGACY_LLM_KEY);
@@ -128,13 +154,45 @@ export function loadAgentSettings(): AgentSettings {
         provider: legacy?.provider ?? "none",
         apiKey: legacy?.apiKey ?? "",
       };
-      writeStorageItem(KEY, JSON.stringify(migrated));
+      apiKeyCache = migrated.apiKey;
+      persistMeta(migrated);
       return migrated;
     }
-    return defaultAgentSettings();
+    return { ...defaultAgentSettings(), apiKey: apiKeyCache };
   } catch {
-    return defaultAgentSettings();
+    return { ...defaultAgentSettings(), apiKey: apiKeyCache };
   }
+}
+
+/** Load LLM API key from OS keychain into the session cache (desktop). */
+export async function hydrateAgentApiKey(): Promise<string> {
+  if (hydrated && apiKeyCache) return apiKeyCache;
+  if (canUseTauriIpc()) {
+    try {
+      const fromKeychain = await getSecret(AGENT_LLM_SECRET_KEY);
+      if (fromKeychain?.trim()) {
+        apiKeyCache = fromKeychain;
+        hydrated = true;
+        return apiKeyCache;
+      }
+      // Migrate plaintext leftover from older builds into keychain once.
+      const disk = parseSettings(readStorageItem(KEY));
+      if (disk?.apiKey?.trim()) {
+        await setSecret(AGENT_LLM_SECRET_KEY, disk.apiKey.trim());
+        apiKeyCache = disk.apiKey.trim();
+        persistMeta({ ...disk, apiKey: "" });
+        hydrated = true;
+        return apiKeyCache;
+      }
+    } catch {
+      // keep cache
+    }
+  } else {
+    const disk = parseSettings(readStorageItem(KEY));
+    apiKeyCache = disk?.apiKey ?? "";
+  }
+  hydrated = true;
+  return apiKeyCache;
 }
 
 export function saveAgentSettings(patch: Partial<AgentSettings>): AgentSettings {
@@ -153,9 +211,42 @@ export function saveAgentSettings(patch: Partial<AgentSettings>): AgentSettings 
       typeof patch.offlineOnly === "boolean" ? patch.offlineOnly : current.offlineOnly,
     cloudJobs: patch.cloudJobs ? normalizeCloudJobs(patch.cloudJobs) : current.cloudJobs,
   };
-  writeStorageItem(KEY, JSON.stringify(next));
+  apiKeyCache = next.apiKey;
+  persistMeta(next);
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event(AGENT_SETTINGS_EVENT));
+  }
+  if (canUseTauriIpc() && typeof patch.apiKey === "string") {
+    void (async () => {
+      try {
+        if (patch.apiKey!.trim()) {
+          await setSecret(AGENT_LLM_SECRET_KEY, patch.apiKey!.trim());
+        } else {
+          await deleteSecret(AGENT_LLM_SECRET_KEY);
+        }
+      } catch {
+        // Settings meta already saved; keychain failure is non-fatal in UI.
+      }
+    })();
+  }
+  return next;
+}
+
+/** Awaitable save that waits for keychain write on desktop. */
+export async function saveAgentSettingsAsync(
+  patch: Partial<AgentSettings>,
+): Promise<AgentSettings> {
+  const next = saveAgentSettings(patch);
+  if (canUseTauriIpc() && typeof patch.apiKey === "string") {
+    try {
+      if (patch.apiKey.trim()) {
+        await setSecret(AGENT_LLM_SECRET_KEY, patch.apiKey.trim());
+      } else {
+        await deleteSecret(AGENT_LLM_SECRET_KEY);
+      }
+    } catch {
+      // ignore
+    }
   }
   return next;
 }

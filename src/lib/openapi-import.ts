@@ -1,8 +1,15 @@
 import { createCollectionGroup } from "./collections";
-import { createRequest, createSavedRequest } from "./helpers";
-import type { ApiRequest, CollectionGroup, HttpMethod, SavedRequest } from "@/types";
+import { createId, createRequest, createSavedRequest } from "./helpers";
+import { snapshotResponseExample } from "./request-examples";
+import type { ApiRequest, CollectionGroup, HttpMethod, HttpResponse, SavedRequest } from "@/types";
 
 const HTTP_METHODS = new Set(["get", "post", "put", "patch", "delete", "head", "options", "query"]);
+
+type OpenApiMedia = {
+  example?: unknown;
+  examples?: Record<string, { value?: unknown; summary?: string }>;
+  schema?: { example?: unknown };
+};
 
 type OpenApiSpec = {
   openapi?: string;
@@ -22,11 +29,11 @@ type OpenApiOperation = {
     schema?: { default?: unknown };
   }>;
   requestBody?: {
-    content?: Record<string, { example?: unknown; schema?: { example?: unknown } }>;
+    content?: Record<string, OpenApiMedia>;
   };
   responses?: Record<
     string,
-    { content?: Record<string, { schema?: unknown }> }
+    { description?: string; content?: Record<string, OpenApiMedia> }
   >;
 };
 
@@ -80,6 +87,64 @@ function exampleBody(operation: OpenApiOperation): { bodyKind: ApiRequest["bodyK
   };
 }
 
+function stringifyExample(value: unknown): string {
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function responseExamplesFromOperation(operation: OpenApiOperation): ReturnType<
+  typeof snapshotResponseExample
+>[] {
+  const responses = operation.responses ?? {};
+  const out: ReturnType<typeof snapshotResponseExample>[] = [];
+  const preferredCodes = ["200", "201", "204"];
+  const codes = [
+    ...preferredCodes.filter((code) => responses[code]),
+    ...Object.keys(responses).filter((code) => !preferredCodes.includes(code)),
+  ];
+
+  for (const code of codes) {
+    const response = responses[code];
+    if (!response?.content) continue;
+    const status = Number.parseInt(code, 10);
+    if (!Number.isFinite(status)) continue;
+    const json = response.content["application/json"] ?? Object.values(response.content)[0];
+    if (!json) continue;
+
+    const named = json.examples
+      ? Object.entries(json.examples).map(([key, item]) => ({
+          name: item.summary?.trim() || key,
+          value: item.value,
+        }))
+      : [];
+    const singles =
+      json.example != null || json.schema?.example != null
+        ? [{ name: `${status} ${response.description ?? ""}`.trim() || `${status}`, value: json.example ?? json.schema?.example }]
+        : [];
+
+    for (const item of [...named, ...singles]) {
+      if (item.value == null) continue;
+      const body = stringifyExample(item.value);
+      const httpResponse: HttpResponse = {
+        status,
+        statusText: response.description?.trim() || "",
+        headers: [{ key: "Content-Type", value: "application/json" }],
+        body,
+        elapsedMs: 0,
+        sizeBytes: new TextEncoder().encode(body).length,
+        requestId: createId("openapi"),
+      };
+      out.push(snapshotResponseExample(httpResponse, item.name));
+      if (out.length >= 5) return out;
+    }
+  }
+  return out;
+}
+
 export function importOpenApiCollection(raw: string): {
   collection: CollectionGroup;
   requests: SavedRequest[];
@@ -102,6 +167,7 @@ export function importOpenApiCollection(raw: string): {
       const op = operation as OpenApiOperation;
       const name = op.summary?.trim() || op.operationId?.trim() || `${method.toUpperCase()} ${path}`;
       const { bodyKind, body } = exampleBody(op);
+      const examples = responseExamplesFromOperation(op);
       const request = createRequest({
         name,
         method: method.toUpperCase() as HttpMethod,
@@ -109,6 +175,7 @@ export function importOpenApiCollection(raw: string): {
         bodyKind,
         body: body || '{\n  \n}',
         responseSchema: responseSchema(op),
+        examples,
       });
 
       requests.push(

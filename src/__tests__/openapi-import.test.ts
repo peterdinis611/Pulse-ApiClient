@@ -17,6 +17,16 @@ const sampleSpec = JSON.stringify({
             },
           },
         },
+        responses: {
+          "201": {
+            description: "Created",
+            content: {
+              "application/json": {
+                example: { id: 1, name: "Fluffy" },
+              },
+            },
+          },
+        },
       },
     },
   },
@@ -33,6 +43,14 @@ describe("openapi-import", () => {
     expect(imported.collection.name).toBe("Petstore");
     expect(imported.requests).toHaveLength(2);
     expect(imported.requests[0]?.request.url).toContain("https://api.example.com/pets");
+  });
+
+  it("fills response examples and schema from OpenAPI responses", () => {
+    const imported = importOpenApiCollection(sampleSpec);
+    const create = imported.requests.find((item) => item.request.method === "POST");
+    expect(create?.request.examples.length).toBeGreaterThan(0);
+    expect(create?.request.examples[0]?.response.body).toContain("Fluffy");
+    expect(create?.request.examples[0]?.response.status).toBe(201);
   });
 
   it("lists operations for the live explorer without importing", () => {

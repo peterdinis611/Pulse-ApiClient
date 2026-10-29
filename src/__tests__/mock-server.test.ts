@@ -52,6 +52,9 @@ describe("mock routes", () => {
         contentType: "",
         exampleName: "example",
         headers: [],
+        matchQuery: [],
+        matchHeaders: [],
+        matchBodyIncludes: "",
       },
     ]);
   });
@@ -105,6 +108,9 @@ describe("mock routes", () => {
         contentType: "application/json",
         exampleName: "ok",
         headers: [{ key: "Cache-Control", value: "no-store" }],
+        matchQuery: [],
+        matchHeaders: [],
+        matchBodyIncludes: "",
       },
       {
         method: "GET",
@@ -114,6 +120,9 @@ describe("mock routes", () => {
         contentType: "application/json",
         exampleName: "missing",
         headers: [],
+        matchQuery: [],
+        matchHeaders: [],
+        matchBodyIncludes: "",
       },
     ]);
   });

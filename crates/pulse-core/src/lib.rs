@@ -55,7 +55,7 @@ pub use test_runner::{
     read_json_path, run_http_tests, run_pre_request_script, run_pre_request_script_with_env, EnvMutation,
     PreRequestResult, TestCaseResult, TestRunResult,
 };
-pub use contract::{breaking_diff, check_workspace, compare_to_schema};
+pub use contract::{breaking_diff, check_workspace, compare_to_schema, ContractReport};
 pub use json_diff::{compare as diff_compare, compare_raw as diff_compare_raw, pretty_any, unified_lines};
 pub use prepare::{interpolate_request, to_http_payload};
 pub use sse::{
