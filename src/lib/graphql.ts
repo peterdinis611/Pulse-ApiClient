@@ -1,3 +1,5 @@
+import { invoke } from "@tauri-apps/api/core";
+import { canUseTauriIpc } from "./tauri-runtime";
 import type { ApiRequest } from "@/types";
 
 export type GraphqlPayload = {
@@ -16,108 +18,6 @@ export type GraphqlResponse = {
   data?: unknown;
   errors?: GraphqlError[];
 };
-
-export function defaultGraphqlQuery(): string {
-  return `query Example {\n  __typename\n}`;
-}
-
-export function defaultGraphqlVariables(): string {
-  return "{}";
-}
-
-export function buildGraphqlBody(
-  request: Pick<ApiRequest, "graphqlQuery" | "graphqlVariables" | "graphqlOperationName">,
-): string {
-  const query = request.graphqlQuery.trim();
-  const variablesRaw = request.graphqlVariables.trim() || "{}";
-  const variables = JSON.parse(variablesRaw) as unknown;
-
-  if (variables !== null && typeof variables !== "object") {
-    throw new Error("GraphQL variables must be a JSON object.");
-  }
-
-  const payload: GraphqlPayload = {
-    query,
-    variables: (variables ?? {}) as Record<string, unknown>,
-  };
-
-  const operationName = request.graphqlOperationName.trim();
-  if (operationName) {
-    payload.operationName = operationName;
-  }
-
-  return JSON.stringify(payload);
-}
-
-export function validateGraphqlRequest(
-  request: Pick<ApiRequest, "graphqlQuery" | "graphqlVariables" | "graphqlOperationName">,
-): string | null {
-  if (!request.graphqlQuery.trim()) {
-    return "GraphQL query is required.";
-  }
-
-  try {
-    buildGraphqlBody(request);
-    return null;
-  } catch (error) {
-    return error instanceof Error ? error.message : "Invalid GraphQL request.";
-  }
-}
-
-export function parseGraphqlResponse(body: string): GraphqlResponse | null {
-  try {
-    const parsed = JSON.parse(body) as GraphqlResponse;
-    if (!parsed || typeof parsed !== "object") return null;
-    if (!("data" in parsed) && !("errors" in parsed)) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-export function formatGraphqlResponse(body: string): string {
-  const parsed = parseGraphqlResponse(body);
-  if (!parsed) return body;
-
-  const sections: string[] = [];
-
-  if (parsed.errors?.length) {
-    sections.push(
-      "Errors:\n" +
-        parsed.errors
-          .map((error) => {
-            const path = error.path?.length ? ` (path: ${error.path.join(".")})` : "";
-            return `- ${error.message}${path}`;
-          })
-          .join("\n"),
-    );
-  }
-
-  if (parsed.data !== undefined) {
-    sections.push("Data:\n" + JSON.stringify(parsed.data, null, 2));
-  }
-
-  return sections.join("\n\n") || body;
-}
-
-export const GRAPHQL_INTROSPECTION_QUERY = `query PulseIntrospection {
-  __schema {
-    queryType { name }
-    mutationType { name }
-    subscriptionType { name }
-    types {
-      kind
-      name
-      description
-      fields {
-        name
-        description
-        args { name }
-        type { kind name ofType { kind name ofType { kind name ofType { kind name } } } }
-      }
-    }
-  }
-}`;
 
 export type GraphqlTypeRef = {
   kind?: string;
@@ -146,6 +46,121 @@ export type GraphqlSchema = {
   types: GraphqlType[];
 };
 
+export type GraphqlSchemaSummary = {
+  queryType?: string | null;
+  mutationType?: string | null;
+  subscriptionType?: string | null;
+  types: Array<{ kind?: string | null; name: string; fields: string[] }>;
+};
+
+export type GraphqlDocumentOperation = {
+  kind: string;
+  name?: string | null;
+};
+
+export type GraphqlOperationKind = "query" | "mutation" | "subscription";
+
+function requireTauri(): void {
+  if (!canUseTauriIpc()) {
+    throw new Error("GraphQL helpers require the desktop app");
+  }
+}
+
+export function defaultGraphqlQuery(): string {
+  return `query Example {\n  __typename\n}`;
+}
+
+export function defaultGraphqlVariables(): string {
+  return "{}";
+}
+
+/** Compact introspection query constant (mirrors pulse-core). Prefer `graphqlIntrospectionQuery()`. */
+export const GRAPHQL_INTROSPECTION_QUERY = `query PulseIntrospection {
+  __schema {
+    queryType { name }
+    mutationType { name }
+    subscriptionType { name }
+    types {
+      kind
+      name
+      description
+      fields {
+        name
+        description
+        args { name }
+        type { kind name ofType { kind name ofType { kind name ofType { kind name } } } }
+      }
+    }
+  }
+}`;
+
+export async function graphqlIntrospectionQuery(): Promise<string> {
+  requireTauri();
+  return invoke<string>("graphql_introspection_query");
+}
+
+export async function buildGraphqlBody(
+  request: Pick<ApiRequest, "graphqlQuery" | "graphqlVariables" | "graphqlOperationName">,
+): Promise<string> {
+  requireTauri();
+  return invoke<string>("graphql_build_body", {
+    query: request.graphqlQuery,
+    variablesJson: request.graphqlVariables,
+    operationName: request.graphqlOperationName || null,
+  });
+}
+
+export async function validateGraphqlRequest(
+  request: Pick<ApiRequest, "graphqlQuery" | "graphqlVariables" | "graphqlOperationName">,
+): Promise<string | null> {
+  requireTauri();
+  return invoke<string | null>("graphql_validate", {
+    query: request.graphqlQuery,
+    variablesJson: request.graphqlVariables,
+    operationName: request.graphqlOperationName || null,
+  });
+}
+
+/** Lightweight sync gate for send-button enablement (full validate is IPC). */
+export function canSendGraphqlRequest(
+  request: Pick<ApiRequest, "graphqlQuery" | "graphqlVariables">,
+): boolean {
+  if (!request.graphqlQuery.trim()) return false;
+  const raw = request.graphqlVariables.trim() || "{}";
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed === null || typeof parsed === "object";
+  } catch {
+    return false;
+  }
+}
+
+export function parseGraphqlResponse(body: string): GraphqlResponse | null {
+  try {
+    const parsed = JSON.parse(body) as GraphqlResponse;
+    if (!parsed || typeof parsed !== "object") return null;
+    if (!("data" in parsed) && !("errors" in parsed)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export async function formatGraphqlResponse(body: string): Promise<string> {
+  requireTauri();
+  return invoke<string>("graphql_format_response", { body });
+}
+
+export async function summarizeGraphqlSchema(body: string): Promise<GraphqlSchemaSummary | null> {
+  requireTauri();
+  return invoke<GraphqlSchemaSummary | null>("graphql_summarize_schema", { body });
+}
+
+export async function listGraphqlOperations(document: string): Promise<GraphqlDocumentOperation[]> {
+  requireTauri();
+  return invoke<GraphqlDocumentOperation[]>("graphql_list_operations", { document });
+}
+
 export function parseGraphqlSchema(body: string): GraphqlSchema | null {
   const parsed = parseGraphqlResponse(body);
   const schema = (parsed?.data as { __schema?: GraphqlSchema } | undefined)?.__schema;
@@ -166,8 +181,6 @@ export function visibleGraphqlTypes(schema: GraphqlSchema): GraphqlType[] {
     .sort((left, right) => (left.name ?? "").localeCompare(right.name ?? ""));
 }
 
-export type GraphqlOperationKind = "query" | "mutation" | "subscription";
-
 export function graphqlOperationKindForType(
   schema: GraphqlSchema,
   typeName: string | null | undefined,
@@ -185,5 +198,3 @@ export function buildGraphqlFieldStub(
 ): string {
   return `${operation} ${operationName} {\n  ${fieldName}\n}`;
 }
-
-

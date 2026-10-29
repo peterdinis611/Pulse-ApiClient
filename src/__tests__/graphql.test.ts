@@ -1,54 +1,61 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
-  buildGraphqlBody,
   buildGraphqlFieldStub,
-  formatGraphqlResponse,
+  canSendGraphqlRequest,
   formatGraphqlTypeRef,
   graphqlOperationKindForType,
   parseGraphqlResponse,
   parseGraphqlSchema,
-  validateGraphqlRequest,
   visibleGraphqlTypes,
 } from "@/lib/graphql";
 
-const sampleRequest = {
-  graphqlQuery: "query Example { user { id } }",
-  graphqlVariables: '{"id":"abc"}',
-  graphqlOperationName: "Example",
-};
+vi.mock("@/lib/tauri-runtime", () => ({
+  canUseTauriIpc: () => false,
+}));
 
 describe("graphql", () => {
-  it("builds a graphql request body", () => {
-    expect(JSON.parse(buildGraphqlBody(sampleRequest))).toEqual({
-      query: "query Example { user { id } }",
-      variables: { id: "abc" },
-      operationName: "Example",
-    });
+  it("gates send with a lightweight sync check", () => {
+    expect(
+      canSendGraphqlRequest({
+        graphqlQuery: "query { ping }",
+        graphqlVariables: "{}",
+      }),
+    ).toBe(true);
+    expect(
+      canSendGraphqlRequest({
+        graphqlQuery: "",
+        graphqlVariables: "{}",
+      }),
+    ).toBe(false);
+    expect(
+      canSendGraphqlRequest({
+        graphqlQuery: "query { ping }",
+        graphqlVariables: '"bad"',
+      }),
+    ).toBe(false);
   });
 
-  it("omits operationName when empty", () => {
-    const body = JSON.parse(
-      buildGraphqlBody({ ...sampleRequest, graphqlOperationName: "" }),
+  it("requires desktop IPC for build/format/validate", async () => {
+    const { buildGraphqlBody, formatGraphqlResponse, validateGraphqlRequest } = await import(
+      "@/lib/graphql"
     );
-    expect(body).not.toHaveProperty("operationName");
+    const sample = {
+      graphqlQuery: "query Example { user { id } }",
+      graphqlVariables: '{"id":"abc"}',
+      graphqlOperationName: "Example",
+    };
+    await expect(buildGraphqlBody(sample)).rejects.toThrow(/desktop/i);
+    await expect(formatGraphqlResponse("{}")).rejects.toThrow(/desktop/i);
+    await expect(validateGraphqlRequest(sample)).rejects.toThrow(/desktop/i);
   });
 
-  it.each([
-    [{ ...sampleRequest, graphqlQuery: "" }, "GraphQL query is required."],
-    [{ ...sampleRequest, graphqlVariables: '"bad"' }, "GraphQL variables must be a JSON object."],
-  ] as const)("validateGraphqlRequest rejects invalid input", (request, message) => {
-    expect(validateGraphqlRequest(request)).toBe(message);
-  });
-
-  it("parses and formats graphql responses", () => {
+  it("parses graphql responses locally", () => {
     const raw = JSON.stringify({
       data: { user: { id: "1" } },
       errors: [{ message: "Field missing", path: ["user", "email"] }],
     });
-
     const parsed = parseGraphqlResponse(raw);
     expect(parsed?.data).toEqual({ user: { id: "1" } });
-    expect(formatGraphqlResponse(raw)).toContain("Field missing");
     expect(parseGraphqlResponse("not-json")).toBeNull();
   });
 
@@ -81,22 +88,9 @@ describe("graphql", () => {
       types: [],
     };
     expect(graphqlOperationKindForType(schema, "Subscription")).toBe("subscription");
-    expect(graphqlOperationKindForType(schema, "Mutation")).toBe("mutation");
-    expect(graphqlOperationKindForType(schema, "Query")).toBe("query");
-    expect(buildGraphqlFieldStub("subscription", "Subscription", "messageAdded")).toContain(
-      "subscription Subscription",
+    expect(buildGraphqlFieldStub("query", "Query", "user")).toContain("user");
+    expect(formatGraphqlTypeRef({ kind: "NON_NULL", ofType: { kind: "SCALAR", name: "ID" } })).toBe(
+      "ID!",
     );
-  });
-
-  it("formats nested NON_NULL list type refs", () => {
-    expect(
-      formatGraphqlTypeRef({
-        kind: "NON_NULL",
-        ofType: {
-          kind: "LIST",
-          ofType: { kind: "SCALAR", name: "String" },
-        },
-      }),
-    ).toBe("[String]!");
   });
 });

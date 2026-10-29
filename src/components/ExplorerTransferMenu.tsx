@@ -23,7 +23,7 @@ type ExplorerTransferMenuProps = {
   collectionCount: number;
   requestCount: number;
   exportCollections: () => string;
-  importCollections: (raw: string) => void;
+  importCollections: (raw: string) => void | Promise<void>;
   onOpenApiExplorer?: () => void;
   className?: string;
 };
@@ -65,7 +65,7 @@ export function ExplorerTransferMenu({
         return;
       }
 
-      importCollections(raw);
+      await importCollections(raw);
 
       const detailParts = [inspection.label];
       if (inspection.collectionCount > 0) {

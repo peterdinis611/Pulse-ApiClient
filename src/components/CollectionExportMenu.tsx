@@ -15,7 +15,10 @@ export type CollectionExportFormat = "pulse" | "postman" | "openapi" | "bruno" |
 type CollectionExportMenuProps = {
   collectionId: string;
   collectionName: string;
-  exportCollection: (collectionId: string, format: CollectionExportFormat) => string | null;
+  exportCollection: (
+    collectionId: string,
+    format: CollectionExportFormat,
+  ) => string | null | Promise<string | null>;
   variant?: "icon" | "menu";
   className?: string;
 };
@@ -51,14 +54,23 @@ export function CollectionExportMenu({
   className,
 }: CollectionExportMenuProps) {
   const handleExport = (format: CollectionExportFormat) => {
-    const content = exportCollection(collectionId, format);
-    if (!content) {
-      toast.error("Export failed", "Collection not found");
-      return;
-    }
+    void (async () => {
+      try {
+        const content = await exportCollection(collectionId, format);
+        if (!content) {
+          toast.error("Export failed", "Collection not found");
+          return;
+        }
 
-    downloadJson(content, collectionExportFilename(collectionName, exportSuffix(format)));
-    toast.success("Collection exported", `${collectionName} (${EXPORT_LABELS[format]})`);
+        downloadJson(content, collectionExportFilename(collectionName, exportSuffix(format)));
+        toast.success("Collection exported", `${collectionName} (${EXPORT_LABELS[format]})`);
+      } catch (error) {
+        toast.error(
+          "Export failed",
+          error instanceof Error ? error.message : "Could not export collection.",
+        );
+      }
+    })();
   };
 
   return (

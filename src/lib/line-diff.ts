@@ -1,38 +1,29 @@
+import { invoke } from "@tauri-apps/api/core";
+import { canUseTauriIpc } from "./tauri-runtime";
+
 export type LineDiff = {
   kind: "same" | "add" | "del";
   text: string;
 };
 
-export function unifiedLineDiff(left: string, right: string): LineDiff[] {
-  const a = left.replace(/\r\n/g, "\n").split("\n");
-  const b = right.replace(/\r\n/g, "\n").split("\n");
-  const rows: LineDiff[] = [];
-  let i = 0;
-  let j = 0;
-  while (i < a.length || j < b.length) {
-    if (i < a.length && j < b.length && a[i] === b[j]) {
-      rows.push({ kind: "same", text: a[i]! });
-      i += 1;
-      j += 1;
-      continue;
-    }
-    if (j < b.length && (i >= a.length || !a.slice(i + 1).includes(b[j]!))) {
-      rows.push({ kind: "add", text: b[j]! });
-      j += 1;
-      continue;
-    }
-    if (i < a.length) {
-      rows.push({ kind: "del", text: a[i]! });
-      i += 1;
-    }
+function requireTauri(): void {
+  if (!canUseTauriIpc()) {
+    throw new Error("Line diff requires the desktop app");
   }
-  return rows;
 }
 
-export function prettyMaybeJson(raw: string): string {
-  try {
-    return JSON.stringify(JSON.parse(raw), null, 2);
-  } catch {
-    return raw;
-  }
+/** Unified line diff via pulse-core (`unified_lines`). */
+export async function unifiedLineDiff(left: string, right: string): Promise<LineDiff[]> {
+  requireTauri();
+  const rows = await invoke<Array<{ kind: string; text: string }>>("unified_lines", { left, right });
+  return rows.map((row) => ({
+    kind: (row.kind === "add" || row.kind === "del" ? row.kind : "same") as LineDiff["kind"],
+    text: row.text,
+  }));
+}
+
+/** Pretty-print JSON when possible via pulse-core (`pretty_any`). */
+export async function prettyMaybeJson(raw: string): Promise<string> {
+  requireTauri();
+  return invoke<string>("pretty_any", { raw });
 }

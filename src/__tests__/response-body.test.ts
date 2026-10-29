@@ -32,32 +32,32 @@ describe("response-body", () => {
     expect(looksLikeJson(value)).toBe(expected);
   });
 
-  it("formats raw body unchanged", () => {
-    const result = formatResponseBody("<html></html>", "text/html", "raw");
+  it("formats raw body unchanged", async () => {
+    const result = await formatResponseBody("<html></html>", "text/html", "raw");
     expect(result.text).toBe("<html></html>");
     expect(result.jsonValid).toBeNull();
   });
 
-  it("formats preview mode as passthrough", () => {
-    const result = formatResponseBody("iVBORw0KGgo=", "image/png", "preview");
+  it("formats preview mode as passthrough", async () => {
+    const result = await formatResponseBody("iVBORw0KGgo=", "image/png", "preview");
     expect(result.text).toBe("iVBORw0KGgo=");
     expect(result.jsonValid).toBeNull();
   });
 
-  it("formats json mode for valid json", () => {
-    const result = formatResponseBody('{"a":1}', "text/html", "json");
+  it("formats json mode for valid json", async () => {
+    const result = await formatResponseBody('{"a":1}', "text/html", "json");
     expect(result.text).toBe('{\n  "a": 1\n}');
     expect(result.jsonValid).toBe(true);
   });
 
-  it("marks invalid json in json mode", () => {
-    const result = formatResponseBody("not json", "text/plain", "json");
+  it("marks invalid json in json mode", async () => {
+    const result = await formatResponseBody("not json", "text/plain", "json");
     expect(result.jsonValid).toBe(false);
     expect(result.text).toBe("not json");
   });
 
-  it("pretty mode formats json without json content-type", () => {
-    const result = formatResponseBody('{"ok":true}', "text/plain", "pretty");
+  it("pretty mode formats json without json content-type", async () => {
+    const result = await formatResponseBody('{"ok":true}', "text/plain", "pretty");
     expect(result.text).toContain('"ok": true');
   });
 

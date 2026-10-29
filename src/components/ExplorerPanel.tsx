@@ -197,12 +197,36 @@ export function ExplorerPanel() {
   const [openCollections, setOpenCollections] = useState<Record<string, boolean>>({});
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
   const [gitUi, setGitUi] = useState<GitWorkspaceUiStatus>(() => getGitWorkspaceUiStatus());
+  const [conflictDiffRows, setConflictDiffRows] = useState<
+    Array<{ kind: "same" | "add" | "del"; text: string }>
+  >([]);
 
   useEffect(() => {
     const sync = () => setGitUi(getGitWorkspaceUiStatus());
     window.addEventListener(GIT_WORKSPACE_STATUS_EVENT, sync);
     return () => window.removeEventListener(GIT_WORKSPACE_STATUS_EVENT, sync);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const conflict = gitUi.conflict;
+    if (!conflict) {
+      setConflictDiffRows([]);
+      return;
+    }
+    void unifiedLineDiff(conflict.disk, conflict.editor)
+      .then((rows) => {
+        if (!cancelled) {
+          setConflictDiffRows(rows.filter((row) => row.kind !== "same").slice(0, 24));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setConflictDiffRows([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [gitUi.conflict]);
   const [inheritTarget, setInheritTarget] = useState<
     { kind: "collection"; id: string } | { kind: "folder"; collectionId: string; path: string } | null
   >(null);
@@ -559,10 +583,7 @@ export function ExplorerPanel() {
                       {gitUi.conflict.filePath}
                     </p>
                     <pre className="mt-1.5 max-h-24 overflow-auto font-mono text-[9px] leading-4">
-                      {unifiedLineDiff(gitUi.conflict.disk, gitUi.conflict.editor)
-                        .filter((row) => row.kind !== "same")
-                        .slice(0, 24)
-                        .map((row, index) => (
+                      {conflictDiffRows.map((row, index) => (
                           <div
                             key={`${row.kind}-${index}`}
                             className={row.kind === "add" ? "text-emerald-600" : "text-red-600"}
@@ -1678,33 +1699,42 @@ function CollectionActionsMenu({
   exportCollection: (
     collectionId: string,
     format: "pulse" | "postman" | "openapi" | "bruno" | "insomnia",
-  ) => string | null;
+  ) => string | null | Promise<string | null>;
   onEditSettings: () => void;
 }) {
   const exportAs = (format: "pulse" | "postman" | "bruno" | "insomnia") => {
-    const content = exportCollection(collectionId, format);
-    if (!content) {
-      toast.error("Export failed", "Collection not found");
-      return;
-    }
-    const suffix =
-      format === "postman"
-        ? "postman_collection.json"
-        : format === "bruno"
-          ? "bruno_collection.json"
-          : format === "insomnia"
-            ? "insomnia_export.json"
-            : "pulse_collection.json";
-    const label =
-      format === "postman"
-        ? "Postman"
-        : format === "bruno"
-          ? "Bruno"
-          : format === "insomnia"
-            ? "Insomnia"
-            : "Pulse";
-    downloadJson(content, collectionExportFilename(collectionName, suffix));
-    toast.success("Collection exported", `${collectionName} (${label})`);
+    void (async () => {
+      try {
+        const content = await exportCollection(collectionId, format);
+        if (!content) {
+          toast.error("Export failed", "Collection not found");
+          return;
+        }
+        const suffix =
+          format === "postman"
+            ? "postman_collection.json"
+            : format === "bruno"
+              ? "bruno_collection.json"
+              : format === "insomnia"
+                ? "insomnia_export.json"
+                : "pulse_collection.json";
+        const label =
+          format === "postman"
+            ? "Postman"
+            : format === "bruno"
+              ? "Bruno"
+              : format === "insomnia"
+                ? "Insomnia"
+                : "Pulse";
+        downloadJson(content, collectionExportFilename(collectionName, suffix));
+        toast.success("Collection exported", `${collectionName} (${label})`);
+      } catch (error) {
+        toast.error(
+          "Export failed",
+          error instanceof Error ? error.message : "Could not export collection.",
+        );
+      }
+    })();
   };
 
   return (

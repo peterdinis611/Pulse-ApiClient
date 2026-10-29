@@ -1,20 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { SavedRequest } from "@/types";
 import { canUseTauriIpc } from "./tauri-runtime";
-import { isBetaFeatureEnabled } from "@/lib/release-channel";
 
 export const LOCKED_MOCK_PORT = 4010;
 export const MAX_MOCK_DELAY_MS = 60_000;
-
-const HIDDEN_HEADERS = new Set([
-  "x-request-id",
-  "server",
-  "date",
-  "connection",
-  "keep-alive",
-  "transfer-encoding",
-  "content-length",
-]);
 
 export type MockHeader = {
   key: string;
@@ -42,45 +31,12 @@ export type MockServerHandle = {
   delayMs: number;
 };
 
-function isHiddenHeader(key: string): boolean {
-  const lower = key.trim().toLowerCase();
-  return lower.startsWith("x-pulse-") || HIDDEN_HEADERS.has(lower);
-}
-
-function requestPath(url: string): string {
-  try {
-    return new URL(url.replace(/\{\{[^}]+\}\}/g, "x")).pathname;
-  } catch {
-    const slash = url.indexOf("/", url.indexOf("//") + 2);
-    return slash >= 0 ? url.slice(slash).split("?")[0] || "/" : "/";
+/** Build mock routes via pulse-core (`mock_routes_from_collections`). Matchers omitted on Rust side. */
+export async function mockRoutesFromCollections(collections: SavedRequest[]): Promise<MockRoute[]> {
+  if (!canUseTauriIpc()) {
+    throw new Error("Mock routes require the desktop app");
   }
-}
-
-export function mockRoutesFromCollections(collections: SavedRequest[]): MockRoute[] {
-  const allowMatchers = isBetaFeatureEnabled("mock_matchers");
-  return collections.flatMap((saved) => {
-    const examples = saved.request.examples ?? [];
-    if (examples.length === 0) return [];
-    const path = requestPath(saved.request.url);
-    return examples.map((example) => {
-      const matchers = allowMatchers ? example.matchers : undefined;
-      return {
-        method: saved.request.method,
-        path,
-        status: example.response.status || 200,
-        body: example.response.body || "",
-        contentType: example.response.contentType?.trim() || "",
-        exampleName: example.name.trim() || "example",
-        headers: (example.response.headers ?? [])
-          .filter((header) => header.key.trim() && !isHiddenHeader(header.key))
-          .map((header) => ({ key: header.key, value: header.value })),
-        matchQuery: matchers?.query?.map((item) => ({ key: item.key, value: item.value })) ?? [],
-        matchHeaders:
-          matchers?.headers?.map((item) => ({ key: item.key, value: item.value })) ?? [],
-        matchBodyIncludes: matchers?.bodyIncludes?.trim() || "",
-      };
-    });
-  });
+  return invoke<MockRoute[]>("mock_routes_from_collections", { collections });
 }
 
 export function clampMockDelayMs(value: number): number {

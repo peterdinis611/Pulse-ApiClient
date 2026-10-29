@@ -1,15 +1,13 @@
-import { describe, expect, it } from "vitest";
-import { prettyMaybeJson, unifiedLineDiff } from "@/lib/line-diff";
+import { describe, expect, it, vi } from "vitest";
 
-describe("line diff", () => {
-  it("marks added and removed lines", () => {
-    const rows = unifiedLineDiff("a\nb\n", "a\nc\n");
-    expect(rows.some((row) => row.kind === "del" && row.text === "b")).toBe(true);
-    expect(rows.some((row) => row.kind === "add" && row.text === "c")).toBe(true);
-  });
+vi.mock("@/lib/tauri-runtime", () => ({
+  canUseTauriIpc: () => false,
+}));
 
-  it("pretty-prints json when possible", () => {
-    expect(prettyMaybeJson('{"a":1}')).toContain("\n");
-    expect(prettyMaybeJson("not-json")).toBe("not-json");
+describe("line-diff", () => {
+  it("requires desktop IPC outside Tauri", async () => {
+    const { unifiedLineDiff, prettyMaybeJson } = await import("@/lib/line-diff");
+    await expect(unifiedLineDiff("a", "b")).rejects.toThrow(/desktop/i);
+    await expect(prettyMaybeJson("{}")).rejects.toThrow(/desktop/i);
   });
 });

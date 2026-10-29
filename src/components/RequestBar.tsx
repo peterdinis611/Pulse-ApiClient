@@ -17,12 +17,12 @@ import {
   selectActiveTab,
   selectWorkspaceEnvironment,
 } from "@/machines/appMachine";
-import { validateGraphqlRequest } from "@/lib/graphql";
+import { canSendGraphqlRequest } from "@/lib/graphql";
 import { isStreamProtocol, isWebSocketProtocol, isSseProtocol, SSE_METHODS } from "@/lib/protocol";
 import { containsVariables, mergeVariableLayers } from "@/lib/env";
 import { collectFolderVariables } from "@/lib/inherit";
 import { prepareRequest } from "@/lib/http-client";
-import { CODE_SNIPPETS, requestToSnippet, type CodeSnippetId } from "@/lib/code-snippets";
+import { CODE_SNIPPETS, requestToSnippetAsync, type CodeSnippetId } from "@/lib/code-snippets";
 import { resolveRequestForSend } from "@/lib/resolve-request";
 import { methodToneStyle } from "@/lib/method-colors";
 import { VariableField } from "@/components/VariableField";
@@ -118,7 +118,7 @@ export function RequestBar() {
     if (!request.url.trim()) return false;
     if (isStream) return false;
     if (request.bodyKind === "graphql") {
-      return validateGraphqlRequest(request) === null;
+      return canSendGraphqlRequest(request);
     }
     return true;
   }, [isStream, request]);
@@ -143,7 +143,7 @@ export function RequestBar() {
       globals,
       environment: activeEnvironment,
     });
-    const snippet = requestToSnippet(id, prepared.request, prepared.environment);
+    const snippet = await requestToSnippetAsync(id, prepared.request, prepared.environment);
     await navigator.clipboard.writeText(snippet);
     toast.success("Copied snippet", CODE_SNIPPETS.find((item) => item.id === id)?.label);
   };

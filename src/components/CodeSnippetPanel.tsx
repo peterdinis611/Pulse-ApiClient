@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Copy } from "lucide-react";
 import { useApp } from "@/machines";
-import { CODE_SNIPPETS, requestToSnippet, type CodeSnippetId } from "@/lib/code-snippets";
+import { CODE_SNIPPETS, requestToSnippetAsync, type CodeSnippetId } from "@/lib/code-snippets";
 import { resolveRequestForSend } from "@/lib/resolve-request";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
@@ -18,8 +18,10 @@ export function CodeSnippetPanel() {
   } = useApp();
   const [lang, setLang] = useState<CodeSnippetId>("curl");
   const [copied, setCopied] = useState(false);
+  const [snippet, setSnippet] = useState("");
 
-  const snippet = useMemo(() => {
+  useEffect(() => {
+    let cancelled = false;
     const collection =
       collectionGroups.find((group) => group.id === tabCollectionId) ?? null;
     const prepared = resolveRequestForSend({
@@ -29,7 +31,18 @@ export function CodeSnippetPanel() {
       globals,
       environment: activeEnvironment,
     });
-    return requestToSnippet(lang, prepared.request, prepared.environment);
+    void requestToSnippetAsync(lang, prepared.request, prepared.environment)
+      .then((text) => {
+        if (!cancelled) setSnippet(text);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setSnippet(error instanceof Error ? error.message : "Failed to generate snippet");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [
     activeEnvironment,
     collectionGroups,

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, LoaderCircle } from "lucide-react";
 import { useApp } from "@/machines";
 import { listOpenApiOperations } from "@/lib/openapi-import";
@@ -7,6 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { methodClass } from "@/lib/helpers";
 import { cn } from "@/lib/utils";
+import type { ApiRequest, HttpMethod } from "@/types";
+
+type OpenApiOp = {
+  method: HttpMethod;
+  path: string;
+  summary: string;
+  request: ApiRequest;
+};
 
 export function OpenApiExplorer({ onClose }: { onClose?: () => void }) {
   const { openRequestTab, setMainView } = useApp();
@@ -15,21 +23,34 @@ export function OpenApiExplorer({ onClose }: { onClose?: () => void }) {
   const [raw, setRaw] = useState("");
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
+  const [operations, setOperations] = useState<OpenApiOp[]>([]);
 
-  const operations = useMemo(() => {
-    if (!raw.trim()) return [];
-    try {
-      return listOpenApiOperations(raw);
-    } catch {
-      return [];
+  useEffect(() => {
+    let cancelled = false;
+    if (!raw.trim()) {
+      setOperations([]);
+      return;
     }
+    void listOpenApiOperations(raw)
+      .then((ops) => {
+        if (!cancelled) setOperations(ops);
+      })
+      .catch(() => {
+        if (!cancelled) setOperations([]);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [raw]);
 
-  const visible = operations.filter((op) => {
-    if (!query.trim()) return true;
-    const hay = `${op.method} ${op.path} ${op.summary}`.toLowerCase();
-    return hay.includes(query.trim().toLowerCase());
-  });
+  const visible = useMemo(() => {
+    if (!query.trim()) return operations;
+    const needle = query.trim().toLowerCase();
+    return operations.filter((op) => {
+      const hay = `${op.method} ${op.path} ${op.summary}`.toLowerCase();
+      return hay.includes(needle);
+    });
+  }, [operations, query]);
 
   const loadUrl = async () => {
     if (!url.trim()) {
@@ -40,9 +61,9 @@ export function OpenApiExplorer({ onClose }: { onClose?: () => void }) {
     try {
       const response = await fetch(url.trim());
       const text = await response.text();
-      listOpenApiOperations(text);
+      const ops = await listOpenApiOperations(text);
       setRaw(text);
-      toast.success("Spec loaded", `${listOpenApiOperations(text).length} operations`);
+      toast.success("Spec loaded", `${ops.length} operations`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not fetch spec");
     } finally {
@@ -89,9 +110,9 @@ export function OpenApiExplorer({ onClose }: { onClose?: () => void }) {
           onChange={(event) => {
             const file = event.target.files?.[0];
             if (!file) return;
-            void file.text().then((text) => {
+            void file.text().then(async (text) => {
               try {
-                listOpenApiOperations(text);
+                await listOpenApiOperations(text);
                 setRaw(text);
               } catch (error) {
                 toast.error(error instanceof Error ? error.message : "Not an OpenAPI spec");

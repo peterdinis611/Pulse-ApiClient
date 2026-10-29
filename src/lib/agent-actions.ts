@@ -307,7 +307,7 @@ async function recordAgentHistory(
   }).catch(() => undefined);
 }
 
-function summarizeHttpResponse(response: HttpResponse): string {
+async function summarizeHttpResponse(response: HttpResponse): Promise<string> {
   const lines = [
     t("agent.md.statusLabel", {
       status: `${response.status} ${response.statusText || ""}`.trim(),
@@ -321,7 +321,7 @@ function summarizeHttpResponse(response: HttpResponse): string {
   const gql = parseGraphqlResponse(response.body);
   if (gql) {
     lines.push("");
-    lines.push(formatGraphqlResponse(response.body));
+    lines.push(await formatGraphqlResponse(response.body));
   } else {
     const body = response.body?.trim() ?? "";
     const preview = body.length > 1200 ? `${body.slice(0, 1200)}\n…` : body;
@@ -424,7 +424,7 @@ export async function runAgentIntent(
       await recordAgentHistory("explain_response", {
         response: { status: ctx.activeResponse.status },
       });
-      let local = summarizeHttpResponse(ctx.activeResponse);
+      let local = await summarizeHttpResponse(ctx.activeResponse);
       const root = getGitWorkspaceRoot();
       let citations: AgentRagCitation[] | undefined;
       let ragBlock = "";
@@ -614,7 +614,7 @@ export async function runAgentIntent(
       if (!body?.trim()) {
         return { markdown: t("agent.md.noGraphqlBody") };
       }
-      const summary = summarizeGraphqlSchemaLike(body);
+      const summary = await summarizeGraphqlSchemaLike(body);
       if (!summary) {
         return { markdown: t("agent.md.notGraphql") };
       }
@@ -623,7 +623,7 @@ export async function runAgentIntent(
     }
     case "sse_parse": {
       const { parseSseTextLocal } = await import("@/lib/agent-format");
-      const events = parseSseTextLocal(intent.text);
+      const events = await parseSseTextLocal(intent.text);
       if (events.length === 0) {
         return { markdown: t("agent.md.noSse") };
       }
@@ -842,7 +842,7 @@ export async function confirmAgentAction(
   }
   if (kind === "mock_start") {
     try {
-      const routes = mockRoutesFromCollections(ctx.collections);
+      const routes = await mockRoutesFromCollections(ctx.collections);
       if (routes.length === 0) {
         return { markdown: "No saved examples to mock — save a response example first." };
       }

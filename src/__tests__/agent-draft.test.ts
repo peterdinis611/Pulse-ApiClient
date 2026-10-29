@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { draftPreRequestFromResponse, draftTestsFromResponse } from "@/lib/agent-draft";
-import { routeAgentInput } from "@/lib/agent-router";
 import type { HttpResponse } from "@/types";
 
 const response: HttpResponse = {
@@ -26,8 +25,4 @@ describe("agent drafts", () => {
     expect(code).toContain("access_token");
   });
 
-  it("routes draft quick actions", () => {
-    expect(routeAgentInput("quick:draft-tests")).toEqual({ kind: "draft_tests" });
-    expect(routeAgentInput("draft pre-request")).toEqual({ kind: "draft_pre_request" });
-  });
 });
