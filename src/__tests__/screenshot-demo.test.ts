@@ -35,4 +35,14 @@ describe("screenshot mode", () => {
     expect(isScreenshotMode()).toBe(false);
     expect(getScreenshotMainView()).toBe("request");
   });
+
+  it("opens agent and mcp shots", () => {
+    setSearch("?shot=agent");
+    expect(isScreenshotMode()).toBe(true);
+    expect(getScreenshotMainView()).toBe("agent");
+    setSearch("?shot=mcp");
+    expect(getScreenshotMainView()).toBe("mcp");
+    setSearch("?shot=environments");
+    expect(getScreenshotMainView()).toBe("environments");
+  });
 });

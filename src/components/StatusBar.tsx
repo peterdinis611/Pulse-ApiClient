@@ -15,6 +15,7 @@ import { toast } from "@/lib/toast";
 import type { HttpEngineStats } from "@/types";
 import { WindowMenu } from "@/components/WindowMenu";
 import { TooltipIconButton } from "@/components/TooltipIconButton";
+import { GitCommitPopover } from "@/components/GitCommitPopover";
 import { cn } from "@/lib/utils";
 
 export function StatusBar() {
@@ -166,6 +167,7 @@ export function StatusBar() {
             )}
           </button>
         )}
+        <GitCommitPopover />
         <button
           type="button"
           className={cn(

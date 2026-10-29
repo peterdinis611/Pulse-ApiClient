@@ -1,8 +1,10 @@
 # Pulse API Client
 
-Desktop API client **2.1** — Git YAML is the workspace, SQLite keeps history. Built with **Tauri**, **React**, **TypeScript**, **Tailwind CSS**, **shadcn/ui**, and **Rust** (reqwest).
+Desktop API client — Git YAML is the workspace, SQLite keeps history. Built with **Tauri**, **React**, **TypeScript**, **Tailwind CSS**, **shadcn/ui**, and **Rust** (reqwest).
 
-![Pulse request workspace](./docs/screenshots/request.png)
+<p align="center">
+  <img src="./docs/screenshots/request.png" alt="Pulse request workspace" width="900" />
+</p>
 
 ## Stack
 
@@ -25,7 +27,7 @@ A blank install opens a three-step wizard: **language**, **theme**, then **how t
 - Replay anytime: Settings → Appearance → **First-run setup**, or the command palette (`Cmd/Ctrl + K`)
 - Change later without the wizard: Appearance (language, theme) and Layout (start view, explorer)
 - Existing installs that already have a last-seen version skip the wizard so they are not interrupted
-- After first-run, Pulse may still show **What's new** for 2.1, then a Driver.js product tour
+- After first-run, Pulse may still show **What's new** for 2.4.0, then a Driver.js product tour
 
 ## Features
 
@@ -53,11 +55,19 @@ See the full guide in [docs/FEATURES.md](./docs/FEATURES.md) (in-app under **Doc
 
 | Overview | Request workspace |
 | --- | --- |
-| ![Overview](./docs/screenshots/overview.png) | ![Request](./docs/screenshots/request.png) |
+| <img src="./docs/screenshots/overview.png" alt="Overview" width="440" /> | <img src="./docs/screenshots/request.png" alt="Request workspace" width="440" /> |
 
-| Settings & themes | Sign in |
+| Environments | Settings & themes |
 | --- | --- |
-| ![Settings](./docs/screenshots/settings.png) | ![Auth](./docs/screenshots/auth.png) |
+| <img src="./docs/screenshots/environments.png" alt="Environments" width="440" /> | <img src="./docs/screenshots/settings.png" alt="Settings" width="440" /> |
+
+| Agent | MCP |
+| --- | --- |
+| <img src="./docs/screenshots/agent.png" alt="Agent" width="440" /> | <img src="./docs/screenshots/mcp.png" alt="MCP" width="440" /> |
+
+| Sign in |
+| --- |
+| <img src="./docs/screenshots/auth.png" alt="Sign in" width="440" /> |
 
 ## Run
 
@@ -124,10 +134,19 @@ Opens a Fumadocs site at http://localhost:3000. Content is generated from `src/l
 
 ## Regenerate README screenshots
 
+Captures Overview, Request, Environments, Settings, Agent, MCP, and Sign-in into `docs/screenshots/` (and copies to `docs/site/public/screenshots/`).
+
 ```bash
 bun install
 bunx playwright install chromium
 bun run screenshots:readme
+```
+
+Optional: point at a cached Chromium if Playwright’s download is blocked:
+
+```bash
+PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="$HOME/Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing" \
+  bun run screenshots:readme
 ```
 
 ## Project layout

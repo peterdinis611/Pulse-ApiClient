@@ -9,17 +9,21 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from pulse.bench import compare_bench, format_bench_summary, run_bench
 from pulse.curl import curl_to_payload, payload_to_curl
+from pulse.diff import compare
 from pulse.graphql import (
     INTROSPECTION_QUERY,
     build_body,
+    example_queries,
     format_response,
     list_operations,
+    response_error_count,
     summarize_schema,
     validate,
 )
 from pulse.graphql_ws import complete, ping, pong, start, stop, subscribe
-from pulse.sse import parse_block, parse_text
+from pulse.sse import filter_events, parse_block, parse_text, summarize
 
 
 class SseOfflineTests(unittest.TestCase):
@@ -39,6 +43,16 @@ class SseOfflineTests(unittest.TestCase):
         assert event is not None
         self.assertNotIn("id", event)
         self.assertEqual(event["data"], "x")
+
+    def test_filter_and_summarize(self) -> None:
+        events = parse_text("event: ping\ndata: a\n\nevent: pong\ndata: b\n\nid: 9\ndata: c\n\n")
+        only_ping = filter_events(events, "ping")
+        self.assertEqual(len(only_ping), 1)
+        self.assertEqual(only_ping[0]["data"], "a")
+        summary = summarize(events)
+        self.assertEqual(summary["count"], 3)
+        self.assertEqual(summary["byEvent"]["ping"], 1)
+        self.assertEqual(summary["latestId"], "9")
 
 
 class GraphqlOfflineTests(unittest.TestCase):
@@ -90,6 +104,37 @@ class GraphqlOfflineTests(unittest.TestCase):
         ops = list_operations("query A { a } mutation B { b }")
         self.assertEqual([item["kind"] for item in ops], ["query", "mutation"])
         self.assertEqual(ops[0]["name"], "A")
+        ignored = list_operations("# query Skip { x }\nquery Keep { y }")
+        self.assertEqual([item["name"] for item in ignored], ["Keep"])
+        examples = example_queries(summary, limit=1)
+        self.assertTrue(any("ping" in item for item in examples))
+        self.assertEqual(response_error_count('{"errors":[{"message":"x"}]}'), 1)
+
+
+class DiffBenchOfflineTests(unittest.TestCase):
+    def test_path_diff_and_bench_summary(self) -> None:
+        report = compare({"id": 1, "nested": {"a": 1}}, {"id": 2, "nested": {"a": 1}})
+        self.assertFalse(report["equal"])
+        self.assertGreaterEqual(report["pathsChanged"], 1)
+        self.assertTrue(any(item["path"] == "$.id" for item in report["paths"]))
+        same = compare({"b": 1, "a": 2}, {"a": 2, "b": 1})
+        self.assertTrue(same["equal"])
+
+        def once() -> dict:
+            return {
+                "passed": 1,
+                "failed": 0,
+                "steps": [{"saved": {"name": "ping"}, "response": {"elapsedMs": 12, "totalMs": 12}}],
+            }
+
+        bench = run_bench(once, 2)
+        self.assertEqual(bench["failedRuns"], 0)
+        self.assertTrue(bench["ok"])
+        self.assertIn("meanMs", bench["timing"])
+        self.assertIn("stddevMs", bench["timing"])
+        self.assertIn("successRate", format_bench_summary(bench))
+        self.assertTrue(compare_bench(bench, {}, p95_budget=1))  # errors list is truthy
+        self.assertFalse(compare_bench(bench, {"timing": {"p95Ms": 100}}, factor=1.2))
 
 
 class GraphqlWsOfflineTests(unittest.TestCase):
@@ -126,13 +171,24 @@ class CurlOfflineTests(unittest.TestCase):
                 "method": "POST",
                 "url": "https://example.com",
                 "headers": [{"key": "Accept", "value": "application/json", "enabled": True}],
+                "query": [{"key": "q", "value": "1", "enabled": True}],
                 "bodyKind": "json",
                 "body": '{"ok":true}',
+                "auth": {"authType": "bearer", "bearerToken": "tok"},
             }
         )
         self.assertIn("curl", command)
         self.assertIn("-X POST", command)
         self.assertIn("https://example.com", command)
+        self.assertIn("Authorization: Bearer tok", command)
+        self.assertIn("q=1", command)
+        self.assertIn("--compressed", command)
+
+    def test_url_query_split_and_location_flag(self) -> None:
+        payload = curl_to_payload("curl -L 'https://api.example.com/items?x=1&y=2'")
+        self.assertEqual(payload["url"], "https://api.example.com/items")
+        keys = {row["key"] for row in payload["query"]}
+        self.assertEqual(keys, {"x", "y"})
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { SavedRequest } from "@/types";
 import { canUseTauriIpc } from "./tauri-runtime";
+import { isBetaFeatureEnabled } from "@/lib/release-channel";
 
 export const LOCKED_MOCK_PORT = 4010;
 export const MAX_MOCK_DELAY_MS = 60_000;
@@ -28,6 +29,9 @@ export type MockRoute = {
   contentType: string;
   headers: MockHeader[];
   exampleName: string;
+  matchQuery?: MockHeader[];
+  matchHeaders?: MockHeader[];
+  matchBodyIncludes?: string;
 };
 
 export type MockServerHandle = {
@@ -53,21 +57,29 @@ function requestPath(url: string): string {
 }
 
 export function mockRoutesFromCollections(collections: SavedRequest[]): MockRoute[] {
+  const allowMatchers = isBetaFeatureEnabled("mock_matchers");
   return collections.flatMap((saved) => {
     const examples = saved.request.examples ?? [];
     if (examples.length === 0) return [];
     const path = requestPath(saved.request.url);
-    return examples.map((example) => ({
-      method: saved.request.method,
-      path,
-      status: example.response.status || 200,
-      body: example.response.body || "",
-      contentType: example.response.contentType?.trim() || "",
-      exampleName: example.name.trim() || "example",
-      headers: (example.response.headers ?? [])
-        .filter((header) => header.key.trim() && !isHiddenHeader(header.key))
-        .map((header) => ({ key: header.key, value: header.value })),
-    }));
+    return examples.map((example) => {
+      const matchers = allowMatchers ? example.matchers : undefined;
+      return {
+        method: saved.request.method,
+        path,
+        status: example.response.status || 200,
+        body: example.response.body || "",
+        contentType: example.response.contentType?.trim() || "",
+        exampleName: example.name.trim() || "example",
+        headers: (example.response.headers ?? [])
+          .filter((header) => header.key.trim() && !isHiddenHeader(header.key))
+          .map((header) => ({ key: header.key, value: header.value })),
+        matchQuery: matchers?.query?.map((item) => ({ key: item.key, value: item.value })) ?? [],
+        matchHeaders:
+          matchers?.headers?.map((item) => ({ key: item.key, value: item.value })) ?? [],
+        matchBodyIncludes: matchers?.bodyIncludes?.trim() || "",
+      };
+    });
   });
 }
 

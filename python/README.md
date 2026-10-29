@@ -24,6 +24,7 @@ bun run pulse:cli openapi python/examples/openapi.json --list
 bun run pulse:cli openapi python/examples/openapi.json --out python/examples/.out/from-openapi.json
 bun run pulse:cli har python/examples/capture.har --out python/examples/.out/from-har.json
 bun run pulse:cli curl 'curl -X GET https://api.example.com/health'
+bun run pulse:cli format-curl '{"method":"GET","url":"https://api.example.com/health"}'
 bun run pulse:cli snippet --url https://api.example.com/health --format python
 bun run pulse:cli diff '{"a":1}' '{"a":2}'
 bun run pulse:cli schema python/examples/body.json python/examples/schema.json
@@ -31,6 +32,12 @@ bun run pulse:cli send --method GET --url https://jsonplaceholder.typicode.com/p
 bun run pulse:cli graphql --url https://api.example.com/graphql --introspect
 bun run pulse:cli workspace --workspace python/examples/git-workspace status
 bun run pulse:cli workspace --workspace python/examples/git-workspace list
+bun run pulse:cli git status --workspace .
+bun run pulse:cli agent-memory set env staging --workspace python/examples/git-workspace
+bun run pulse:cli agent-memory search stag --workspace python/examples/git-workspace
+bun run pulse:cli agent-rag reindex --workspace python/examples/git-workspace
+bun run pulse:cli agent-rag search health --workspace python/examples/git-workspace
+bun run pulse:cli agent-rag related 'GET health' --workspace python/examples/git-workspace
 bun run pulse:cli contract python/examples/git-workspace
 bun run pulse:cli env --env-file python/examples/staging.env --format dotenv
 bun run pulse:cli mock start --workspace python/examples/git-workspace --delay-ms 50
@@ -48,9 +55,11 @@ Pulse exposes the same engine as an MCP stdio server. Project config is `.cursor
 2. Reload Cursor (**Settings → MCP** or restart)
 3. Enable the **pulse** server if Cursor asks
 
-Tools: `pulse_send`, `pulse_run_collection`, `pulse_bench`, `pulse_write_collection`, `pulse_pre_request`, `pulse_interpolate`, `pulse_run_tests`, `pulse_openapi`, `pulse_har`, `pulse_schema`, `pulse_diff`, `pulse_export_openapi`, `pulse_graphql`, `pulse_curl`, `pulse_snippet`, `pulse_last_run`, `pulse_validate_run`, `pulse_help`, plus workspace tools when `PULSE_WORKSPACE` is set.
+Tools: `pulse_send`, `pulse_run_collection`, `pulse_bench`, `pulse_write_collection`, `pulse_pre_request`, `pulse_interpolate`, `pulse_run_tests`, `pulse_openapi`, `pulse_har`, `pulse_schema`, `pulse_diff`, `pulse_export_openapi`, `pulse_graphql`, `pulse_curl`, `pulse_format_curl`, `pulse_snippet`, `pulse_last_run`, `pulse_validate_run`, `pulse_git_*`, `pulse_memory_*`, `pulse_rag_*`, `pulse_help`, plus workspace tools when `PULSE_WORKSPACE` is set.
 
-Prompts (Cursor can pick these without knowing tool names): `run_and_explain`, `openapi_to_pulse`, `compare_responses`, `graphql_introspect`, `curl_import`, `export_openapi`, `explain_last_run`, `validate_schema`.
+Prompts (Cursor can pick these without knowing tool names): `run_and_explain`, `openapi_to_pulse`, `compare_responses`, `graphql_introspect`, `curl_import`, `export_openapi`, `explain_last_run`, `validate_schema`, `git_status`, `propose_commit`, `remember_fact`, `search_memory`, `search_rag`.
+
+Resources also include `pulse://workspace/memory` and `pulse://workspace/git` when `PULSE_WORKSPACE` is set.
 
 `pulse_run_collection` and `pulse_bench` emit `notifications/progress` (when the client sends `_meta.progressToken`) plus `notifications/pulse/step` with `{ name, status, ms }` after each request.
 

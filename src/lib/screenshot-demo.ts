@@ -10,16 +10,22 @@ import {
 } from "./helpers";
 import { buildWindowSession, defaultPersistedState, type PersistedState } from "./storage";
 
+const SCREENSHOT_SHOTS = [
+  "auth",
+  "overview",
+  "request",
+  "settings",
+  "environments",
+  "agent",
+  "mcp",
+] as const;
+
+export type ScreenshotShot = (typeof SCREENSHOT_SHOTS)[number];
+
 export function isScreenshotMode(): boolean {
   if (import.meta.env.VITE_SCREENSHOT_MODE === "true") return true;
   const shot = getScreenshotShotParam();
-  return (
-    shot === "auth" ||
-    shot === "overview" ||
-    shot === "request" ||
-    shot === "settings" ||
-    shot === "environments"
-  );
+  return shot !== null && (SCREENSHOT_SHOTS as readonly string[]).includes(shot);
 }
 
 export function getScreenshotShotParam(): string | null {
@@ -37,7 +43,9 @@ export function getScreenshotMainView(): MainView {
     shot === "overview" ||
     shot === "request" ||
     shot === "settings" ||
-    shot === "environments"
+    shot === "environments" ||
+    shot === "agent" ||
+    shot === "mcp"
   ) {
     return shot;
   }

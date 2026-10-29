@@ -6,6 +6,7 @@ import {
   ChevronRight,
   CircleAlert,
   ClipboardCopy,
+  RotateCcw,
   X,
   XCircle,
 } from "lucide-react";
@@ -22,6 +23,7 @@ import { cn } from "@/lib/utils";
 type CollectionRunResultsPanelProps = {
   result: CollectionRunResult;
   onClose: () => void;
+  onRetryFailed?: (failed: CollectionRunStep[]) => void;
 };
 
 /** Long URLs/errors must wrap inside narrow flex children. */
@@ -51,11 +53,13 @@ function stepFailed(step: CollectionRunStep): boolean {
   return Boolean(step.error) || (step.testResults?.failed ?? 0) > 0;
 }
 
-export function CollectionRunResultsPanel({ result, onClose }: CollectionRunResultsPanelProps) {
-  const failedCount = useMemo(
-    () => result.steps.filter(stepFailed).length,
-    [result.steps],
-  );
+export function CollectionRunResultsPanel({
+  result,
+  onClose,
+  onRetryFailed,
+}: CollectionRunResultsPanelProps) {
+  const failedSteps = useMemo(() => result.steps.filter(stepFailed), [result.steps]);
+  const failedCount = failedSteps.length;
   const passedCount = result.steps.length - failedCount;
   const allPassed = failedCount === 0;
 
@@ -109,6 +113,17 @@ export function CollectionRunResultsPanel({ result, onClose }: CollectionRunResu
               )}
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              {!allPassed && onRetryFailed && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onRetryFailed(failedSteps)}
+                >
+                  <RotateCcw className="mr-1.5 size-3.5" />
+                  Retry failed ({failedCount})
+                </Button>
+              )}
               <Button type="button" variant="outline" size="sm" onClick={onClose}>
                 Close
               </Button>
@@ -135,6 +150,23 @@ export function CollectionRunResultsPanel({ result, onClose }: CollectionRunResu
                 tone={result.failed > 0 ? "danger" : "success"}
               />
             )}
+          </div>
+
+          <div
+            className="mt-3 flex h-3 w-full overflow-hidden rounded-full bg-muted"
+            role="img"
+            aria-label={`Pass/fail timeline: ${passedCount} passed, ${failedCount} failed`}
+          >
+            {result.steps.map((step, index) => (
+              <div
+                key={`${step.saved.id}-tl-${index}`}
+                className={cn(
+                  "min-w-[2px] flex-1",
+                  stepFailed(step) ? "bg-destructive" : "bg-success",
+                )}
+                title={`${step.saved.name}: ${stepFailed(step) ? "failed" : "passed"}`}
+              />
+            ))}
           </div>
 
           <div

@@ -206,6 +206,40 @@ pub fn filter_events<'a>(
         .collect()
 }
 
+/// Compact summary for CLI/MCP (`pulse sse --summary`).
+pub fn summarize_events(events: &[ParsedSseEvent]) -> serde_json::Value {
+    use serde_json::json;
+    use std::collections::BTreeMap;
+    let mut by_event: BTreeMap<String, usize> = BTreeMap::new();
+    for event in events {
+        let key = event
+            .event
+            .as_deref()
+            .unwrap_or("message")
+            .to_string();
+        *by_event.entry(key).or_default() += 1;
+    }
+    json!({
+        "count": events.len(),
+        "byEvent": by_event,
+        "latestId": latest_event_id(events),
+        "latestRetryMs": latest_retry_ms(events),
+        "dataPreview": events.iter().take(5).map(|event| {
+            let data = &event.data;
+            let preview = if data.chars().count() > 120 {
+                format!("{}…", data.chars().take(120).collect::<String>())
+            } else {
+                data.clone()
+            };
+            json!({
+                "event": event.event,
+                "id": event.id,
+                "data": preview,
+            })
+        }).collect::<Vec<_>>(),
+    })
+}
+
 /// Open an HTTP SSE stream and collect up to `max_events` (shared by CLI / MCP / native).
 pub async fn collect_sse(url: &str, options: SseCollectOptions) -> Result<Vec<ParsedSseEvent>, String> {
     let max_events = options.max_events.max(1);
@@ -322,6 +356,16 @@ pub fn ws_close_code_label(code: u16) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn summarize_counts_by_event() {
+        let events = parse_sse_text("event: ping\ndata: a\n\ndata: b\n\nid: 3\ndata: c\n\n").unwrap();
+        let summary = summarize_events(&events);
+        assert_eq!(summary["count"], 3);
+        assert_eq!(summary["byEvent"]["ping"], 1);
+        assert_eq!(summary["byEvent"]["message"], 2);
+        assert_eq!(summary["latestId"], "3");
+    }
 
     #[test]
     fn parse_sse_block_joins_data_lines() {

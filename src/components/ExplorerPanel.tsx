@@ -75,6 +75,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { ApiRequest, CollectionGroup, Environment, FolderConfig, HistoryEntry, SavedRequest } from "@/types";
 import { methodShortLabel, methodTextClass, statusBadgeClass } from "@/lib/method-colors";
+import {
+  GIT_WORKSPACE_STATUS_EVENT,
+  getGitWorkspaceUiStatus,
+  patchGitWorkspaceUiStatus,
+  type GitWorkspaceUiStatus,
+} from "@/lib/git-workspace-status";
+import { getGitWorkspaceRoot, loadGitWorkspace, mapGitWorkspace } from "@/lib/git-workspace";
+import { AppMachineContext } from "@/machines/AppProvider";
+import { unifiedLineDiff } from "@/lib/line-diff";
 import { cn } from "@/lib/utils";
 
 type PreviewTarget =
@@ -181,10 +190,19 @@ export function ExplorerPanel() {
     setSearchQuery: setHistorySearchQuery,
   } = useHistory();
 
+  const actorRef = AppMachineContext.useActorRef();
   const [collectionsOpen, setCollectionsOpen] = useState(true);
+  const [collectionsExpanded, setCollectionsExpanded] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(true);
   const [openCollections, setOpenCollections] = useState<Record<string, boolean>>({});
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
+  const [gitUi, setGitUi] = useState<GitWorkspaceUiStatus>(() => getGitWorkspaceUiStatus());
+
+  useEffect(() => {
+    const sync = () => setGitUi(getGitWorkspaceUiStatus());
+    window.addEventListener(GIT_WORKSPACE_STATUS_EVENT, sync);
+    return () => window.removeEventListener(GIT_WORKSPACE_STATUS_EVENT, sync);
+  }, []);
   const [inheritTarget, setInheritTarget] = useState<
     { kind: "collection"; id: string } | { kind: "folder"; collectionId: string; path: string } | null
   >(null);
@@ -530,6 +548,71 @@ export function ExplorerPanel() {
           resetKey={`${search.query}:${isSearchMode ? "search" : "browse"}`}
         >
           <div className="min-w-0 space-y-3 p-2 pb-3">
+            {(gitUi.conflict || gitUi.conflictedPaths.length > 0) && (
+              <div className="rounded-md border border-destructive/35 bg-destructive/8 px-2.5 py-2">
+                <p className="text-[12px] font-medium text-destructive">
+                  {gitUi.conflict ? "Request conflicts with disk" : "Git merge conflicts"}
+                </p>
+                {gitUi.conflict ? (
+                  <>
+                    <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                      {gitUi.conflict.filePath}
+                    </p>
+                    <pre className="mt-1.5 max-h-24 overflow-auto font-mono text-[9px] leading-4">
+                      {unifiedLineDiff(gitUi.conflict.disk, gitUi.conflict.editor)
+                        .filter((row) => row.kind !== "same")
+                        .slice(0, 24)
+                        .map((row, index) => (
+                          <div
+                            key={`${row.kind}-${index}`}
+                            className={row.kind === "add" ? "text-emerald-600" : "text-red-600"}
+                          >
+                            {row.kind === "add" ? "+" : "-"} {row.text}
+                          </div>
+                        ))}
+                    </pre>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-[11px]"
+                        onClick={() => patchGitWorkspaceUiStatus({ conflict: null })}
+                      >
+                        Keep editor
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-7 px-2 text-[11px]"
+                        onClick={() => {
+                          const root = getGitWorkspaceRoot();
+                          if (!root) return;
+                          void loadGitWorkspace(root)
+                            .then((payload) => {
+                              actorRef.send({
+                                type: "LOAD_GIT_WORKSPACE",
+                                ...mapGitWorkspace(payload),
+                              });
+                              patchGitWorkspaceUiStatus({ conflict: null });
+                              toast.success("Reloaded from disk");
+                            })
+                            .catch(() => toast.error("Reload failed"));
+                        }}
+                      >
+                        Reload disk
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <ul className="mt-1 max-h-20 space-y-0.5 overflow-auto font-mono text-[10px] text-muted-foreground">
+                    {gitUi.conflictedPaths.slice(0, 8).map((path) => (
+                      <li key={path}>{path}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
             {isSearchMode ? (
               <SearchResults
                 key={search.query}
@@ -564,14 +647,20 @@ export function ExplorerPanel() {
                       </CollapsibleTrigger>
                     </div>
                     <CollapsibleContent className="mt-0.5 space-y-0.5">
-                      {collectionGroups.map((group) => {
+                      <VirtualWindow
+                        items={collectionGroups}
+                        limit={36}
+                        expanded={collectionsExpanded}
+                        onShowMore={() => setCollectionsExpanded(true)}
+                        moreLabel={(n) => `Show ${n} more collections`}
+                        getKey={(group) => group.id}
+                        renderItem={(group) => {
                         const items = requestsForCollection(filteredCollections, group.id);
                         const grouped = groupRequestsByFolder(items, group.folders);
                         const open = openCollections[group.id] ?? true;
 
                         return (
                           <Collapsible
-                            key={group.id}
                             open={open}
                             onOpenChange={(value) =>
                               setOpenCollections((current) => ({ ...current, [group.id]: value }))
@@ -760,7 +849,8 @@ export function ExplorerPanel() {
                             </CollapsibleContent>
                           </Collapsible>
                         );
-                      })}
+                        }}
+                      />
                       {collectionGroups.length === 0 && (
                         <div className="px-2 py-2">
                           <p className="text-[11px] text-muted-foreground">No collections yet</p>
@@ -969,6 +1059,15 @@ export function ExplorerPanel() {
         <CollectionRunResultsPanel
           result={collectionRun}
           onClose={() => setShowRunResults(false)}
+          onRetryFailed={(failed) => {
+            setShowRunResults(false);
+            void handleRun({
+              collectionId: collectionRun.collectionId,
+              collectionName: collectionRun.collectionName,
+              items: failed.map((step) => step.saved),
+              folderPath: collectionRun.folderPath,
+            });
+          }}
         />
       )}
 

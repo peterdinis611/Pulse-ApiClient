@@ -4,12 +4,14 @@ pub mod agent_rag;
 pub mod collection_run;
 pub mod contract;
 pub mod curl;
+pub mod git_cmd;
 pub mod graphql;
 pub mod graphql_ws;
 pub mod inherit;
 pub mod json_assertions;
 pub mod json_diff;
 pub mod json_path;
+pub mod json_schema;
 pub mod mock_server;
 pub mod openapi_ops;
 pub mod path_params;
@@ -17,6 +19,7 @@ pub mod prepare;
 pub mod script_engine;
 pub mod secrets;
 pub mod simple_http;
+pub mod snippets;
 pub mod sse;
 pub mod test_runner;
 pub mod types;
@@ -42,9 +45,12 @@ pub use collection_run::{
     run_collection, run_collection_with_progress, CollectionRunInput, CollectionRunResult, CollectionRunStep,
 };
 pub use curl::{curl_to_payload, payload_to_curl};
+pub use git_cmd::{git_add, git_commit, git_diff_stat, git_status, GitFileStatus, GitStatus};
 pub use graphql::{
     build_body as build_graphql_body, build_body_raw as build_graphql_body_raw,
+    example_queries_from_summary as graphql_example_queries,
     format_response as format_graphql_response, list_operations as list_graphql_operations,
+    response_error_count as graphql_response_error_count,
     summarize_schema as summarize_graphql_schema, validate as validate_graphql, INTROSPECTION_QUERY,
 };
 pub use mock_server::{
@@ -55,13 +61,20 @@ pub use test_runner::{
     read_json_path, run_http_tests, run_pre_request_script, run_pre_request_script_with_env, EnvMutation,
     PreRequestResult, TestCaseResult, TestRunResult,
 };
-pub use contract::{breaking_diff, check_workspace, compare_to_schema};
-pub use json_diff::{compare as diff_compare, compare_raw as diff_compare_raw, pretty_any, unified_lines};
+pub use contract::{breaking_diff, check_workspace, compare_to_schema, ContractReport};
+pub use json_diff::{
+    compare as diff_compare, compare_raw as diff_compare_raw, compare_raw_report as diff_compare_raw_report,
+    compare_report as diff_compare_report, path_changes as diff_path_changes, pretty_any, unified_lines,
+};
+pub use json_schema::validate_json as validate_json_schema;
+pub use openapi_ops::{convert as openapi_convert, export_spec as openapi_export_spec, list_operations as openapi_list_operations};
 pub use prepare::{interpolate_request, to_http_payload};
+pub use snippets::generate as generate_snippet;
 pub use sse::{
     collect_sse, filter_events as filter_sse_events, latest_event_id as latest_sse_event_id,
     latest_retry_ms as latest_sse_retry_ms, next_event_boundary, parse_sse_block, parse_sse_text,
-    ws_close_code_label, ParsedSseEvent, SseBuffer, SseCollectOptions,
+    summarize_events as summarize_sse_events, ws_close_code_label, ParsedSseEvent, SseBuffer,
+    SseCollectOptions,
 };
 pub use types::{AuthConfig, EnvVariable, HttpRequestPayload, HttpResponsePayload, KeyValue};
 pub use vars::substitute_variables;

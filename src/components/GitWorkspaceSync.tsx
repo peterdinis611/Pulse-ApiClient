@@ -2,12 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import { AppMachineContext } from "@/machines/AppProvider";
 import {
   getGitWorkspaceRoot,
+  getGitWorkspaceStatus,
   listGitAgentHistory,
   listGitPending,
   listenGitWorkspaceChanges,
   loadGitWorkspace,
   mapGitWorkspace,
 } from "@/lib/git-workspace";
+import {
+  clearGitWorkspaceUiStatus,
+  patchGitWorkspaceUiStatus,
+} from "@/lib/git-workspace-status";
 import { importHistoryEntries } from "@/lib/history-client";
 import { prettyMaybeJson, unifiedLineDiff } from "@/lib/line-diff";
 import { Button } from "@/components/ui/button";
@@ -24,16 +29,52 @@ export function GitWorkspaceSync() {
   );
   const [pending, setPending] = useState<string[]>([]);
   const lastDisk = useRef(new Map<string, string>());
+  const lastBranch = useRef<string | null>(null);
   const reloadTimer = useRef(0);
 
   useEffect(() => {
     let mounted = true;
     let unlisten: (() => void) | undefined;
 
-    const reload = async () => {
+    const refreshStatus = async (root: string) => {
+      try {
+        const status = await getGitWorkspaceStatus(root);
+        if (!mounted) return;
+        const branchChanged =
+          lastBranch.current != null && lastBranch.current !== status.branch;
+        lastBranch.current = status.branch;
+        patchGitWorkspaceUiStatus({
+          root,
+          branch: status.branch,
+          dirty: status.dirty,
+          ahead: status.ahead,
+          behind: status.behind,
+          conflictedPaths: status.conflicted,
+          files: status.files ?? [],
+        });
+        return branchChanged;
+      } catch {
+        if (mounted) {
+          patchGitWorkspaceUiStatus({
+            root,
+            branch: null,
+            dirty: false,
+            ahead: 0,
+            behind: 0,
+            conflictedPaths: [],
+            files: [],
+          });
+        }
+        return false;
+      }
+    };
+
+    const reload = async (force = false) => {
       const root = getGitWorkspaceRoot();
       if (!root || !mounted) return;
+      patchGitWorkspaceUiStatus({ syncing: true, root });
       try {
+        const branchChanged = await refreshStatus(root);
         const ctx = actorRef.getSnapshot().context;
         const { collections, tabs } = {
           collections: ctx.persisted.collections,
@@ -44,19 +85,25 @@ export function GitWorkspaceSync() {
         const active = tabs.find((tab) => tab.savedRequestId);
         const saved = collections.find((item) => item.id === active?.savedRequestId);
         const diskRequest = mapped.collections.find((item) => item.id === saved?.id)?.request;
-        if (active && saved && diskRequest) {
+        if (!force && !branchChanged && active && saved && diskRequest) {
           const disk = JSON.stringify(diskRequest);
           const editor = JSON.stringify(active.request);
           const previous = lastDisk.current.get(saved.id);
           if (previous && disk !== previous && editor !== previous) {
-            setConflict({
+            const nextConflict = {
               disk: prettyMaybeJson(disk),
               editor: prettyMaybeJson(editor),
               filePath: saved.filePath ?? saved.name,
-            });
+            };
+            setConflict(nextConflict);
+            patchGitWorkspaceUiStatus({ conflict: nextConflict, syncing: false });
             return;
           }
           lastDisk.current.set(saved.id, disk);
+        }
+        if (branchChanged) {
+          lastDisk.current.clear();
+          toast.info("Branch changed", `Reloaded collections for ${lastBranch.current ?? "HEAD"}`);
         }
         const history = await listGitAgentHistory(root).catch(() => []);
         const mappedHistory: HistoryEntry[] = [];
@@ -76,12 +123,28 @@ export function GitWorkspaceSync() {
           await importHistoryEntries(mappedHistory).catch(() => 0);
         }
         const nextPending = await listGitPending(root).catch(() => []);
-        if (mounted) setPending(nextPending);
+        if (mounted) {
+          setPending(nextPending);
+          setConflict(null);
+          patchGitWorkspaceUiStatus({
+            pendingCount: nextPending.length,
+            conflict: null,
+          });
+        }
         actorRef.send({ type: "LOAD_GIT_WORKSPACE", ...mapped });
       } catch (error) {
         console.warn("Git workspace reload failed:", error);
+      } finally {
+        if (mounted) patchGitWorkspaceUiStatus({ syncing: false });
       }
     };
+
+    const root = getGitWorkspaceRoot();
+    if (root) {
+      void reload(true);
+    } else {
+      clearGitWorkspaceUiStatus();
+    }
 
     void listenGitWorkspaceChanges(async () => {
       if (!mounted) return;
@@ -103,7 +166,9 @@ export function GitWorkspaceSync() {
 
   if (!conflict && pending.length === 0) return null;
 
-  const diffRows = conflict ? unifiedLineDiff(conflict.disk, conflict.editor).filter((row) => row.kind !== "same") : [];
+  const diffRows = conflict
+    ? unifiedLineDiff(conflict.disk, conflict.editor).filter((row) => row.kind !== "same")
+    : [];
 
   return (
     <div className="pointer-events-auto fixed bottom-6 right-6 z-50 w-[min(420px,calc(100vw-2rem))] space-y-3">
@@ -133,7 +198,15 @@ export function GitWorkspaceSync() {
             </pre>
           )}
           <div className="mt-3 flex justify-end gap-2">
-            <Button type="button" variant="ghost" size="sm" onClick={() => setConflict(null)}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setConflict(null);
+                patchGitWorkspaceUiStatus({ conflict: null });
+              }}
+            >
               Keep editor
             </Button>
             <Button
@@ -141,6 +214,7 @@ export function GitWorkspaceSync() {
               size="sm"
               onClick={() => {
                 setConflict(null);
+                patchGitWorkspaceUiStatus({ conflict: null });
                 const root = getGitWorkspaceRoot();
                 if (!root) return;
                 void loadGitWorkspace(root)

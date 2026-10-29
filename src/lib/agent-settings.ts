@@ -1,4 +1,11 @@
 import { readStorageItem, writeStorageItem } from "@/lib/app-config";
+import { canUseTauriIpc } from "@/lib/tauri-runtime";
+import {
+  AGENT_LLM_SECRET_KEY,
+  deleteSecret,
+  getSecret,
+  setSecret,
+} from "@/lib/secrets-ipc";
 
 const KEY = "agent-settings-v1";
 const LEGACY_LLM_KEY = "agent-llm-v1";
@@ -22,11 +29,19 @@ export type AgentCapability = (typeof AGENT_CAPABILITIES)[number];
 
 export type AgentLlmProvider = "none" | "openai" | "anthropic";
 
+/** Which high-level agent jobs may use the cloud LLM. */
+export type AgentCloudJob = "explain" | "unknown" | "tools";
+
 export type AgentSettings = {
   enabled: boolean;
   capabilities: Record<AgentCapability, boolean>;
   provider: AgentLlmProvider;
+  /** In-memory / session value — never written to localStorage when keychain is available. */
   apiKey: string;
+  /** When true, never call cloud APIs even if a key is set. */
+  offlineOnly: boolean;
+  /** Per-job cloud allowlist (ignored when offlineOnly or provider is none). */
+  cloudJobs: Record<AgentCloudJob, boolean>;
 };
 
 /** @deprecated Prefer AgentSettings — kept for existing imports. */
@@ -37,12 +52,24 @@ const ALL_ON = Object.fromEntries(AGENT_CAPABILITIES.map((id) => [id, true])) as
   boolean
 >;
 
+const DEFAULT_CLOUD_JOBS: Record<AgentCloudJob, boolean> = {
+  explain: true,
+  unknown: true,
+  tools: true,
+};
+
 const DEFAULTS: AgentSettings = {
   enabled: true,
   capabilities: { ...ALL_ON },
   provider: "none",
   apiKey: "",
+  offlineOnly: false,
+  cloudJobs: { ...DEFAULT_CLOUD_JOBS },
 };
+
+/** Session cache for the LLM key (keychain or web fallback). */
+let apiKeyCache = "";
+let hydrated = false;
 
 function normalizeCapabilities(
   raw: Partial<Record<AgentCapability, boolean>> | undefined,
@@ -55,23 +82,49 @@ function normalizeCapabilities(
   return next;
 }
 
+function normalizeCloudJobs(
+  raw: Partial<Record<AgentCloudJob, boolean>> | undefined,
+): Record<AgentCloudJob, boolean> {
+  const next = { ...DEFAULT_CLOUD_JOBS };
+  if (!raw || typeof raw !== "object") return next;
+  for (const id of Object.keys(DEFAULT_CLOUD_JOBS) as AgentCloudJob[]) {
+    if (typeof raw[id] === "boolean") next[id] = raw[id]!;
+  }
+  return next;
+}
+
+function parseProvider(value: unknown): AgentLlmProvider {
+  return value === "openai" || value === "anthropic" ? value : "none";
+}
+
 function parseSettings(raw: string | null): AgentSettings | null {
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as Partial<AgentSettings> & {
-      provider?: string;
-      apiKey?: string;
-    };
+    const parsed = JSON.parse(raw) as Partial<AgentSettings>;
     return {
       enabled: typeof parsed.enabled === "boolean" ? parsed.enabled : DEFAULTS.enabled,
       capabilities: normalizeCapabilities(parsed.capabilities),
-      provider:
-        parsed.provider === "openai" || parsed.provider === "anthropic" ? parsed.provider : "none",
+      provider: parseProvider(parsed.provider),
       apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : "",
+      offlineOnly: typeof parsed.offlineOnly === "boolean" ? parsed.offlineOnly : false,
+      cloudJobs: normalizeCloudJobs(parsed.cloudJobs),
     };
   } catch {
     return null;
   }
+}
+
+function persistMeta(settings: AgentSettings): void {
+  const forDisk = {
+    enabled: settings.enabled,
+    capabilities: settings.capabilities,
+    provider: settings.provider,
+    // Never persist the real key when desktop keychain is available.
+    apiKey: canUseTauriIpc() ? "" : settings.apiKey,
+    offlineOnly: settings.offlineOnly,
+    cloudJobs: settings.cloudJobs,
+  };
+  writeStorageItem(KEY, JSON.stringify(forDisk));
 }
 
 export function defaultAgentSettings(): AgentSettings {
@@ -80,6 +133,8 @@ export function defaultAgentSettings(): AgentSettings {
     capabilities: { ...ALL_ON },
     provider: DEFAULTS.provider,
     apiKey: DEFAULTS.apiKey,
+    offlineOnly: DEFAULTS.offlineOnly,
+    cloudJobs: { ...DEFAULT_CLOUD_JOBS },
   };
 }
 
@@ -87,7 +142,8 @@ export function loadAgentSettings(): AgentSettings {
   try {
     const rawCurrent = readStorageItem(KEY);
     if (rawCurrent != null) {
-      return parseSettings(rawCurrent) ?? defaultAgentSettings();
+      const parsed = parseSettings(rawCurrent) ?? defaultAgentSettings();
+      return { ...parsed, apiKey: apiKeyCache || parsed.apiKey };
     }
 
     const legacyRaw = readStorageItem(LEGACY_LLM_KEY);
@@ -98,13 +154,45 @@ export function loadAgentSettings(): AgentSettings {
         provider: legacy?.provider ?? "none",
         apiKey: legacy?.apiKey ?? "",
       };
-      writeStorageItem(KEY, JSON.stringify(migrated));
+      apiKeyCache = migrated.apiKey;
+      persistMeta(migrated);
       return migrated;
     }
-    return defaultAgentSettings();
+    return { ...defaultAgentSettings(), apiKey: apiKeyCache };
   } catch {
-    return defaultAgentSettings();
+    return { ...defaultAgentSettings(), apiKey: apiKeyCache };
   }
+}
+
+/** Load LLM API key from OS keychain into the session cache (desktop). */
+export async function hydrateAgentApiKey(): Promise<string> {
+  if (hydrated && apiKeyCache) return apiKeyCache;
+  if (canUseTauriIpc()) {
+    try {
+      const fromKeychain = await getSecret(AGENT_LLM_SECRET_KEY);
+      if (fromKeychain?.trim()) {
+        apiKeyCache = fromKeychain;
+        hydrated = true;
+        return apiKeyCache;
+      }
+      // Migrate plaintext leftover from older builds into keychain once.
+      const disk = parseSettings(readStorageItem(KEY));
+      if (disk?.apiKey?.trim()) {
+        await setSecret(AGENT_LLM_SECRET_KEY, disk.apiKey.trim());
+        apiKeyCache = disk.apiKey.trim();
+        persistMeta({ ...disk, apiKey: "" });
+        hydrated = true;
+        return apiKeyCache;
+      }
+    } catch {
+      // keep cache
+    }
+  } else {
+    const disk = parseSettings(readStorageItem(KEY));
+    apiKeyCache = disk?.apiKey ?? "";
+  }
+  hydrated = true;
+  return apiKeyCache;
 }
 
 export function saveAgentSettings(patch: Partial<AgentSettings>): AgentSettings {
@@ -119,10 +207,46 @@ export function saveAgentSettings(patch: Partial<AgentSettings>): AgentSettings 
         ? patch.provider
         : current.provider,
     apiKey: typeof patch.apiKey === "string" ? patch.apiKey : current.apiKey,
+    offlineOnly:
+      typeof patch.offlineOnly === "boolean" ? patch.offlineOnly : current.offlineOnly,
+    cloudJobs: patch.cloudJobs ? normalizeCloudJobs(patch.cloudJobs) : current.cloudJobs,
   };
-  writeStorageItem(KEY, JSON.stringify(next));
+  apiKeyCache = next.apiKey;
+  persistMeta(next);
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event(AGENT_SETTINGS_EVENT));
+  }
+  if (canUseTauriIpc() && typeof patch.apiKey === "string") {
+    void (async () => {
+      try {
+        if (patch.apiKey!.trim()) {
+          await setSecret(AGENT_LLM_SECRET_KEY, patch.apiKey!.trim());
+        } else {
+          await deleteSecret(AGENT_LLM_SECRET_KEY);
+        }
+      } catch {
+        // Settings meta already saved; keychain failure is non-fatal in UI.
+      }
+    })();
+  }
+  return next;
+}
+
+/** Awaitable save that waits for keychain write on desktop. */
+export async function saveAgentSettingsAsync(
+  patch: Partial<AgentSettings>,
+): Promise<AgentSettings> {
+  const next = saveAgentSettings(patch);
+  if (canUseTauriIpc() && typeof patch.apiKey === "string") {
+    try {
+      if (patch.apiKey.trim()) {
+        await setSecret(AGENT_LLM_SECRET_KEY, patch.apiKey.trim());
+      } else {
+        await deleteSecret(AGENT_LLM_SECRET_KEY);
+      }
+    } catch {
+      // ignore
+    }
   }
   return next;
 }
@@ -138,9 +262,7 @@ export function isAgentCapabilityEnabled(
   return settings.enabled && settings.capabilities[capability] !== false;
 }
 
-export function capabilityForIntent(
-  kind: string,
-): AgentCapability | null {
+export function capabilityForIntent(kind: string): AgentCapability | null {
   if (
     kind === "remember" ||
     kind === "recall" ||
@@ -156,6 +278,27 @@ export function capabilityForIntent(
     return kind as AgentCapability;
   }
   return null;
+}
+
+export function cloudJobForIntent(kind: string): AgentCloudJob | null {
+  if (kind === "explain_response" || kind === "explain_tests") return "explain";
+  if (kind === "unknown") return "unknown";
+  if (kind === "tools" || kind === "tool_call") return "tools";
+  return null;
+}
+
+/** Whether cloud LLM may run for this job under current settings. */
+export function canUseCloudForJob(
+  job: AgentCloudJob,
+  settings = loadAgentSettings(),
+): boolean {
+  if (settings.offlineOnly) return false;
+  if (!canUseAgentLlm(settings.provider, settings.apiKey)) return false;
+  return settings.cloudJobs[job] !== false;
+}
+
+export function canUseAgentLlm(provider: AgentLlmProvider, apiKey: string): boolean {
+  return provider !== "none" && apiKey.trim().length > 0;
 }
 
 /** @deprecated Use loadAgentSettings(). */

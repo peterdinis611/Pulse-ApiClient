@@ -295,3 +295,57 @@ pub fn git_workspace_append_agent_history(
     }
     Ok(())
 }
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitFileStatusDto {
+    pub path: String,
+    pub xy: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitStatusDto {
+    pub branch: String,
+    pub dirty: bool,
+    pub ahead: i32,
+    pub behind: i32,
+    pub conflicted: Vec<String>,
+    #[serde(default)]
+    pub files: Vec<GitFileStatusDto>,
+}
+
+#[tauri::command]
+pub fn git_workspace_status(root: String) -> Result<GitStatusDto, String> {
+    let status = pulse_core::git_status(&root)?;
+    Ok(GitStatusDto {
+        branch: status.branch,
+        dirty: status.dirty,
+        ahead: status.ahead,
+        behind: status.behind,
+        conflicted: status.conflicted,
+        files: status
+            .files
+            .into_iter()
+            .map(|f| GitFileStatusDto {
+                path: f.path,
+                xy: f.xy,
+            })
+            .collect(),
+    })
+}
+
+#[tauri::command]
+pub fn git_workspace_add(root: String, paths: Vec<String>) -> Result<(), String> {
+    pulse_core::git_add(&root, &paths)
+}
+
+#[tauri::command]
+pub fn git_workspace_commit(root: String, message: String) -> Result<String, String> {
+    pulse_core::git_commit(&root, &message)
+}
+
+#[tauri::command]
+pub fn git_workspace_diff_stat(root: String) -> Result<String, String> {
+    pulse_core::git_diff_stat(&root)
+}

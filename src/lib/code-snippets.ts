@@ -1,5 +1,7 @@
+import { invoke } from "@tauri-apps/api/core";
 import { requestToCurl } from "./curl";
 import { prepareRequest } from "./http-client";
+import { canUseTauriIpc } from "./tauri-runtime";
 import type { ApiRequest, Environment } from "@/types";
 
 export type CodeSnippetId =
@@ -341,4 +343,50 @@ export function requestToSnippet(
     case "swift":
       return toSwift(prepared);
   }
+}
+
+/** Prefer pulse-core via Tauri when available (go stays JS-only). */
+export async function requestToSnippetAsync(
+  id: CodeSnippetId,
+  request: ApiRequest,
+  environment: Environment | null = null,
+): Promise<string> {
+  if (id === "go") return requestToSnippet(id, request, environment);
+  if (canUseTauriIpc()) {
+    try {
+      const prepared = prepareRequest(request, environment);
+      const payload = {
+        method: prepared.method,
+        url: prepared.url,
+        headers: prepared.headers.filter((item) => item.enabled && item.key.trim()),
+        query: prepared.query.filter((item) => item.enabled && item.key.trim()),
+        bodyKind: prepared.bodyKind,
+        body: prepared.body,
+        form: prepared.form.filter((item) => item.enabled && item.key.trim()),
+        multipart: prepared.multipart
+          .filter((item) => item.enabled && item.key.trim())
+          .map((item) => ({
+            key: item.key.trim(),
+            enabled: true,
+            fieldType: item.fieldType,
+            value: item.value,
+            fileName: item.fileName ?? null,
+            mimeType: item.mimeType ?? null,
+          })),
+        auth: {
+          authType: prepared.auth.authType === "inherit" ? "none" : prepared.auth.authType,
+          bearerToken: prepared.auth.bearerToken,
+          basicUsername: prepared.auth.basicUsername,
+          basicPassword: prepared.auth.basicPassword,
+          apiKeyKey: prepared.auth.apiKeyKey,
+          apiKeyValue: prepared.auth.apiKeyValue,
+          apiKeyIn: prepared.auth.apiKeyIn,
+        },
+      };
+      return await invoke<string>("generate_code_snippet", { payload, format: id });
+    } catch {
+      // fall through
+    }
+  }
+  return requestToSnippet(id, request, environment);
 }

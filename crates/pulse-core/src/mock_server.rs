@@ -37,6 +37,15 @@ pub struct MockRoute {
     pub headers: Vec<MockHeader>,
     #[serde(default)]
     pub example_name: String,
+    /// Require these query params (key → value). Empty = any.
+    #[serde(default)]
+    pub match_query: Vec<MockHeader>,
+    /// Require these request headers (case-insensitive keys).
+    #[serde(default)]
+    pub match_headers: Vec<MockHeader>,
+    /// Require substring in request body.
+    #[serde(default)]
+    pub match_body_includes: String,
 }
 
 fn default_status() -> u16 {
@@ -218,11 +227,14 @@ fn match_route<'a>(request: &'a str, routes: &'a [MockRoute]) -> Option<&'a Mock
     let (path_raw, query_raw) = target.split_once('?').unwrap_or((target, ""));
     let path = path_raw.split('?').next().unwrap_or("/");
     let query = parse_query(query_raw);
+    let req_headers = parse_request_headers(request);
+    let req_body = request_body(request);
     let candidates: Vec<&MockRoute> = routes
         .iter()
         .filter(|route| {
             route.method.eq_ignore_ascii_case(&method)
                 && paths_equal(&route.path, path)
+                && matchers_pass(route, &query, &req_headers, req_body)
         })
         .collect();
     if candidates.is_empty() {
@@ -238,11 +250,78 @@ fn match_route<'a>(request: &'a str, routes: &'a [MockRoute]) -> Option<&'a Mock
             return Some(*hit);
         }
     }
-    candidates
+    // Prefer more specific matcher sets.
+    let mut ranked = candidates;
+    ranked.sort_by_key(|route| {
+        -(route.match_query.len() as i32
+            + route.match_headers.len() as i32
+            + if route.match_body_includes.trim().is_empty() {
+                0
+            } else {
+                1
+            })
+    });
+    ranked
         .iter()
         .copied()
         .find(|route| (200..300).contains(&route.status))
-        .or_else(|| candidates.first().copied())
+        .or_else(|| ranked.first().copied())
+}
+
+fn matchers_pass(
+    route: &MockRoute,
+    query: &std::collections::HashMap<String, String>,
+    headers: &std::collections::HashMap<String, String>,
+    body: &str,
+) -> bool {
+    for item in &route.match_query {
+        let key = item.key.trim().to_ascii_lowercase();
+        if key.is_empty() {
+            continue;
+        }
+        match query.get(&key) {
+            Some(value) if value == &item.value => {}
+            _ => return false,
+        }
+    }
+    for item in &route.match_headers {
+        let key = item.key.trim().to_ascii_lowercase();
+        if key.is_empty() {
+            continue;
+        }
+        match headers.get(&key) {
+            Some(value) if value.eq_ignore_ascii_case(item.value.trim()) || value == &item.value => {}
+            _ => return false,
+        }
+    }
+    let needle = route.match_body_includes.trim();
+    if !needle.is_empty() && !body.contains(needle) {
+        return false;
+    }
+    true
+}
+
+fn parse_request_headers(request: &str) -> std::collections::HashMap<String, String> {
+    let mut map = std::collections::HashMap::new();
+    for line in request.lines().skip(1) {
+        if line.trim().is_empty() {
+            break;
+        }
+        if let Some((key, value)) = line.split_once(':') {
+            map.insert(key.trim().to_ascii_lowercase(), value.trim().to_string());
+        }
+    }
+    map
+}
+
+fn request_body(request: &str) -> &str {
+    if let Some(idx) = request.find("\r\n\r\n") {
+        &request[idx + 4..]
+    } else if let Some(idx) = request.find("\n\n") {
+        &request[idx + 2..]
+    } else {
+        ""
+    }
 }
 
 fn example_matches(route: &MockRoute, wanted: &str) -> bool {
@@ -324,6 +403,9 @@ where
                         name.to_string()
                     }
                 },
+                match_query: Vec::new(),
+                match_headers: Vec::new(),
+                match_body_includes: String::new(),
             });
         }
     }
@@ -407,7 +489,35 @@ mod tests {
                 value: "nope".into(),
             }],
             example_name: name.into(),
+            match_query: Vec::new(),
+            match_headers: Vec::new(),
+            match_body_includes: String::new(),
         }
+    }
+
+    #[test]
+    fn matchers_require_query_header_and_body() {
+        let mut matched = route("POST", "/pets", 200, "ok", "{\"ok\":true}");
+        matched.match_query = vec![MockHeader {
+            key: "role".into(),
+            value: "admin".into(),
+        }];
+        matched.match_headers = vec![MockHeader {
+            key: "x-tenant".into(),
+            value: "acme".into(),
+        }];
+        matched.match_body_includes = "\"name\"".into();
+        let routes = [matched];
+        let hit = match_route(
+            "POST /pets?role=admin HTTP/1.1\r\nx-tenant: acme\r\n\r\n{\"name\":\"a\"}",
+            &routes,
+        );
+        assert!(hit.is_some());
+        let miss = match_route(
+            "POST /pets?role=user HTTP/1.1\r\nx-tenant: acme\r\n\r\n{\"name\":\"a\"}",
+            &routes,
+        );
+        assert!(miss.is_none());
     }
 
     #[tokio::test]

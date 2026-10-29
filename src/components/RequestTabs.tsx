@@ -28,8 +28,13 @@ import { VariableField } from "@/components/VariableField";
 import { exchangeOAuthToken } from "@/lib/http-client";
 import {
   buildOAuthAuthorizeUrl,
+  consumeOAuthState,
   extractAuthCodeFromRedirect,
+  extractOAuthStateFromRedirect,
+  generateOAuthState,
   generatePkcePair,
+  startOAuthDeviceFlow,
+  storeOAuthState,
 } from "@/lib/oauth";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -38,7 +43,7 @@ import { canUseTauriIpc } from "@/lib/tauri-runtime";
 const CORS_HEADER_PRESETS: Array<{ key: string; value: string; label: string }> = [
   { key: "Origin", value: "http://localhost:5173", label: "Origin" },
   { key: "Referer", value: "http://localhost:5173/", label: "Referer" },
-  { key: "User-Agent", value: "Mozilla/5.0 (compatible; PulseAPI/2.0)", label: "User-Agent" },
+  { key: "User-Agent", value: "Mozilla/5.0 (compatible; PulseAPI/2.4)", label: "User-Agent" },
   {
     key: "Access-Control-Request-Method",
     value: "POST",
@@ -628,6 +633,7 @@ export function RequestTabs() {
                       <SelectContent>
                         <SelectItem value="client_credentials">Client credentials</SelectItem>
                         <SelectItem value="authorization_code">Authorization code + PKCE</SelectItem>
+                        <SelectItem value="device_code">Device code</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -642,16 +648,25 @@ export function RequestTabs() {
                       placeholder="https://auth.example.com/oauth/token"
                     />
                   </div>
-                  {request.auth.oauthGrantType === "authorization_code" && (
+                  {(request.auth.oauthGrantType === "authorization_code" ||
+                    request.auth.oauthGrantType === "device_code") && (
                     <div className="space-y-2 md:col-span-2">
-                      <Label>Authorize URL</Label>
+                      <Label>
+                        {request.auth.oauthGrantType === "device_code"
+                          ? "Device authorization URL"
+                          : "Authorize URL"}
+                      </Label>
                       <VariableField
                         environment={variableEnvironment}
                         value={request.auth.oauthAuthorizeUrl}
                         onChange={(oauthAuthorizeUrl) =>
                           updateRequest({ auth: { ...request.auth, oauthAuthorizeUrl } })
                         }
-                        placeholder="https://auth.example.com/oauth/authorize"
+                        placeholder={
+                          request.auth.oauthGrantType === "device_code"
+                            ? "https://auth.example.com/oauth/device/code"
+                            : "https://auth.example.com/oauth/authorize"
+                        }
                       />
                     </div>
                   )}
@@ -734,6 +749,8 @@ export function RequestTabs() {
                           void (async () => {
                             try {
                               const { verifier, challenge } = await generatePkcePair();
+                              const state = generateOAuthState();
+                              storeOAuthState(request.id, state);
                               updateRequest({
                                 auth: { ...request.auth, oauthCodeVerifier: verifier },
                               });
@@ -743,9 +760,13 @@ export function RequestTabs() {
                                 redirectUri: request.auth.oauthRedirectUri,
                                 scope: request.auth.oauthScope,
                                 codeChallenge: challenge,
+                                state,
                               });
                               window.open(url, "_blank", "noopener,noreferrer");
-                              toast.success("Opened authorize URL", "Sign in, then paste the redirect URL or code below.");
+                              toast.success(
+                                "Opened authorize URL",
+                                "Sign in, then paste the redirect URL or code below.",
+                              );
                             } catch (error) {
                               toast.error(
                                 "Could not start PKCE flow",
@@ -758,15 +779,107 @@ export function RequestTabs() {
                         Open authorize URL
                       </Button>
                     )}
+                    {request.auth.oauthGrantType === "device_code" && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={oauthBusy || !canUseTauriIpc()}
+                        onClick={() => {
+                          void (async () => {
+                            setOauthBusy(true);
+                            try {
+                              const started = await startOAuthDeviceFlow({
+                                deviceAuthorizationUrl: request.auth.oauthAuthorizeUrl,
+                                clientId: request.auth.oauthClientId,
+                                clientSecret: request.auth.oauthClientSecret || null,
+                                scope: request.auth.oauthScope || null,
+                              });
+                              updateRequest({
+                                auth: {
+                                  ...request.auth,
+                                  oauthAuthCode: started.deviceCode,
+                                },
+                              });
+                              const verify =
+                                started.verificationUriComplete || started.verificationUri;
+                              window.open(verify, "_blank", "noopener,noreferrer");
+                              toast.success(
+                                `Enter code ${started.userCode}`,
+                                "Complete sign-in, then click Fetch token to poll.",
+                              );
+                              const deadline = Date.now() + started.expiresIn * 1000;
+                              const intervalMs = Math.max(started.interval, 2) * 1000;
+                              while (Date.now() < deadline) {
+                                await new Promise((r) => setTimeout(r, intervalMs));
+                                try {
+                                  const token = await exchangeOAuthToken({
+                                    grantType: "device_code",
+                                    tokenUrl: request.auth.oauthTokenUrl,
+                                    clientId: request.auth.oauthClientId,
+                                    clientSecret: request.auth.oauthClientSecret || null,
+                                    deviceCode: started.deviceCode,
+                                  });
+                                  updateRequest({
+                                    auth: {
+                                      ...request.auth,
+                                      bearerToken: token.accessToken,
+                                      oauthRefreshToken:
+                                        token.refreshToken ?? request.auth.oauthRefreshToken,
+                                      oauthAuthCode: started.deviceCode,
+                                    },
+                                  });
+                                  toast.success("OAuth device token fetched");
+                                  return;
+                                } catch (error) {
+                                  const message =
+                                    error instanceof Error ? error.message : String(error);
+                                  if (
+                                    /authorization_pending|slow_down/i.test(message) ||
+                                    message.includes("400")
+                                  ) {
+                                    continue;
+                                  }
+                                  throw error;
+                                }
+                              }
+                              toast.error("Device flow timed out");
+                            } catch (error) {
+                              toast.error(
+                                "Device flow failed",
+                                error instanceof Error ? error.message : undefined,
+                              );
+                            } finally {
+                              setOauthBusy(false);
+                            }
+                          })();
+                        }}
+                      >
+                        {oauthBusy ? "Waiting…" : "Start device flow"}
+                      </Button>
+                    )}
                     <Button
                       type="button"
                       size="sm"
-                      disabled={oauthBusy || !canUseTauriIpc()}
+                      disabled={
+                        oauthBusy ||
+                        !canUseTauriIpc() ||
+                        request.auth.oauthGrantType === "device_code"
+                      }
                       onClick={() => {
                         void (async () => {
                           setOauthBusy(true);
                           try {
                             const grant = request.auth.oauthGrantType;
+                            if (grant === "authorization_code") {
+                              const expected = consumeOAuthState(request.id);
+                              const got = extractOAuthStateFromRedirect(
+                                request.auth.oauthAuthCode,
+                              );
+                              if (expected && got && expected !== got) {
+                                throw new Error("OAuth state mismatch — restart the PKCE flow");
+                              }
+                            }
                             const code =
                               grant === "authorization_code"
                                 ? extractAuthCodeFromRedirect(request.auth.oauthAuthCode) ??
@@ -787,6 +900,8 @@ export function RequestTabs() {
                                 grant === "authorization_code"
                                   ? request.auth.oauthCodeVerifier
                                   : null,
+                              deviceCode:
+                                grant === "device_code" ? request.auth.oauthAuthCode : null,
                             });
                             updateRequest({
                               auth: {

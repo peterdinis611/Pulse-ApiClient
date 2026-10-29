@@ -10,7 +10,7 @@ export type HttpMethod =
 
 export type BodyKind = "none" | "json" | "raw" | "form" | "multipart" | "graphql";
 export type AuthType = "none" | "inherit" | "bearer" | "basic" | "apiKey" | "oauth2";
-export type OAuth2GrantType = "client_credentials" | "authorization_code";
+export type OAuth2GrantType = "client_credentials" | "authorization_code" | "device_code";
 export type ApiKeyLocation = "header" | "query";
 export type MultipartFieldType = "text" | "file";
 export type SidebarTab = "collections" | "history" | "environments";
@@ -153,11 +153,19 @@ export type ApiRequest = {
   responseSchema?: string;
 };
 
+export type ExampleMatchers = {
+  query?: Array<{ key: string; value: string }>;
+  headers?: Array<{ key: string; value: string }>;
+  bodyIncludes?: string;
+};
+
 export type RequestExample = {
   id: string;
   name: string;
   savedAt: string;
   response: HttpResponse;
+  /** Optional mock-server matchers (beta). */
+  matchers?: ExampleMatchers;
 };
 
 export type HttpResponse = {

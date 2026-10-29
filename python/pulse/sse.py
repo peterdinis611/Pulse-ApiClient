@@ -37,6 +37,53 @@ def parse_text(text: str) -> list[dict[str, Any]]:
     return list(_iter_events_py(text))
 
 
+def filter_events(events: list[dict[str, Any]], event: str | None = None) -> list[dict[str, Any]]:
+    needle = (event or "").strip().lower()
+    if not needle:
+        return list(events)
+    return [
+        item
+        for item in events
+        if str(item.get("event") or "message").lower() == needle
+    ]
+
+
+def latest_event_id(events: list[dict[str, Any]]) -> str | None:
+    for item in reversed(events):
+        value = item.get("id")
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
+def latest_retry_ms(events: list[dict[str, Any]]) -> int | None:
+    for item in reversed(events):
+        value = item.get("retryMs")
+        if isinstance(value, int):
+            return value
+    return None
+
+
+def summarize(events: list[dict[str, Any]]) -> dict[str, Any]:
+    by_event: dict[str, int] = {}
+    for item in events:
+        key = str(item.get("event") or "message")
+        by_event[key] = by_event.get(key, 0) + 1
+    preview = []
+    for item in events[:5]:
+        data = str(item.get("data") or "")
+        if len(data) > 120:
+            data = data[:120] + "…"
+        preview.append({"event": item.get("event"), "id": item.get("id"), "data": data})
+    return {
+        "count": len(events),
+        "byEvent": by_event,
+        "latestId": latest_event_id(events),
+        "latestRetryMs": latest_retry_ms(events),
+        "dataPreview": preview,
+    }
+
+
 def _parse_block_py(block: str) -> dict[str, Any] | None:
     event = None
     event_id = None

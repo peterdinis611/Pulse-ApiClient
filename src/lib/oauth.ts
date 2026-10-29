@@ -12,6 +12,31 @@ export async function generatePkcePair(): Promise<{ verifier: string; challenge:
   return { verifier, challenge: toBase64Url(digest) };
 }
 
+export function generateOAuthState(): string {
+  return toBase64Url(crypto.getRandomValues(new Uint8Array(16)));
+}
+
+const STATE_PREFIX = "pulse-oauth-state:";
+
+export function storeOAuthState(requestId: string, state: string): void {
+  try {
+    sessionStorage.setItem(`${STATE_PREFIX}${requestId}`, state);
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+export function consumeOAuthState(requestId: string): string | null {
+  try {
+    const key = `${STATE_PREFIX}${requestId}`;
+    const value = sessionStorage.getItem(key);
+    sessionStorage.removeItem(key);
+    return value;
+  } catch {
+    return null;
+  }
+}
+
 export function buildOAuthAuthorizeUrl(input: {
   authorizeUrl: string;
   clientId: string;
@@ -38,8 +63,46 @@ export function extractAuthCodeFromRedirect(input: string): string | null {
     const url = new URL(trimmed);
     return url.searchParams.get("code");
   } catch {
-    // bare code
     if (!trimmed.includes("=") && !trimmed.includes("://")) return trimmed;
     return null;
   }
+}
+
+export function extractOAuthStateFromRedirect(input: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  try {
+    return new URL(trimmed).searchParams.get("state");
+  } catch {
+    return null;
+  }
+}
+
+export type OAuthDeviceCodeStart = {
+  deviceCode: string;
+  userCode: string;
+  verificationUri: string;
+  verificationUriComplete?: string | null;
+  expiresIn: number;
+  interval: number;
+};
+
+export async function startOAuthDeviceFlow(input: {
+  deviceAuthorizationUrl: string;
+  clientId: string;
+  scope?: string | null;
+  clientSecret?: string | null;
+}): Promise<OAuthDeviceCodeStart> {
+  const { invokeEffect } = await import("./effect/tauri");
+  const { runEffect } = await import("./effect/run");
+  return runEffect(
+    invokeEffect<OAuthDeviceCodeStart>("start_oauth_device_flow", {
+      request: {
+        deviceAuthorizationUrl: input.deviceAuthorizationUrl,
+        clientId: input.clientId,
+        scope: input.scope ?? null,
+        clientSecret: input.clientSecret ?? null,
+      },
+    }),
+  );
 }

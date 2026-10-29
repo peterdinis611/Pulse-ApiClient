@@ -366,6 +366,60 @@ export const CHANGELOG: ChangelogRelease[] = [
       },
     ],
   },
+  {
+    version: "2.4.0",
+    date: "2026-10-17",
+    title: {
+      en: "Agent tools, Git status & runner dashboard",
+      sk: "Agent tools, Git status a runner dashboard",
+    },
+    summary: {
+      en: "Tool-calling agent with confirm, streaming cloud replies, richer RAG citations, Git dirty/branch chips, virtualized explorer, and OAuth device + PKCE polish.",
+      sk: "Agent s tool-calling a confirm, streamované cloud odpovede, bohatšie RAG citácie, Git dirty/branch chipy, virtualizovaný explorer a OAuth device + PKCE polish.",
+    },
+    changes: [
+      {
+        id: "agent-tools-stream",
+        title: { en: "Agent tools & streaming", sk: "Agent tools a streaming" },
+        detail: {
+          en: "LLM can propose send, run collection, and remember via tools with UI confirm. Offline-only mode and per-job cloud toggles; OpenAI/Anthropic SSE streams into the chat.",
+          sk: "LLM môže navrhnúť send, run collection a remember cez tools s UI confirm. Offline-only režim a per-job cloud prepínače; OpenAI/Anthropic SSE streamuje do chatu.",
+        },
+      },
+      {
+        id: "rag-citations",
+        title: { en: "Richer RAG citations", sk: "Bohatšie RAG citácie" },
+        detail: {
+          en: "Citations carry headers, query, and body from history — open and send with the full request shape, not just method + URL.",
+          sk: "Citácie nesú headers, query a body z histórie — otvoríš a odošleš celý request, nie len method + URL.",
+        },
+      },
+      {
+        id: "git-workspace-ui",
+        title: { en: "Git dirty, branch & conflicts", sk: "Git dirty, branch a konflikty" },
+        detail: {
+          en: "StatusBar shows branch + dirty/synced. Branch switches reload collections. Explorer surfaces disk conflicts with a line diff before reload.",
+          sk: "StatusBar ukazuje branch + dirty/synced. Prepnutie branchu znovu načíta kolekcie. Explorer ukáže disk konflikty s line diffom pred reloadom.",
+        },
+      },
+      {
+        id: "runner-oauth",
+        title: { en: "Runner timeline & OAuth device", sk: "Runner timeline a OAuth device" },
+        detail: {
+          en: "Collection run results include a pass/fail timeline and Retry failed. OAuth adds device-code flow and PKCE state round-trip.",
+          sk: "Výsledky behu kolekcie majú pass/fail timeline a Retry failed. OAuth pridáva device-code flow a PKCE state round-trip.",
+        },
+      },
+      {
+        id: "release-channel",
+        title: { en: "Release channel", sk: "Kanál vydaní" },
+        detail: {
+          en: "Settings → Appearance: pick Stable or Beta for early feature flags.",
+          sk: "Nastavenia → Vzhľad: zvol Stable alebo Beta pre skoré feature flagy.",
+        },
+      },
+    ],
+  },
 ];
 
 export function parseSemver(version: string): [number, number, number] {

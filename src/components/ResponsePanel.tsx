@@ -69,9 +69,9 @@ export function ResponsePanel() {
     previewKind === "image" || previewKind === "pdf" || previewKind === "excel";
 
   const formattedBody = useMemo(() => {
-    if (!response) return { text: "", jsonValid: null as boolean | null };
+    if (!response || view !== "body") return { text: "", jsonValid: null as boolean | null };
     return formatResponseBody(response.body, response.contentType, bodyFormat);
-  }, [bodyFormat, response]);
+  }, [bodyFormat, response, view]);
 
   const bodyTruncated =
     !forceFullBody && formattedBody.text.length > MAX_BODY_CHARS
@@ -82,10 +82,10 @@ export function ResponsePanel() {
 
   const graphqlErrors = useMemo(
     () =>
-      response?.bodyEncoding === "base64"
+      view !== "body" || response?.bodyEncoding === "base64"
         ? []
         : (parseGraphqlResponse(response?.body ?? "")?.errors ?? []),
-    [response],
+    [response, view],
   );
 
   const examples = request?.examples ?? [];

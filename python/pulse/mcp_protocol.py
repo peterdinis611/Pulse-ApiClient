@@ -10,7 +10,7 @@ from typing import Any, Callable
 
 from .agent import run_agent
 from .bench import compare_bench, run_bench
-from .curl import curl_to_payload
+from .curl import curl_to_payload, payload_to_curl
 from .diff import compare as diff_compare
 from .envfile import load_data_rows
 from .export import to_run_input
@@ -34,8 +34,28 @@ from .mcp_resources import (
     write_out_json,
     write_out_text,
 )
+from .git_cmd import git_add as git_add_paths
+from .git_cmd import git_commit as git_commit_message
+from .git_cmd import git_diff_stat as git_diff_stat_root
+from .git_cmd import git_status as git_status_root
+from .memory import (
+    delete_fact as memory_delete_fact,
+    get_fact as memory_get_fact,
+    list_facts as memory_list_facts,
+    search_facts as memory_search_facts,
+    upsert_fact as memory_upsert_fact,
+)
+from .bruno import export_bruno, import_bruno, is_bruno_collection
+from .insomnia import export_insomnia, import_insomnia, is_insomnia_export
 from .openapi import convert as convert_openapi
 from .openapi import export_spec, load_spec
+from .postman import export_postman, import_postman, is_postman_collection
+from .rag import (
+    format_rag_hits_markdown,
+    rebuild_rag_index,
+    related_context as rag_related_context,
+    search_rag,
+)
 from .report import summarize_run
 from .schema import validate_json
 from .snippet import SNIPPET_FORMATS
@@ -64,7 +84,7 @@ from .workspace import (
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "pulse"
-SERVER_VERSION = "2.0.0"
+SERVER_VERSION = "2.4.0"
 
 PYTHON_ROOT = Path(__file__).resolve().parent.parent
 REPO_ROOT = PYTHON_ROOT.parent
@@ -420,6 +440,82 @@ def tool_har(arguments: dict) -> dict:
     return _written(payload, arguments.get("name") or path.stem)
 
 
+def _resolve_collection_path(arguments: dict) -> Path | None:
+    path = Path(arguments.get("path") or "")
+    if not path.is_file():
+        path = REPO_ROOT / path
+    return path if path.is_file() else None
+
+
+def tool_import_collection(arguments: dict) -> dict:
+    path = _resolve_collection_path(arguments)
+    if path is None:
+        return _text(f"No such collection file: {arguments.get('path')}", error=True)
+    raw = path.read_text()
+    fmt = str(arguments.get("format") or "auto")
+    if fmt == "auto":
+        if is_postman_collection(raw):
+            fmt = "postman"
+        elif is_bruno_collection(raw):
+            fmt = "bruno"
+        elif is_insomnia_export(raw):
+            fmt = "insomnia"
+        else:
+            return _text("Could not detect format; pass format=postman|bruno|insomnia", error=True)
+    try:
+        if fmt == "postman":
+            payload = import_postman(raw)
+        elif fmt == "bruno":
+            payload = import_bruno(raw)
+        elif fmt == "insomnia":
+            payload = import_insomnia(raw)
+        else:
+            return _text(f"Unsupported format: {fmt}", error=True)
+    except Exception as error:  # noqa: BLE001 — surface parse errors to MCP
+        return _text(str(error), error=True)
+    if arguments.get("inline"):
+        return _json(payload)
+    return _written(payload, arguments.get("name") or f"{path.stem}-{fmt}")
+
+
+def tool_export_collection(arguments: dict) -> dict:
+    fmt = str(arguments.get("format") or "")
+    if fmt not in {"postman", "bruno", "insomnia"}:
+        return _text("format must be postman|bruno|insomnia", error=True)
+    payload = arguments.get("collection")
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+    if not isinstance(payload, dict):
+        path = _resolve_collection_path(arguments)
+        if path is None:
+            return _text(f"No such collection file: {arguments.get('path')}", error=True)
+        payload = json.loads(path.read_text())
+    groups = payload.get("collectionGroups") or []
+    requests = payload.get("collections") or []
+    if not groups:
+        return _text("Pulse dump needs collectionGroups", error=True)
+    group = groups[0]
+    scoped = [
+        item
+        for item in requests
+        if not item.get("collectionId") or item.get("collectionId") == group.get("id")
+    ]
+    if fmt == "postman":
+        text = export_postman(group, scoped)
+    elif fmt == "bruno":
+        text = export_bruno(group, scoped)
+    else:
+        text = export_insomnia(group, scoped)
+    if arguments.get("inline"):
+        return _text(text)
+    written = write_out_text(
+        text,
+        str(arguments.get("name") or f"{group.get('name') or 'collection'}-{fmt}"),
+        ".json",
+    )
+    return _json({"path": _mcp_path(written), "format": fmt, "requests": len(scoped)})
+
+
 def tool_write_collection(arguments: dict) -> dict:
     payload = arguments.get("collection")
     if isinstance(payload, str):
@@ -563,6 +659,29 @@ def tool_curl(arguments: dict) -> dict:
     if arguments.get("send"):
         return _text(_native().send_once_json(json.dumps(payload)))
     return _json(payload)
+
+
+def tool_format_curl(arguments: dict) -> dict:
+    """Pulse HTTP payload JSON → cURL (Python formatter; native when available)."""
+    raw = arguments.get("request") or arguments.get("payload")
+    if raw is None:
+        return _text("request is required (Pulse HTTP payload object or JSON string)", error=True)
+    if isinstance(raw, str):
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError as error:
+            return _text(str(error), error=True)
+    elif isinstance(raw, dict):
+        payload = raw
+    else:
+        return _text("request must be an object or JSON string", error=True)
+    native = _native_optional()
+    if native is not None and hasattr(native, "format_curl_json"):
+        try:
+            return _text(native.format_curl_json(json.dumps(payload)))
+        except Exception:
+            pass
+    return _text(payload_to_curl(payload))
 
 
 def tool_agent(arguments: dict) -> dict:
@@ -816,7 +935,174 @@ def tool_workspace_status(_arguments: dict) -> dict:
     root, error = _require_workspace()
     if error or root is None:
         return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
-    return _json(workspace_status(root))
+    status = workspace_status(root)
+    try:
+        status["git"] = git_status_root(root)
+    except Exception:
+        status["git"] = None
+    try:
+        status["memoryFacts"] = len(memory_list_facts(root))
+    except Exception:
+        status["memoryFacts"] = 0
+    return _json(status)
+
+
+def tool_git_status(_arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    try:
+        return _json(git_status_root(root))
+    except Exception as exc:
+        return _text(str(exc), error=True)
+
+
+def tool_git_add(arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    if arguments.get("confirm") is not True:
+        return _text("git add requires confirm=true", error=True)
+    paths = [str(p) for p in (arguments.get("paths") or []) if p]
+    if not paths:
+        return _text("paths is required", error=True)
+    try:
+        git_add_paths(root, paths)
+    except Exception as exc:
+        return _text(str(exc), error=True)
+    return _text("ok")
+
+
+def tool_git_commit(arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    if arguments.get("confirm") is not True:
+        return _text("git commit requires confirm=true", error=True)
+    message = str(arguments.get("message") or "").strip()
+    try:
+        out = git_commit_message(root, message)
+    except Exception as exc:
+        return _text(str(exc), error=True)
+    return _text(out or "ok")
+
+
+def tool_git_diff_stat(_arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    try:
+        return _text(git_diff_stat_root(root))
+    except Exception as exc:
+        return _text(str(exc), error=True)
+
+
+def tool_memory_list(arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    scope = str(arguments.get("scope") or "").strip() or None
+    if scope and scope not in {"workspace", "local"}:
+        return _text("scope must be workspace or local", error=True)
+    return _json(memory_list_facts(root, scope))
+
+
+def tool_memory_get(arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    key = str(arguments.get("key") or "")
+    if not key:
+        return _text("key is required", error=True)
+    scope = str(arguments.get("scope") or "").strip() or None
+    fact = memory_get_fact(root, key, scope)
+    if fact is None:
+        return _text("Fact not found", error=True)
+    return _json(fact)
+
+
+def tool_memory_search(arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    query = str(arguments.get("query") or "")
+    if not query:
+        return _text("query is required", error=True)
+    return _json(memory_search_facts(root, query))
+
+
+def tool_memory_upsert(arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    if arguments.get("confirm") is not True:
+        return _text("memory upsert requires confirm=true", error=True)
+    key = str(arguments.get("key") or "")
+    value = str(arguments.get("value") or "")
+    scope = str(arguments.get("scope") or "workspace")
+    tags = [str(t) for t in (arguments.get("tags") or []) if t]
+    note = arguments.get("note")
+    try:
+        fact = memory_upsert_fact(
+            root,
+            key=key,
+            value=value,
+            scope=scope,
+            source="mcp",
+            tags=tags,
+            note=str(note) if note else None,
+        )
+    except ValueError as exc:
+        return _text(str(exc), error=True)
+    return _json(fact)
+
+
+def tool_memory_delete(arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    if arguments.get("confirm") is not True:
+        return _text("memory delete requires confirm=true", error=True)
+    key = str(arguments.get("key") or "")
+    if not key:
+        return _text("key is required", error=True)
+    scope = str(arguments.get("scope") or "").strip() or None
+    if memory_delete_fact(root, key, scope):
+        return _text("ok")
+    return _text("Fact not found", error=True)
+
+
+def tool_rag_search(arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    query = str(arguments.get("query") or "")
+    if not query:
+        return _text("query is required", error=True)
+    limit = int(arguments.get("limit") or 8)
+    hits = search_rag(root, query, limit)
+    if arguments.get("markdown") is False:
+        return _json(hits)
+    return _text(format_rag_hits_markdown(hits, query))
+
+
+def tool_rag_reindex(_arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    count = rebuild_rag_index(root)
+    return _json({"documents": count})
+
+
+def tool_rag_related(arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    seed = str(arguments.get("seed") or "")
+    if not seed:
+        return _text("seed is required", error=True)
+    limit = int(arguments.get("limit") or 6)
+    return _json(rag_related_context(root, seed, limit))
 
 
 def tool_workspace_import_openapi(arguments: dict) -> dict:
@@ -972,7 +1258,7 @@ def tool_junit(arguments: dict) -> dict:
 
 
 def tool_mock_start(arguments: dict) -> dict:
-    native = load_native()
+    native = _native()
     if not hasattr(native, "mock_start_json"):
         return _text(
             "pulse_native is outdated (missing mock_start_json). Rebuild with: bun run pulse:cli:install",
@@ -990,7 +1276,7 @@ def tool_mock_start(arguments: dict) -> dict:
 
 
 def tool_mock_stop(_arguments: dict) -> dict:
-    native = load_native()
+    native = _native()
     if not hasattr(native, "mock_stop"):
         return _text(
             "pulse_native is outdated (missing mock_stop). Rebuild with: bun run pulse:cli:install",
@@ -1022,6 +1308,8 @@ TOOLS: dict[str, Callable[[dict], dict]] = {
     "pulse_run_tests": tool_run_tests,
     "pulse_openapi": tool_openapi,
     "pulse_har": tool_har,
+    "pulse_import_collection": tool_import_collection,
+    "pulse_export_collection": tool_export_collection,
     "pulse_write_collection": tool_write_collection,
     "pulse_pre_request": tool_pre_request,
     "pulse_schema": tool_schema,
@@ -1029,6 +1317,7 @@ TOOLS: dict[str, Callable[[dict], dict]] = {
     "pulse_export_openapi": tool_export_openapi,
     "pulse_graphql": tool_graphql,
     "pulse_curl": tool_curl,
+    "pulse_format_curl": tool_format_curl,
     "pulse_snippet": tool_snippet,
     "pulse_last_run": tool_last_run,
     "pulse_validate_run": tool_validate_run,
@@ -1052,6 +1341,18 @@ TOOLS: dict[str, Callable[[dict], dict]] = {
     "pulse_mock_start": tool_mock_start,
     "pulse_mock_stop": tool_mock_stop,
     "pulse_agent": tool_agent,
+    "pulse_git_status": tool_git_status,
+    "pulse_git_add": tool_git_add,
+    "pulse_git_commit": tool_git_commit,
+    "pulse_git_diff_stat": tool_git_diff_stat,
+    "pulse_memory_list": tool_memory_list,
+    "pulse_memory_get": tool_memory_get,
+    "pulse_memory_search": tool_memory_search,
+    "pulse_memory_upsert": tool_memory_upsert,
+    "pulse_memory_delete": tool_memory_delete,
+    "pulse_rag_search": tool_rag_search,
+    "pulse_rag_reindex": tool_rag_reindex,
+    "pulse_rag_related": tool_rag_related,
     "pulse_help": tool_help,
 }
 
@@ -1172,6 +1473,39 @@ TOOL_DEFS = [
         },
     },
     {
+        "name": "pulse_import_collection",
+        "description": "Import Postman / Bruno / Insomnia collection JSON into a Pulse dump (collectionGroups + collections).",
+        "inputSchema": {
+            "type": "object",
+            "required": ["path"],
+            "properties": {
+                "path": {"type": "string"},
+                "format": {
+                    "type": "string",
+                    "enum": ["auto", "postman", "bruno", "insomnia"],
+                    "default": "auto",
+                },
+                "name": {"type": "string"},
+                "inline": {"type": "boolean"},
+            },
+        },
+    },
+    {
+        "name": "pulse_export_collection",
+        "description": "Export a Pulse dump to Postman / Bruno / Insomnia JSON.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["format"],
+            "properties": {
+                "format": {"type": "string", "enum": ["postman", "bruno", "insomnia"]},
+                "path": {"type": "string", "description": "Pulse dump JSON path"},
+                "collection": {"type": "object", "description": "Inline Pulse dump"},
+                "name": {"type": "string"},
+                "inline": {"type": "boolean"},
+            },
+        },
+    },
+    {
         "name": "pulse_write_collection",
         "description": "Write a Pulse collection JSON to python/examples/.out/ and return the path.",
         "inputSchema": {
@@ -1266,6 +1600,19 @@ TOOL_DEFS = [
             "properties": {
                 "command": {"type": "string"},
                 "send": {"type": "boolean", "default": False},
+            },
+        },
+    },
+    {
+        "name": "pulse_format_curl",
+        "description": "Format a Pulse HTTP payload as a cURL command (inverse of pulse_curl).",
+        "inputSchema": {
+            "type": "object",
+            "required": ["request"],
+            "properties": {
+                "request": {
+                    "description": "Pulse HTTP payload object or JSON string (method, url, headers, body, …)"
+                },
             },
         },
     },
@@ -1510,12 +1857,15 @@ TOOL_DEFS = [
     },
     {
         "name": "pulse_mock_start",
-        "description": "Start the local mock on 127.0.0.1:4010 from PULSE_WORKSPACE examples or explicit routes.",
+        "description": "Start the local mock on 127.0.0.1:4010 from PULSE_WORKSPACE examples or explicit routes. Routes may include matchQuery, matchHeaders, matchBodyIncludes.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "delayMs": {"type": "integer", "default": 0},
-                "routes": {"type": "array", "description": "Optional MockRoute[]"},
+                "routes": {
+                    "type": "array",
+                    "description": "Optional MockRoute[] with optional matchQuery/matchHeaders/matchBodyIncludes",
+                },
                 "workspace": {"type": "string", "description": "Override PULSE_WORKSPACE"},
             },
         },
@@ -1539,6 +1889,130 @@ TOOL_DEFS = [
                 "body": {"type": "string", "description": "GraphQL introspection/response JSON for summarize"},
                 "workspace": {"type": "string", "description": "Override PULSE_WORKSPACE"},
                 "historyLimit": {"type": "integer", "default": 15},
+            },
+        },
+    },
+    {
+        "name": "pulse_git_status",
+        "description": "Git porcelain status for PULSE_WORKSPACE (branch, dirty, ahead/behind, files).",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "pulse_git_add",
+        "description": "Stage paths under PULSE_WORKSPACE (git add). Requires confirm=true.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["paths"],
+            "properties": {
+                "paths": {"type": "array", "items": {"type": "string"}},
+                "confirm": {"type": "boolean"},
+            },
+        },
+    },
+    {
+        "name": "pulse_git_commit",
+        "description": "Commit staged changes in PULSE_WORKSPACE. Requires confirm=true.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["message"],
+            "properties": {
+                "message": {"type": "string"},
+                "confirm": {"type": "boolean"},
+            },
+        },
+    },
+    {
+        "name": "pulse_git_diff_stat",
+        "description": "git diff --stat HEAD for PULSE_WORKSPACE (falls back to status --short).",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "pulse_memory_list",
+        "description": "List agent memory facts (workspace and/or local scope).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "scope": {"type": "string", "enum": ["workspace", "local"]},
+            },
+        },
+    },
+    {
+        "name": "pulse_memory_get",
+        "description": "Get one memory fact by key.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["key"],
+            "properties": {
+                "key": {"type": "string"},
+                "scope": {"type": "string", "enum": ["workspace", "local"]},
+            },
+        },
+    },
+    {
+        "name": "pulse_memory_search",
+        "description": "Search memory facts by substring across key/value/tags.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["query"],
+            "properties": {"query": {"type": "string"}},
+        },
+    },
+    {
+        "name": "pulse_memory_upsert",
+        "description": "Create or update a memory fact. Requires confirm=true.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["key", "value"],
+            "properties": {
+                "key": {"type": "string"},
+                "value": {"type": "string"},
+                "scope": {"type": "string", "enum": ["workspace", "local"], "default": "workspace"},
+                "tags": {"type": "array", "items": {"type": "string"}},
+                "note": {"type": "string"},
+                "confirm": {"type": "boolean"},
+            },
+        },
+    },
+    {
+        "name": "pulse_memory_delete",
+        "description": "Delete a memory fact by key. Requires confirm=true.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["key"],
+            "properties": {
+                "key": {"type": "string"},
+                "scope": {"type": "string", "enum": ["workspace", "local"]},
+                "confirm": {"type": "boolean"},
+            },
+        },
+    },
+    {
+        "name": "pulse_rag_search",
+        "description": "Hybrid search over the workspace RAG index (history, memory, requests).",
+        "inputSchema": {
+            "type": "object",
+            "required": ["query"],
+            "properties": {
+                "query": {"type": "string"},
+                "limit": {"type": "integer", "default": 8},
+                "markdown": {"type": "boolean", "default": True},
+            },
+        },
+    },
+    {
+        "name": "pulse_rag_reindex",
+        "description": "Rebuild the RAG index from history + memory.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "pulse_rag_related",
+        "description": "Find RAG docs related to a seed string (method URL, name, etc.).",
+        "inputSchema": {
+            "type": "object",
+            "required": ["seed"],
+            "properties": {
+                "seed": {"type": "string"},
+                "limit": {"type": "integer", "default": 6},
             },
         },
     },

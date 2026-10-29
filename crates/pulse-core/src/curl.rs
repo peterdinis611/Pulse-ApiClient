@@ -11,13 +11,13 @@ fn flag_re() -> &'static Regex {
     RE.get_or_init(|| {
         Regex::new(
             r#"(?xi)
-            (?P<bool>--compressed|--get|--head|-G|-I)
+            (?P<bool>--compressed|--location|--get|--head|-L|-G|-I|-k|--insecure|--silent|-s|-S)
             |
             (?:(?P<flag>
                 --data-urlencode|--data-binary|--data-raw|--data|--json|
                 --request|--header|--user|--url|--user-agent|--referer|--cookie|
-                --form|
-                -X|-H|-d|-u|-A|-e|-b|-F
+                --form|--max-time|--connect-timeout|
+                -X|-H|-d|-u|-A|-e|-b|-F|-m
             )
             \s+(?:'(?P<sq>[^']*)'|"(?P<dq>[^"]*)"|(?P<bare>\S+)))
             "#,
@@ -117,7 +117,7 @@ pub fn curl_to_payload(raw: &str) -> Result<HttpRequestPayload, String> {
     for caps in flag_re().captures_iter(&normalized) {
         if let Some(bool_flag) = caps.name("bool").map(|m| m.as_str().to_ascii_lowercase()) {
             match bool_flag.as_str() {
-                "--compressed" => {}
+                "--compressed" | "-l" | "--location" | "-k" | "--insecure" | "-s" | "-S" | "--silent" => {}
                 "-g" | "--get" => force_get = true,
                 "-i" | "--head" => force_head = true,
                 _ => {}
@@ -184,6 +184,7 @@ pub fn curl_to_payload(raw: &str) -> Result<HttpRequestPayload, String> {
             "-a" | "--user-agent" => headers.push(kv("User-Agent", &value)),
             "-e" | "--referer" => headers.push(kv("Referer", &value)),
             "-b" | "--cookie" => headers.push(kv("Cookie", &value)),
+            "-m" | "--max-time" | "--connect-timeout" => {}
             _ => {}
         }
     }
@@ -209,6 +210,24 @@ pub fn curl_to_payload(raw: &str) -> Result<HttpRequestPayload, String> {
     }
     if url.is_empty() {
         return Err("Could not find URL in cURL command".into());
+    }
+
+    // Fold `?a=1&b=2` from the URL into query rows (keep base URL clean for re-export).
+    let mut query_from_url = Vec::new();
+    if let Some((base, qs)) = url.split_once('?') {
+        if !qs.is_empty() && !qs.contains('{') {
+            for part in qs.split('&') {
+                if part.is_empty() {
+                    continue;
+                }
+                let (k, v) = part.split_once('=').unwrap_or((part, ""));
+                query_from_url.push(kv(
+                    &urlencoding_decode(k),
+                    &urlencoding_decode(v),
+                ));
+            }
+            url = base.to_string();
+        }
     }
 
     for header in &headers {
@@ -245,7 +264,7 @@ pub fn curl_to_payload(raw: &str) -> Result<HttpRequestPayload, String> {
         method = "GET".into();
     }
 
-    let mut query = Vec::new();
+    let mut query = query_from_url;
     let mut form = urlencode_parts;
     let mut body = body_joined;
     let mut body_kind = "none".to_string();

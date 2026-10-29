@@ -118,6 +118,36 @@ export async function listGitPending(root: string): Promise<string[]> {
   return runEffect(invokeEffect<string[]>("git_workspace_pending", { root }));
 }
 
+export type GitFileStatus = {
+  path: string;
+  xy: string;
+};
+
+export type GitStatusPayload = {
+  branch: string;
+  dirty: boolean;
+  ahead: number;
+  behind: number;
+  conflicted: string[];
+  files?: GitFileStatus[];
+};
+
+export async function getGitWorkspaceStatus(root: string): Promise<GitStatusPayload> {
+  return runEffect(invokeEffect<GitStatusPayload>("git_workspace_status", { root }));
+}
+
+export async function gitWorkspaceAdd(root: string, paths: string[]): Promise<void> {
+  await runEffect(invokeEffect<void>("git_workspace_add", { root, paths }));
+}
+
+export async function gitWorkspaceCommit(root: string, message: string): Promise<string> {
+  return runEffect(invokeEffect<string>("git_workspace_commit", { root, message }));
+}
+
+export async function gitWorkspaceDiffStat(root: string): Promise<string> {
+  return runEffect(invokeEffect<string>("git_workspace_diff_stat", { root }));
+}
+
 export async function listGitAgentHistory(root: string): Promise<unknown[]> {
   return runEffect(invokeEffect<unknown[]>("git_workspace_agent_history", { root }));
 }

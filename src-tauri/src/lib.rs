@@ -41,9 +41,10 @@ use cache::CacheConfig;
 use db::{DbState, DbUserSession};
 use engine::HttpEngineStats;
 use git_workspace::{
-    git_workspace_agent_history, git_workspace_append_agent_history, git_workspace_load,
-    git_workspace_migrate, git_workspace_open, git_workspace_pending, git_workspace_read_file,
-    git_workspace_save, git_workspace_save_request, git_workspace_unwatch, git_workspace_watch,
+    git_workspace_add, git_workspace_agent_history, git_workspace_append_agent_history,
+    git_workspace_commit, git_workspace_diff_stat, git_workspace_load, git_workspace_migrate,
+    git_workspace_open, git_workspace_pending, git_workspace_read_file, git_workspace_save,
+    git_workspace_save_request, git_workspace_status, git_workspace_unwatch, git_workspace_watch,
     GitWatchState,
 };
 use mock_server::{mock_server_start, mock_server_stop, MockServerState};
@@ -111,6 +112,37 @@ fn parse_curl(command: String) -> Result<HttpRequestPayload, String> {
 #[tauri::command]
 fn format_curl(payload: HttpRequestPayload) -> Result<String, String> {
     Ok(curl::payload_to_curl(&payload))
+}
+
+#[tauri::command]
+fn validate_json_schema(
+    instance: serde_json::Value,
+    schema: serde_json::Value,
+) -> Result<Vec<String>, String> {
+    Ok(pulse_core::validate_json_schema(&instance, &schema, "$"))
+}
+
+#[tauri::command]
+fn generate_code_snippet(
+    payload: HttpRequestPayload,
+    format: String,
+) -> Result<String, String> {
+    pulse_core::generate_snippet(&payload, &format)
+}
+
+#[tauri::command]
+fn openapi_convert_spec(spec: serde_json::Value) -> Result<serde_json::Value, String> {
+    Ok(pulse_core::openapi_convert(&spec))
+}
+
+#[tauri::command]
+fn openapi_export_collection(payload: serde_json::Value) -> Result<serde_json::Value, String> {
+    Ok(pulse_core::openapi_export_spec(&payload))
+}
+
+#[tauri::command]
+fn route_agent_intent(input: String) -> Result<serde_json::Value, String> {
+    serde_json::to_value(pulse_core::route_agent_input(&input)).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -272,6 +304,18 @@ async fn exchange_oauth_token(
     request: oauth::OAuthTokenRequest,
 ) -> Result<oauth::OAuthTokenResponse, String> {
     oauth::exchange_oauth_token(request).await
+}
+
+#[tauri::command]
+async fn start_oauth_device_flow(
+    request: oauth::OAuthDeviceStartRequest,
+) -> Result<oauth::OAuthDeviceCodeStart, String> {
+    oauth::start_oauth_device_flow(request).await
+}
+
+#[tauri::command]
+fn contract_check_workspace(root: String) -> Result<pulse_core::ContractReport, String> {
+    pulse_core::check_workspace(&root)
 }
 
 #[tauri::command]
@@ -570,6 +614,11 @@ pub fn run() {
             get_http_cache_size,
             parse_curl,
             format_curl,
+            validate_json_schema,
+            generate_code_snippet,
+            openapi_convert_spec,
+            openapi_export_collection,
+            route_agent_intent,
             get_theme,
             set_theme,
             get_app_settings,
@@ -591,6 +640,10 @@ pub fn run() {
             git_workspace_unwatch,
             git_workspace_read_file,
             git_workspace_pending,
+            git_workspace_status,
+            git_workspace_add,
+            git_workspace_commit,
+            git_workspace_diff_stat,
             git_workspace_agent_history,
             git_workspace_append_agent_history,
             agent_memory_reindex,
@@ -612,6 +665,8 @@ pub fn run() {
             run_pre_request_script,
             run_collection,
             exchange_oauth_token,
+            start_oauth_device_flow,
+            contract_check_workspace,
             db_load_workspace,
             db_save_workspace,
             db_append_history,

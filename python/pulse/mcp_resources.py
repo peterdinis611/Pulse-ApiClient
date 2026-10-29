@@ -133,6 +133,18 @@ def list_resources() -> list[dict]:
                     "description": "Mutating MCP calls waiting for confirm=true",
                     "mimeType": "application/json",
                 },
+                {
+                    "uri": "pulse://workspace/memory",
+                    "name": "workspace-memory",
+                    "description": "Agent memory facts (workspace + local scopes)",
+                    "mimeType": "application/json",
+                },
+                {
+                    "uri": "pulse://workspace/git",
+                    "name": "workspace-git",
+                    "description": "Git porcelain status for PULSE_WORKSPACE",
+                    "mimeType": "application/json",
+                },
             ]
         )
         for item in list_requests(root)[:50]:
@@ -323,6 +335,17 @@ def _read_workspace_resource(uri: str) -> dict | None:
         return _json_contents(uri, read_history(root, limit=50))
     if uri == "pulse://workspace/pending":
         return _json_contents(uri, list_pending(root))
+    if uri == "pulse://workspace/memory":
+        from .memory import list_facts
+
+        return _json_contents(uri, list_facts(root))
+    if uri == "pulse://workspace/git":
+        from .git_cmd import git_status
+
+        try:
+            return _json_contents(uri, git_status(root))
+        except Exception as error:
+            return _json_contents(uri, {"error": str(error)})
     request_prefix = "pulse://workspace/request/"
     if uri.startswith(request_prefix):
         item = read_request(root, uri[len(request_prefix) :])

@@ -1,3 +1,5 @@
+import { invoke } from "@tauri-apps/api/core";
+import { canUseTauriIpc } from "@/lib/tauri-runtime";
 import type { HttpResponse, TestRunResult } from "@/types";
 
 export type JsonSchema = {
@@ -11,6 +13,21 @@ export type JsonSchema = {
   minItems?: number;
   maxItems?: number;
 };
+
+/** Prefer pulse-core via Tauri; sync JS fallback otherwise. */
+export async function validateJsonSchemaAsync(
+  instance: unknown,
+  schema: JsonSchema,
+): Promise<string[]> {
+  if (canUseTauriIpc()) {
+    try {
+      return await invoke<string[]>("validate_json_schema", { instance, schema });
+    } catch {
+      // fall through
+    }
+  }
+  return validateJsonSchema(instance, schema);
+}
 
 export function validateJsonSchema(instance: unknown, schema: JsonSchema, path = "$"): string[] {
   const errors: string[] = [];

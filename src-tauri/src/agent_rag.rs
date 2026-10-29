@@ -28,6 +28,14 @@ pub struct RagHitDto {
     pub status: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub history_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub headers: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body_kind: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub query: Option<serde_json::Value>,
 }
 
 impl From<RagHit> for RagHitDto {
@@ -71,6 +79,23 @@ impl From<RagHit> for RagHitDto {
                     .and_then(|m| m.get("id").and_then(|v| v.as_str()))
                     .map(str::to_string)
             });
+        let request = hit.meta.as_ref().and_then(|m| m.get("request"));
+        let headers = request
+            .and_then(|r| r.get("headers"))
+            .cloned()
+            .or_else(|| hit.meta.as_ref().and_then(|m| m.get("headers")).cloned());
+        let query = request
+            .and_then(|r| r.get("query"))
+            .cloned()
+            .or_else(|| hit.meta.as_ref().and_then(|m| m.get("query")).cloned());
+        let body = request
+            .and_then(|r| r.get("body"))
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        let body_kind = request
+            .and_then(|r| r.get("bodyKind").or_else(|| r.get("body_kind")))
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
         Self {
             id: hit.id,
             kind: hit.kind,
@@ -81,6 +106,10 @@ impl From<RagHit> for RagHitDto {
             name,
             status,
             history_id,
+            headers,
+            body,
+            body_kind,
+            query,
         }
     }
 }

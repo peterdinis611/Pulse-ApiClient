@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   AGENT_CAPABILITIES,
+  canUseCloudForJob,
   defaultAgentSettings,
   isAgentCapabilityEnabled,
   isAgentEnabled,
@@ -78,5 +79,18 @@ describe("agent-settings", () => {
     expect(loaded.apiKey).toBe("sk-test");
     expect(loaded.enabled).toBe(true);
     expect(localStorage.getItem("pulse-api-client/agent-settings-v1")).toBeTruthy();
+  });
+
+  it("blocks cloud when offlineOnly even with a key", () => {
+    saveAgentSettings({
+      provider: "openai",
+      apiKey: "sk-test",
+      offlineOnly: true,
+      cloudJobs: { explain: true, unknown: true, tools: true },
+    });
+    expect(canUseCloudForJob("explain")).toBe(false);
+    saveAgentSettings({ offlineOnly: false, cloudJobs: { explain: false, unknown: true, tools: true } });
+    expect(canUseCloudForJob("explain")).toBe(false);
+    expect(canUseCloudForJob("unknown")).toBe(true);
   });
 });

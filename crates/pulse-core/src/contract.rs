@@ -3,11 +3,13 @@
 use std::fs;
 use std::path::Path;
 
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::workspace_fs::YamlRequestFile;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ContractReport {
     pub ok: bool,
     pub errors: Vec<String>,
