@@ -3,6 +3,9 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
+from typing import Any
+
+from ._util import uid
 
 
 def parse_dotenv(text: str) -> dict[str, str]:
@@ -46,6 +49,77 @@ def load_env(
         key, _, value = pair.partition("=")
         merged[key] = value
     return merged
+
+
+def _normalize_env_rows(env: dict[str, str] | list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if isinstance(env, dict):
+        return [{"key": key, "value": value, "enabled": True} for key, value in env.items()]
+    return [
+        {
+            "key": str(item.get("key") or ""),
+            "value": str(item.get("value") if item.get("value") is not None else ""),
+            "enabled": item.get("enabled", True) is not False,
+            **({"secret": True} if item.get("secret") else {}),
+        }
+        for item in env
+        if isinstance(item, dict)
+    ]
+
+
+def export_dotenv(env: dict[str, str] | list[dict[str, Any]], *, name: str = "Environment") -> str:
+    rows = _normalize_env_rows(env)
+    lines = [f"# {name}", ""]
+    for item in rows:
+        if not str(item.get("key") or "").strip() or item.get("enabled") is False:
+            continue
+        key = str(item["key"]).strip()
+        value = str(item.get("value") or "")
+        needs_quote = any(ch in value for ch in ' \t#"\'') or value == ""
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        lines.append(f'{key}="{escaped}"' if needs_quote else f"{key}={value}")
+    return "\n".join(lines) + "\n"
+
+
+def export_postman_environment(name: str, values: dict[str, str] | list[dict[str, Any]], *, env_id: str | None = None) -> str:
+    rows = _normalize_env_rows(values)
+    payload = {
+        "id": env_id or uid("env"),
+        "name": name,
+        "values": [
+            {
+                "key": item["key"],
+                "value": item.get("value") or "",
+                "enabled": item.get("enabled", True) is not False,
+                "type": "secret" if item.get("secret") else "default",
+            }
+            for item in rows
+            if str(item.get("key") or "").strip()
+        ],
+        "_postman_variable_scope": "environment",
+    }
+    return json.dumps(payload, indent=2) + "\n"
+
+
+def import_postman_environment(raw: str) -> dict[str, Any]:
+    parsed = json.loads(raw)
+    if not isinstance(parsed, dict):
+        raise ValueError("Postman environment must be a JSON object")
+    values = []
+    for item in parsed.get("values") or []:
+        if not isinstance(item, dict):
+            continue
+        key = str(item.get("key") or "").strip()
+        if not key:
+            continue
+        row = {
+            "key": key,
+            "value": str(item.get("value") if item.get("value") is not None else ""),
+            "enabled": item.get("enabled", True) is not False,
+        }
+        if item.get("type") == "secret":
+            row["secret"] = True
+        values.append(row)
+    return {"name": str(parsed.get("name") or "Imported Environment"), "values": values}
 
 
 def load_data_rows(path: Path) -> list[dict[str, str]]:
