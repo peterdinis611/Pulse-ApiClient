@@ -25,6 +25,19 @@ jobs:
           workspaces: "."
           shared-key: fast
 
+      # api-client (Tauri) links webkit/gtk; required for `cargo test --workspace`.
+      - name: Linux webkit/gtk (Rust unit tests)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libwebkit2gtk-4.1-0 \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev \
+            libssl-dev
+
       - name: Frontend dependencies
         run: bun install --frozen-lockfile
 
