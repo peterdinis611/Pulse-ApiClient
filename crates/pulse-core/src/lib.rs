@@ -11,6 +11,7 @@ pub mod inherit;
 pub mod json_assertions;
 pub mod json_diff;
 pub mod json_path;
+pub mod json_schema;
 pub mod mock_server;
 pub mod openapi_ops;
 pub mod path_params;
@@ -18,6 +19,7 @@ pub mod prepare;
 pub mod script_engine;
 pub mod secrets;
 pub mod simple_http;
+pub mod snippets;
 pub mod sse;
 pub mod test_runner;
 pub mod types;
@@ -59,7 +61,10 @@ pub use test_runner::{
 };
 pub use contract::{breaking_diff, check_workspace, compare_to_schema, ContractReport};
 pub use json_diff::{compare as diff_compare, compare_raw as diff_compare_raw, pretty_any, unified_lines};
+pub use json_schema::validate_json as validate_json_schema;
+pub use openapi_ops::{convert as openapi_convert, export_spec as openapi_export_spec, list_operations as openapi_list_operations};
 pub use prepare::{interpolate_request, to_http_payload};
+pub use snippets::generate as generate_snippet;
 pub use sse::{
     collect_sse, filter_events as filter_sse_events, latest_event_id as latest_sse_event_id,
     latest_retry_ms as latest_sse_retry_ms, next_event_boundary, parse_sse_block, parse_sse_text,

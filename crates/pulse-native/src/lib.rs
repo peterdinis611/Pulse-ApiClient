@@ -438,6 +438,48 @@ fn parse_curl_json(command: String) -> PyResult<String> {
 }
 
 #[pyfunction]
+fn validate_json_schema_json(instance_json: String, schema_json: String) -> PyResult<String> {
+    let instance: serde_json::Value = serde_json::from_str(&instance_json).map_err(py_err)?;
+    let schema: serde_json::Value = serde_json::from_str(&schema_json).map_err(py_err)?;
+    let errors = pulse_core::validate_json_schema(&instance, &schema, "$");
+    serde_json::to_string(&errors).map_err(py_err)
+}
+
+#[pyfunction]
+#[pyo3(signature = (payload_json, format="curl"))]
+fn generate_snippet_json(payload_json: String, format: &str) -> PyResult<String> {
+    let payload: HttpRequestPayload = serde_json::from_str(&payload_json).map_err(py_err)?;
+    pulse_core::generate_snippet(&payload, format).map_err(py_err)
+}
+
+#[pyfunction]
+fn openapi_convert_json(spec_json: String) -> PyResult<String> {
+    let spec: serde_json::Value = serde_json::from_str(&spec_json).map_err(py_err)?;
+    let payload = pulse_core::openapi_convert(&spec);
+    serde_json::to_string(&payload).map_err(py_err)
+}
+
+#[pyfunction]
+fn openapi_export_json(payload_json: String) -> PyResult<String> {
+    let payload: serde_json::Value = serde_json::from_str(&payload_json).map_err(py_err)?;
+    let spec = pulse_core::openapi_export_spec(&payload);
+    serde_json::to_string(&spec).map_err(py_err)
+}
+
+#[pyfunction]
+fn openapi_list_json(spec_json: String) -> PyResult<String> {
+    let spec: serde_json::Value = serde_json::from_str(&spec_json).map_err(py_err)?;
+    let ops = pulse_core::openapi_list_operations(&spec);
+    serde_json::to_string(&ops).map_err(py_err)
+}
+
+#[pyfunction]
+fn route_agent_json(input: String) -> PyResult<String> {
+    let intent = pulse_core::route_agent_input(&input);
+    serde_json::to_string(&intent).map_err(py_err)
+}
+
+#[pyfunction]
 #[pyo3(signature = (input, workspace=None, body=None, history_limit=None, source=None, record_history=None))]
 fn run_agent_json(
     input: String,
@@ -585,6 +627,12 @@ fn pulse_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(graphql_introspection_query, m)?)?;
     m.add_function(wrap_pyfunction!(parse_curl_json, m)?)?;
     m.add_function(wrap_pyfunction!(format_curl_json, m)?)?;
+    m.add_function(wrap_pyfunction!(validate_json_schema_json, m)?)?;
+    m.add_function(wrap_pyfunction!(generate_snippet_json, m)?)?;
+    m.add_function(wrap_pyfunction!(openapi_convert_json, m)?)?;
+    m.add_function(wrap_pyfunction!(openapi_export_json, m)?)?;
+    m.add_function(wrap_pyfunction!(openapi_list_json, m)?)?;
+    m.add_function(wrap_pyfunction!(route_agent_json, m)?)?;
     m.add_function(wrap_pyfunction!(run_agent_json, m)?)?;
     m.add_function(wrap_pyfunction!(agent_memory_list_json, m)?)?;
     m.add_function(wrap_pyfunction!(agent_memory_get_json, m)?)?;
