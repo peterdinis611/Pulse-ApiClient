@@ -27,7 +27,7 @@ type TourStepDef = {
 const TOUR_STEPS: TourStepDef[] = [
   {
     view: "overview",
-    title: { en: "Pulse 2.0 is on disk", sk: "Pulse 2.0 je na disku" },
+    title: { en: "Pulse 2.4.0 is on disk", sk: "Pulse 2.4.0 je na disku" },
     description: {
       en: "Git is the workspace. This walkthrough highlights where the new YAML folder, secrets, OpenAPI explorer, and mock server live.",
       sk: "Git je workspace. Táto prehliadka ukáže, kde je nový YAML priečinok, secrety, OpenAPI explorer a mock server.",

@@ -19,7 +19,7 @@ class McpProtocolTests(unittest.TestCase):
             }
         )
         self.assertEqual(init["result"]["serverInfo"]["name"], "pulse")
-        self.assertEqual(init["result"]["serverInfo"]["version"], "2.0.0")
+        self.assertEqual(init["result"]["serverInfo"]["version"], "2.4.0")
         self.assertIn("resources", init["result"]["capabilities"])
         self.assertIn("prompts", init["result"]["capabilities"])
         self.assertIsNone(handle_message({"jsonrpc": "2.0", "method": "notifications/initialized"}))
@@ -225,6 +225,11 @@ class McpProtocolTests(unittest.TestCase):
                 "workspace_status",
                 "contract_check",
                 "import_openapi_workspace",
+                "git_status",
+                "propose_commit",
+                "remember_fact",
+                "search_memory",
+                "search_rag",
             },
         )
         got = handle_message(

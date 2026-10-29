@@ -1063,7 +1063,7 @@ export function SettingsView() {
               <Label htmlFor="http-user-agent">Default User-Agent</Label>
               <Input
                 id="http-user-agent"
-                placeholder="Pulse/2.0 (leave empty — no default headers)"
+                placeholder="Pulse/2.4 (leave empty — no default headers)"
                 value={httpUserAgent}
                 onChange={(event) => setHttpUserAgent(event.target.value)}
               />
