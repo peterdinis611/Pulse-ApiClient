@@ -13,7 +13,7 @@ import {
   type AgentActionResult,
   type AgentConfirmKind,
 } from "@/lib/agent-actions";
-import { routeAgentInput } from "@/lib/agent-router";
+import { routeAgentInputAsync } from "@/lib/agent-router";
 import type { AgentRagCitation } from "@/lib/agent-rag";
 import { hydrateAgentApiKey, type AgentCapability } from "@/lib/agent-settings";
 import type { MessageKey } from "@/lib/i18n";
@@ -205,7 +205,7 @@ export function AgentView() {
     setWorking(true);
 
     try {
-      const intent = routeAgentInput(trimmed);
+      const intent = await routeAgentInputAsync(trimmed);
       const result = await runAgentIntent(
         intent,
         buildContext((chunk) => {

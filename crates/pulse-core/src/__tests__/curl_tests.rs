@@ -68,6 +68,9 @@ fn round_trips_export() {
         r#"curl -X POST 'https://api.example.com/users?x=1' -H 'Accept: application/json' --data-raw '{"ok":true}'"#,
     )
     .expect("parse");
+    assert_eq!(original.url, "https://api.example.com/users");
+    assert_eq!(original.query.len(), 1);
+    assert_eq!(original.query[0].key, "x");
     let command = payload_to_curl(&original);
     assert!(command.contains("curl"));
     assert!(command.contains("-X"));
@@ -77,6 +80,7 @@ fn round_trips_export() {
     assert_eq!(again.method, "POST");
     assert!(again.url.contains("api.example.com/users"));
     assert!(again.body.contains("ok"));
+    assert!(again.query.iter().any(|row| row.key == "x"));
 }
 
 #[test]

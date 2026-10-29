@@ -37,6 +37,8 @@ class McpProtocolTests(unittest.TestCase):
         self.assertIn("pulse_last_run", names)
         self.assertIn("pulse_graphql", names)
         self.assertIn("pulse_snippet", names)
+        self.assertIn("pulse_import_collection", names)
+        self.assertIn("pulse_export_collection", names)
         self.assertIn("pulse_validate_run", names)
         self.assertIn("pulse_workspace_list", names)
         self.assertIn("pulse_workspace_read", names)

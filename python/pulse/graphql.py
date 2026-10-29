@@ -197,16 +197,54 @@ def _format_response_py(body: str) -> str:
     return "\n\n".join(sections) if sections else body
 
 
+def _strip_comments(document: str) -> str:
+    import re
+
+    without_block = re.sub(r"(?s)/\*.*?\*/", " ", document)
+    return re.sub(r"(?m)#.*$", "", without_block)
+
+
 def _list_operations_py(document: str) -> list[dict[str, Any]]:
     import re
 
+    cleaned = _strip_comments(document)
     pattern = re.compile(
         r"(?m)(?P<kind>query|mutation|subscription)\b(?:\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*))?"
     )
     out = [
         {"kind": match.group("kind"), "name": match.group("name")}
-        for match in pattern.finditer(document)
+        for match in pattern.finditer(cleaned)
     ]
-    if not out and document.strip().startswith("{"):
+    if not out and cleaned.strip().startswith("{"):
         out.append({"kind": "query", "name": None})
+    return out
+
+
+def response_error_count(body: str) -> int:
+    try:
+        parsed = json.loads(body)
+    except json.JSONDecodeError:
+        return 0
+    errors = parsed.get("errors") if isinstance(parsed, dict) else None
+    return len(errors) if isinstance(errors, list) else 0
+
+
+def example_queries(summary: dict[str, Any], *, limit: int = 3) -> list[str]:
+    limit = max(1, int(limit))
+    out: list[str] = []
+    types = {item.get("name"): item for item in (summary.get("types") or []) if isinstance(item, dict)}
+    for kind, key, prefix in (
+        ("query", "queryType", "Get"),
+        ("mutation", "mutationType", "Mut"),
+        ("subscription", "subscriptionType", "Sub"),
+    ):
+        type_name = summary.get(key)
+        root = types.get(type_name) if type_name else None
+        if not isinstance(root, dict):
+            continue
+        for field in (root.get("fields") or [])[:limit]:
+            if not isinstance(field, str) or not field:
+                continue
+            safe = "".join(ch for ch in field if ch.isalnum() or ch == "_")
+            out.append(f"{kind} {prefix}{safe} {{\n  {field}\n}}")
     return out

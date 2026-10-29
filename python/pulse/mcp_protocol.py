@@ -45,8 +45,11 @@ from .memory import (
     search_facts as memory_search_facts,
     upsert_fact as memory_upsert_fact,
 )
+from .bruno import export_bruno, import_bruno, is_bruno_collection
+from .insomnia import export_insomnia, import_insomnia, is_insomnia_export
 from .openapi import convert as convert_openapi
 from .openapi import export_spec, load_spec
+from .postman import export_postman, import_postman, is_postman_collection
 from .rag import (
     format_rag_hits_markdown,
     rebuild_rag_index,
@@ -435,6 +438,82 @@ def tool_har(arguments: dict) -> dict:
     if arguments.get("inline"):
         return _json(payload)
     return _written(payload, arguments.get("name") or path.stem)
+
+
+def _resolve_collection_path(arguments: dict) -> Path | None:
+    path = Path(arguments.get("path") or "")
+    if not path.is_file():
+        path = REPO_ROOT / path
+    return path if path.is_file() else None
+
+
+def tool_import_collection(arguments: dict) -> dict:
+    path = _resolve_collection_path(arguments)
+    if path is None:
+        return _text(f"No such collection file: {arguments.get('path')}", error=True)
+    raw = path.read_text()
+    fmt = str(arguments.get("format") or "auto")
+    if fmt == "auto":
+        if is_postman_collection(raw):
+            fmt = "postman"
+        elif is_bruno_collection(raw):
+            fmt = "bruno"
+        elif is_insomnia_export(raw):
+            fmt = "insomnia"
+        else:
+            return _text("Could not detect format; pass format=postman|bruno|insomnia", error=True)
+    try:
+        if fmt == "postman":
+            payload = import_postman(raw)
+        elif fmt == "bruno":
+            payload = import_bruno(raw)
+        elif fmt == "insomnia":
+            payload = import_insomnia(raw)
+        else:
+            return _text(f"Unsupported format: {fmt}", error=True)
+    except Exception as error:  # noqa: BLE001 — surface parse errors to MCP
+        return _text(str(error), error=True)
+    if arguments.get("inline"):
+        return _json(payload)
+    return _written(payload, arguments.get("name") or f"{path.stem}-{fmt}")
+
+
+def tool_export_collection(arguments: dict) -> dict:
+    fmt = str(arguments.get("format") or "")
+    if fmt not in {"postman", "bruno", "insomnia"}:
+        return _text("format must be postman|bruno|insomnia", error=True)
+    payload = arguments.get("collection")
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+    if not isinstance(payload, dict):
+        path = _resolve_collection_path(arguments)
+        if path is None:
+            return _text(f"No such collection file: {arguments.get('path')}", error=True)
+        payload = json.loads(path.read_text())
+    groups = payload.get("collectionGroups") or []
+    requests = payload.get("collections") or []
+    if not groups:
+        return _text("Pulse dump needs collectionGroups", error=True)
+    group = groups[0]
+    scoped = [
+        item
+        for item in requests
+        if not item.get("collectionId") or item.get("collectionId") == group.get("id")
+    ]
+    if fmt == "postman":
+        text = export_postman(group, scoped)
+    elif fmt == "bruno":
+        text = export_bruno(group, scoped)
+    else:
+        text = export_insomnia(group, scoped)
+    if arguments.get("inline"):
+        return _text(text)
+    written = write_out_text(
+        text,
+        str(arguments.get("name") or f"{group.get('name') or 'collection'}-{fmt}"),
+        ".json",
+    )
+    return _json({"path": _mcp_path(written), "format": fmt, "requests": len(scoped)})
 
 
 def tool_write_collection(arguments: dict) -> dict:
@@ -1229,6 +1308,8 @@ TOOLS: dict[str, Callable[[dict], dict]] = {
     "pulse_run_tests": tool_run_tests,
     "pulse_openapi": tool_openapi,
     "pulse_har": tool_har,
+    "pulse_import_collection": tool_import_collection,
+    "pulse_export_collection": tool_export_collection,
     "pulse_write_collection": tool_write_collection,
     "pulse_pre_request": tool_pre_request,
     "pulse_schema": tool_schema,
@@ -1386,6 +1467,39 @@ TOOL_DEFS = [
             "required": ["path"],
             "properties": {
                 "path": {"type": "string"},
+                "name": {"type": "string"},
+                "inline": {"type": "boolean"},
+            },
+        },
+    },
+    {
+        "name": "pulse_import_collection",
+        "description": "Import Postman / Bruno / Insomnia collection JSON into a Pulse dump (collectionGroups + collections).",
+        "inputSchema": {
+            "type": "object",
+            "required": ["path"],
+            "properties": {
+                "path": {"type": "string"},
+                "format": {
+                    "type": "string",
+                    "enum": ["auto", "postman", "bruno", "insomnia"],
+                    "default": "auto",
+                },
+                "name": {"type": "string"},
+                "inline": {"type": "boolean"},
+            },
+        },
+    },
+    {
+        "name": "pulse_export_collection",
+        "description": "Export a Pulse dump to Postman / Bruno / Insomnia JSON.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["format"],
+            "properties": {
+                "format": {"type": "string", "enum": ["postman", "bruno", "insomnia"]},
+                "path": {"type": "string", "description": "Pulse dump JSON path"},
+                "collection": {"type": "object", "description": "Inline Pulse dump"},
                 "name": {"type": "string"},
                 "inline": {"type": "boolean"},
             },

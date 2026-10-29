@@ -246,7 +246,12 @@ fn diff_json(left_json: String, right_json: String) -> PyResult<String> {
         .unwrap_or_else(|_| serde_json::Value::String(left_json.clone()));
     let right: serde_json::Value = serde_json::from_str(&right_json)
         .unwrap_or_else(|_| serde_json::Value::String(right_json.clone()));
-    Ok(pulse_core::diff_compare(&left, &right))
+    let report = if left.is_object() || left.is_array() || right.is_object() || right.is_array() {
+        pulse_core::diff_compare_report(&left, &right)
+    } else {
+        pulse_core::diff_compare_raw_report(&left_json, &right_json)
+    };
+    serde_json::to_string(&report).map_err(py_err)
 }
 
 #[pyfunction]

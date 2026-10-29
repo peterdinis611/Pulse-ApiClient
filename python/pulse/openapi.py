@@ -89,6 +89,13 @@ def _status_test(responses: dict) -> str:
 
 
 def convert(spec: dict) -> dict:
+    try:
+        import pulse_native  # type: ignore
+
+        if hasattr(pulse_native, "openapi_convert_json"):
+            return json.loads(pulse_native.openapi_convert_json(json.dumps(spec)))
+    except Exception:
+        pass
     title = (spec.get("info") or {}).get("title") or "OpenAPI Collection"
     servers = spec.get("servers") or []
     base = ((servers[0].get("url") if servers else "") or "").rstrip("/")

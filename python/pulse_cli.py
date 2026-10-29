@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from pulse.bench import compare_bench, run_bench
+from pulse.bench import compare_bench, format_bench_summary, run_bench
 from pulse.curl import curl_to_payload
 from pulse.diff import compare as diff_compare
 from pulse.envfile import load_data_rows, load_env
@@ -124,9 +124,19 @@ def cmd_bench(args: argparse.Namespace) -> int:
     report = run_bench(once, args.repeat)
     if args.out:
         write_json(Path(args.out), report)
-    print(json.dumps(report["timing"], indent=2))
+    if getattr(args, "json", False):
+        print(json.dumps(report, indent=2))
+    else:
+        print(format_bench_summary(report))
+        print(json.dumps(report["timing"], indent=2))
     baseline = json.loads(_require_file(args.baseline, "bench").read_text()) if args.baseline else None
-    errors = compare_bench(report, baseline or {}, p95_budget=args.budget_p95, factor=args.factor)
+    errors = compare_bench(
+        report,
+        baseline or {},
+        p95_budget=args.budget_p95,
+        mean_budget=getattr(args, "budget_mean", None),
+        factor=args.factor,
+    )
     for message in errors:
         print(message, file=sys.stderr)
     return 1 if errors else 0
@@ -170,6 +180,75 @@ def cmd_har(args: argparse.Namespace) -> int:
     else:
         payload = har_to_pulse(raw)
     write_json(Path(args.out), payload) if args.out else print(json.dumps(payload, indent=2))
+    return 0
+
+
+def _detect_collection_format(raw: str, hint: str | None) -> str:
+    if hint and hint != "auto":
+        return hint
+    from pulse.bruno import is_bruno_collection
+    from pulse.insomnia import is_insomnia_export
+    from pulse.postman import is_postman_collection
+
+    if is_postman_collection(raw):
+        return "postman"
+    if is_bruno_collection(raw):
+        return "bruno"
+    if is_insomnia_export(raw):
+        return "insomnia"
+    raise SystemExit("Could not detect format; pass --format postman|bruno|insomnia")
+
+
+def cmd_import(args: argparse.Namespace) -> int:
+    from pulse.bruno import import_bruno
+    from pulse.insomnia import import_insomnia
+    from pulse.postman import import_postman
+
+    path = _require_file(args.input, "import")
+    raw = path.read_text()
+    fmt = _detect_collection_format(raw, args.format)
+    if fmt == "postman":
+        payload = import_postman(raw)
+    elif fmt == "bruno":
+        payload = import_bruno(raw)
+    elif fmt == "insomnia":
+        payload = import_insomnia(raw)
+    else:
+        raise SystemExit(f"Unsupported format: {fmt}")
+    write_json(Path(args.out), payload) if args.out else print(json.dumps(payload, indent=2))
+    return 0
+
+
+def cmd_export(args: argparse.Namespace) -> int:
+    from pulse.bruno import export_bruno
+    from pulse.insomnia import export_insomnia
+    from pulse.postman import export_postman
+
+    path = _require_file(args.input, "export")
+    dump = json.loads(path.read_text())
+    groups = dump.get("collectionGroups") or []
+    requests = dump.get("collections") or []
+    if not groups:
+        raise SystemExit("Pulse dump needs collectionGroups")
+    group = groups[0]
+    scoped = [
+        item
+        for item in requests
+        if not item.get("collectionId") or item.get("collectionId") == group.get("id")
+    ]
+    fmt = args.format
+    if fmt == "postman":
+        text = export_postman(group, scoped)
+    elif fmt == "bruno":
+        text = export_bruno(group, scoped)
+    elif fmt == "insomnia":
+        text = export_insomnia(group, scoped)
+    else:
+        raise SystemExit(f"Unsupported format: {fmt}")
+    if args.out:
+        Path(args.out).write_text(text if text.endswith("\n") else text + "\n")
+    else:
+        print(text)
     return 0
 
 
@@ -405,7 +484,12 @@ def cmd_diff(args: argparse.Namespace) -> int:
     left = json.loads(left_path.read_text()) if left_path.is_file() else _load_json(args.left)
     right = json.loads(right_path.read_text()) if right_path.is_file() else _load_json(args.right)
     report = diff_compare(left, right)
-    print(report.get("diff") or json.dumps(report, indent=2))
+    if getattr(args, "paths", False):
+        print(json.dumps({"equal": report.get("equal"), "paths": report.get("paths") or []}, indent=2))
+    elif getattr(args, "json", False):
+        print(json.dumps(report, indent=2))
+    else:
+        print(report.get("diff") or json.dumps(report, indent=2))
     return 0 if report.get("equal") else 1
 
 
@@ -585,11 +669,15 @@ def cmd_contract(args: argparse.Namespace) -> int:
 
 
 def cmd_sse(args: argparse.Namespace) -> int:
-    from pulse.sse import collect, parse_text
+    from pulse.sse import collect, filter_events, parse_text, summarize
 
     if getattr(args, "parse", None):
         text = Path(args.parse).read_text() if Path(args.parse).is_file() else args.parse
-        print(json.dumps(parse_text(text), indent=2))
+        events = parse_text(text)
+        if getattr(args, "event", None):
+            events = filter_events(events, args.event)
+        payload = summarize(events) if getattr(args, "summary", False) else events
+        print(json.dumps(payload, indent=2))
         return 0
     if not args.url:
         raise SystemExit("pulse sse requires URL or --parse <text|file>")
@@ -609,7 +697,8 @@ def cmd_sse(args: argparse.Namespace) -> int:
         last_event_id=args.last_event_id,
         event=getattr(args, "event", None),
     )
-    print(json.dumps(events, indent=2))
+    payload = summarize(events) if getattr(args, "summary", False) else events
+    print(json.dumps(payload, indent=2))
     return 0
 
 
@@ -817,8 +906,10 @@ def cmd_graphql(args: argparse.Namespace) -> int:
     from pulse.graphql import (
         INTROSPECTION_QUERY,
         build_body,
+        example_queries,
         format_response,
         list_operations,
+        response_error_count,
         summarize_schema,
     )
 
@@ -829,10 +920,18 @@ def cmd_graphql(args: argparse.Namespace) -> int:
         summary = summarize_schema(args.summarize_body)
         if summary is None:
             raise SystemExit("No GraphQL __schema found in --summarize-body")
-        print(json.dumps(summary, indent=2))
+        if getattr(args, "examples", False):
+            print(json.dumps(example_queries(summary, limit=int(args.example_limit or 3)), indent=2))
+        else:
+            print(json.dumps(summary, indent=2))
         return 0
     if args.format_body:
-        print(format_response(args.format_body))
+        formatted = format_response(args.format_body)
+        if getattr(args, "errors_only", False):
+            count = response_error_count(args.format_body)
+            print(json.dumps({"errors": count, "text": formatted if count else "ok"}, indent=2))
+        else:
+            print(formatted)
         return 0
     if args.list_operations:
         print(json.dumps(list_operations(args.list_operations), indent=2))
@@ -968,7 +1067,7 @@ def cmd_help(_args: argparse.Namespace) -> int:
         "Memory/RAG:  agent-memory list|get|search|set|forget · agent-rag search|related|reindex",
         "Git:         git status|add|commit|diff",
         "Streams:     sse · graphql-ws",
-        "Convert:     openapi [--list|--export] · har [--export] · curl · format-curl · snippet · diff · schema",
+        "Convert:     import|export (postman/bruno/insomnia) · openapi · har · curl · format-curl · snippet · diff · schema",
         "CI:          junit · report · validate-run · last-run · contract · env",
         "Workspace:   workspace status|init|migrate|list|search|envs|history|pending|read|write|delete|send|import-openapi|export-openapi",
         "Local mock:  mock start|stop",
@@ -1072,9 +1171,11 @@ def main(argv: list[str] | None = None) -> int:
     bench.add_argument("--data")
     bench.add_argument("--repeat", type=int, default=5)
     bench.add_argument("--budget-p95", type=float, help="Fail if p95 ms is above this")
+    bench.add_argument("--budget-mean", type=float, help="Fail if mean ms is above this")
     bench.add_argument("--baseline", help="Previous bench JSON to compare against")
-    bench.add_argument("--factor", type=float, default=1.2, help="Allowed p95 / baseline ratio (default 1.2)")
+    bench.add_argument("--factor", type=float, default=1.2, help="Allowed p95/mean vs baseline ratio (default 1.2)")
     bench.add_argument("--out", help="Write the full bench report JSON")
+    bench.add_argument("--json", action="store_true", help="Print the full bench report JSON")
     bench.set_defaults(func=cmd_bench)
 
     junit = sub.add_parser("junit", help="Convert a collection run result JSON to JUnit XML")
@@ -1100,6 +1201,22 @@ def main(argv: list[str] | None = None) -> int:
         help="Write HAR from a Pulse collection/history JSON (default auto-detects)",
     )
     har.set_defaults(func=cmd_har)
+
+    import_cmd = sub.add_parser("import", help="Import Postman / Bruno / Insomnia → Pulse dump")
+    import_cmd.add_argument("input", help="Collection JSON file")
+    import_cmd.add_argument(
+        "--format",
+        choices=["auto", "postman", "bruno", "insomnia"],
+        default="auto",
+    )
+    import_cmd.add_argument("--out")
+    import_cmd.set_defaults(func=cmd_import)
+
+    export_cmd = sub.add_parser("export", help="Export Pulse dump → Postman / Bruno / Insomnia")
+    export_cmd.add_argument("input", help="Pulse dump JSON (collectionGroups + collections)")
+    export_cmd.add_argument("--format", choices=["postman", "bruno", "insomnia"], required=True)
+    export_cmd.add_argument("--out")
+    export_cmd.set_defaults(func=cmd_export)
 
     curl = sub.add_parser("curl", help="Parse a cURL command into a Pulse HTTP payload JSON")
     curl.add_argument("command", help="Full curl command (quote the whole string)")
@@ -1208,6 +1325,8 @@ def main(argv: list[str] | None = None) -> int:
     diff = sub.add_parser("diff", help="Unified diff between two JSON values or files")
     diff.add_argument("left")
     diff.add_argument("right")
+    diff.add_argument("--json", action="store_true", help="Print full report JSON")
+    diff.add_argument("--paths", action="store_true", help="Print structural JSON path changes only")
     diff.set_defaults(func=cmd_diff)
 
     snippet = sub.add_parser(
@@ -1258,7 +1377,18 @@ def main(argv: list[str] | None = None) -> int:
     graphql.add_argument("--introspect", action="store_true", help="Run built-in introspection and summarize")
     graphql.add_argument("--body-only", action="store_true", help="Print request JSON body and exit")
     graphql.add_argument("--summarize-body", help="Summarize an introspection JSON body (offline)")
+    graphql.add_argument(
+        "--examples",
+        action="store_true",
+        help="With --summarize-body, print stub queries from the schema summary",
+    )
+    graphql.add_argument("--example-limit", type=int, default=3, help="Max fields per root type for --examples")
     graphql.add_argument("--format-body", help="Pretty-format a GraphQL response body (offline)")
+    graphql.add_argument(
+        "--errors-only",
+        action="store_true",
+        help="With --format-body, print error count + text as JSON",
+    )
     graphql.add_argument("--list-operations", help="List operations in a GraphQL document (offline)")
     graphql.set_defaults(func=cmd_graphql)
 
@@ -1288,6 +1418,7 @@ def main(argv: list[str] | None = None) -> int:
     sse.add_argument("--timeout", type=float, default=30.0)
     sse.add_argument("--last-event-id", help="Last-Event-ID header")
     sse.add_argument("--event", help="Only keep SSE events with this event: name")
+    sse.add_argument("--summary", action="store_true", help="Print compact event summary JSON")
     sse.set_defaults(func=cmd_sse)
 
     gqlws = sub.add_parser("graphql-ws", help="Build/parse graphql-ws frames")

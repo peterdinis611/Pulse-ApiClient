@@ -1,9 +1,11 @@
-/** Local intent router for the in-app Pulse agent (no LLM). */
+/** Local intent router for the in-app Pulse agent (no LLM). Prefer pulse-core via Tauri when available. */
 
+import { invoke } from "@tauri-apps/api/core";
 import { parseRememberPair } from "@/lib/agent-memory";
 import type { AgentCapability, AgentSettings } from "@/lib/agent-settings";
 import { AGENT_CAPABILITIES, loadAgentSettings } from "@/lib/agent-settings";
 import { t, type MessageKey } from "@/lib/i18n";
+import { canUseTauriIpc } from "@/lib/tauri-runtime";
 
 export type AgentIntent =
   | { kind: "help" }
@@ -68,6 +70,19 @@ function extractSseDoc(input: string): string | null {
     return input.trim();
   }
   return null;
+}
+
+/** Prefer pulse-core via Tauri; sync JS fallback otherwise. */
+export async function routeAgentInputAsync(raw: string): Promise<AgentIntent> {
+  if (canUseTauriIpc()) {
+    try {
+      const intent = await invoke<AgentIntent>("route_agent_intent", { input: raw });
+      if (intent?.kind) return intent;
+    } catch {
+      // fall through
+    }
+  }
+  return routeAgentInput(raw);
 }
 
 /** Map a user utterance (or quick-action id) to a structured intent. */

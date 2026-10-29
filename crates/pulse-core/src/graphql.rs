@@ -351,6 +351,17 @@ pub fn build_field_stub(operation: &str, operation_name: &str, field_name: &str)
     format!("{operation} {operation_name} {{\n  {field_name}\n}}")
 }
 
+fn strip_graphql_comments(document: &str) -> String {
+    static BLOCK: OnceLock<Regex> = OnceLock::new();
+    static LINE: OnceLock<Regex> = OnceLock::new();
+    let without_block = BLOCK
+        .get_or_init(|| Regex::new(r"(?s)/\*.*?\*/").expect("block comment"))
+        .replace_all(document, " ");
+    LINE.get_or_init(|| Regex::new(r"(?m)#.*$").expect("line comment"))
+        .replace_all(&without_block, "")
+        .into_owned()
+}
+
 /// List top-level named/anonymous operations in a document (best-effort scan).
 pub fn list_operations(document: &str) -> Vec<DocumentOperation> {
     static RE: OnceLock<Regex> = OnceLock::new();
@@ -358,8 +369,9 @@ pub fn list_operations(document: &str) -> Vec<DocumentOperation> {
         Regex::new(r"(?m)(?P<kind>query|mutation|subscription)\b(?:\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*))?")
             .expect("operations regex")
     });
+    let cleaned = strip_graphql_comments(document);
     let mut out = Vec::new();
-    for caps in re.captures_iter(document) {
+    for caps in re.captures_iter(&cleaned) {
         let kind = caps
             .name("kind")
             .map(|item| item.as_str().to_string())
@@ -367,9 +379,9 @@ pub fn list_operations(document: &str) -> Vec<DocumentOperation> {
         let name = caps.name("name").map(|item| item.as_str().to_string());
         out.push(DocumentOperation { kind, name });
     }
-    if out.is_empty() && !document.trim().is_empty() {
+    if out.is_empty() && !cleaned.trim().is_empty() {
         // Shorthand `{ field }` documents are queries.
-        if document.trim().starts_with('{') {
+        if cleaned.trim().starts_with('{') {
             out.push(DocumentOperation {
                 kind: "query".into(),
                 name: None,
@@ -377,6 +389,50 @@ pub fn list_operations(document: &str) -> Vec<DocumentOperation> {
         }
     }
     out
+}
+
+/// Build stub queries from a schema summary (first N fields per root type).
+pub fn example_queries_from_summary(summary: &SchemaSummary, limit: usize) -> Vec<String> {
+    let mut out = Vec::new();
+    let limit = limit.max(1);
+    let roots = [
+        ("query", summary.query_type.as_deref()),
+        ("mutation", summary.mutation_type.as_deref()),
+        ("subscription", summary.subscription_type.as_deref()),
+    ];
+    for (kind, type_name) in roots {
+        let Some(name) = type_name.filter(|item| !item.is_empty()) else {
+            continue;
+        };
+        let Some(root) = summary.types.iter().find(|item| item.name == name) else {
+            continue;
+        };
+        for field in root.fields.iter().take(limit) {
+            let safe: String = field
+                .chars()
+                .filter(|ch| ch.is_ascii_alphanumeric() || *ch == '_')
+                .collect();
+            let op_name = format!(
+                "{}{}",
+                match kind {
+                    "mutation" => "Mut",
+                    "subscription" => "Sub",
+                    _ => "Get",
+                },
+                safe
+            );
+            out.push(build_field_stub(kind, &op_name, field));
+        }
+    }
+    out
+}
+
+/// Count GraphQL errors in a response body (0 when not a GraphQL payload).
+pub fn response_error_count(body: &str) -> usize {
+    parse_response(body)
+        .and_then(|parsed| parsed.errors)
+        .map(|items| items.len())
+        .unwrap_or(0)
 }
 
 #[cfg(test)]

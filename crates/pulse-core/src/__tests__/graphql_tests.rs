@@ -120,6 +120,30 @@ fn lists_document_operations() {
     assert_eq!(ops[2].kind, "subscription");
     let shorthand = list_operations("{ ping }");
     assert_eq!(shorthand[0].kind, "query");
+    let commented = list_operations("# query Skip { x }\nquery Keep { y }");
+    assert_eq!(commented.len(), 1);
+    assert_eq!(commented[0].name.as_deref(), Some("Keep"));
+}
+
+#[test]
+fn builds_example_queries_and_counts_errors() {
+    let summary = SchemaSummary {
+        query_type: Some("Query".into()),
+        mutation_type: None,
+        subscription_type: None,
+        types: vec![SchemaTypeSummary {
+            kind: Some("OBJECT".into()),
+            name: "Query".into(),
+            fields: vec!["ping".into(), "user".into()],
+        }],
+    };
+    let examples = example_queries_from_summary(&summary, 1);
+    assert_eq!(examples.len(), 1);
+    assert!(examples[0].contains("ping"));
+    assert_eq!(
+        response_error_count(r#"{"errors":[{"message":"x"},{"message":"y"}]}"#),
+        2
+    );
 }
 
 #[test]

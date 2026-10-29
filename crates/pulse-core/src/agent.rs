@@ -44,6 +44,8 @@ pub enum AgentIntent {
     MemoryList,
     RagSearch { query: String },
     RagReindex,
+    DraftTests,
+    DraftPreRequest,
     Unknown { input: String },
 }
 
@@ -110,6 +112,8 @@ fn kind_name(intent: &AgentIntent) -> String {
         AgentIntent::MemoryList => "memory_list".into(),
         AgentIntent::RagSearch { .. } => "rag_search".into(),
         AgentIntent::RagReindex => "rag_reindex".into(),
+        AgentIntent::DraftTests => "draft_tests".into(),
+        AgentIntent::DraftPreRequest => "draft_pre_request".into(),
         AgentIntent::Unknown { .. } => "unknown".into(),
     }
 }
@@ -147,6 +151,16 @@ fn explain_response_re() -> &'static Regex {
 fn explain_tests_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(r"explain\s+(test|tests|failures)").unwrap())
+}
+
+fn draft_tests_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"^(?:draft|generate)\s+tests?").unwrap())
+}
+
+fn draft_prerequest_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"^(?:draft|generate)\s+pre-?request").unwrap())
 }
 
 fn test_failures_re() -> &'static Regex {
@@ -289,6 +303,12 @@ pub fn route_agent_input(raw: &str) -> AgentIntent {
         || test_failures_re().is_match(&quick)
     {
         return AgentIntent::ExplainTests;
+    }
+    if quick == "quick:draft-tests" || draft_tests_re().is_match(&quick) {
+        return AgentIntent::DraftTests;
+    }
+    if quick == "quick:draft-prerequest" || draft_prerequest_re().is_match(&quick) {
+        return AgentIntent::DraftPreRequest;
     }
     if quick == "quick:workspace"
         || workspace_status_re().is_match(&quick)
@@ -477,15 +497,17 @@ pub fn execute_agent_intent(
             markdown: format!("{input}\n\n---\n{AGENT_HELP_TEXT}"),
             data: None,
         }),
-        AgentIntent::ExplainResponse | AgentIntent::ExplainTests | AgentIntent::RunCollection => {
-            Ok(AgentResult {
-                kind,
-                markdown: "This intent needs the desktop in-app Agent (active tab / confirm UI). \
+        AgentIntent::ExplainResponse
+        | AgentIntent::ExplainTests
+        | AgentIntent::RunCollection
+        | AgentIntent::DraftTests
+        | AgentIntent::DraftPreRequest => Ok(AgentResult {
+            kind,
+            markdown: "This intent needs the desktop in-app Agent (active tab / confirm UI). \
 CLI and MCP support offline intents: cURL import, SSE parse, workspace status/history, GraphQL summarize."
-                    .into(),
-                data: Some(json!({ "desktopOnly": true })),
-            })
-        }
+                .into(),
+            data: Some(json!({ "desktopOnly": true })),
+        }),
         AgentIntent::ImportCurl { curl } => {
             let payload = curl_to_payload(curl)?;
             record_history(
