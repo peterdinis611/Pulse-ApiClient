@@ -507,7 +507,7 @@ Direct dependencies — desktop UI, Rust engine, Python satellite, and the docs 
 - MCP crate (`crates/pulse-mcp`) — optional Rust stdio MCP on pulse-core: workspace list/read/write/send/search/envs/history/pending/delete/status, git status/add/commit/diff, memory CRUD, RAG search/reindex/related, contract, interpolate, send, run_tests, pre_request, run_collection, openapi_list, pulse_agent (default agent entry is still Python `pulse`)
 - Python binding (`crates/pulse-native`) — PyO3 (abi3-py310) around pulse-core for CLI/MCP (`run_agent_json`)
 - Contract binary (`pulse-contract`) — CLI check of Git YAML examples vs responseSchema / snapshots
-- Python package (`python/pulse`) — stdlib only: openapi, har, schema, runner, bench, junit, export, envfile, report, curl, diff, graphql, snippet, agent, memory, rag, workspace (PULSE_WORKSPACE YAML), MCP protocol / tools / prompts / resources
+- Python package (`python/pulse`) — stdlib only: openapi, har, schema, runner, bench, junit, export, envfile, report, curl, format-curl, diff, graphql, snippet, agent, memory, rag, git_cmd, workspace (PULSE_WORKSPACE YAML), MCP protocol / tools / prompts / resources (incl. `pulse://workspace/memory|git`)
 - Optional Python — PyYAML (OpenAPI YAML), schemathesis (`python/tools/schemathesis_pulse.py`), maturin to build pulse_native
 - Docs site (`docs/site`) — Next.js, Fumadocs (core, MDX, UI), lucide-react, cnfast
 - Tests — Vitest (UI), wiremock (Rust HTTP), Python unittest

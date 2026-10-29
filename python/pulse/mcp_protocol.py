@@ -10,7 +10,7 @@ from typing import Any, Callable
 
 from .agent import run_agent
 from .bench import compare_bench, run_bench
-from .curl import curl_to_payload
+from .curl import curl_to_payload, payload_to_curl
 from .diff import compare as diff_compare
 from .envfile import load_data_rows
 from .export import to_run_input
@@ -34,6 +34,10 @@ from .mcp_resources import (
     write_out_json,
     write_out_text,
 )
+from .git_cmd import git_add as git_add_paths
+from .git_cmd import git_commit as git_commit_message
+from .git_cmd import git_diff_stat as git_diff_stat_root
+from .git_cmd import git_status as git_status_root
 from .memory import (
     delete_fact as memory_delete_fact,
     get_fact as memory_get_fact,
@@ -578,6 +582,29 @@ def tool_curl(arguments: dict) -> dict:
     return _json(payload)
 
 
+def tool_format_curl(arguments: dict) -> dict:
+    """Pulse HTTP payload JSON → cURL (Python formatter; native when available)."""
+    raw = arguments.get("request") or arguments.get("payload")
+    if raw is None:
+        return _text("request is required (Pulse HTTP payload object or JSON string)", error=True)
+    if isinstance(raw, str):
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError as error:
+            return _text(str(error), error=True)
+    elif isinstance(raw, dict):
+        payload = raw
+    else:
+        return _text("request must be an object or JSON string", error=True)
+    native = _native_optional()
+    if native is not None and hasattr(native, "format_curl_json"):
+        try:
+            return _text(native.format_curl_json(json.dumps(payload)))
+        except Exception:
+            pass
+    return _text(payload_to_curl(payload))
+
+
 def tool_agent(arguments: dict) -> dict:
     utterance = arguments.get("input") or arguments.get("utterance") or ""
     body = arguments.get("body")
@@ -831,7 +858,7 @@ def tool_workspace_status(_arguments: dict) -> dict:
         return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
     status = workspace_status(root)
     try:
-        status["git"] = _git_status(root)
+        status["git"] = git_status_root(root)
     except Exception:
         status["git"] = None
     try:
@@ -841,73 +868,12 @@ def tool_workspace_status(_arguments: dict) -> dict:
     return _json(status)
 
 
-def _git_run(root: str, *args: str) -> tuple[int, str, str]:
-    import subprocess
-
-    proc = subprocess.run(
-        ["git", "-C", root, *args],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return proc.returncode, proc.stdout or "", proc.stderr or ""
-
-
-def _git_status(root: str) -> dict[str, Any]:
-    code, out, err = _git_run(root, "status", "--porcelain=v1", "-b")
-    if code != 0:
-        raise RuntimeError(err.strip() or "git status failed")
-    lines = out.splitlines()
-    branch = "HEAD"
-    ahead = 0
-    behind = 0
-    dirty = False
-    conflicted: list[str] = []
-    files: list[dict[str, str]] = []
-    for index, line in enumerate(lines):
-        if index == 0 and line.startswith("## "):
-            rest = line[3:]
-            name, _, tracking = rest.partition("...")
-            branch = name.split()[0] if name.split() else "HEAD"
-            if "[" in tracking:
-                bracket = tracking[tracking.find("[") :]
-                if "ahead " in bracket:
-                    digits = "".join(
-                        ch for ch in bracket.split("ahead ", 1)[1] if ch.isdigit()
-                    )
-                    ahead = int(digits or "0")
-                if "behind " in bracket:
-                    digits = "".join(
-                        ch for ch in bracket.split("behind ", 1)[1] if ch.isdigit()
-                    )
-                    behind = int(digits or "0")
-            continue
-        if len(line) < 2:
-            continue
-        dirty = True
-        xy = line[:2]
-        path = line[3:].strip()
-        if not path:
-            continue
-        if "U" in xy or xy in {"AA", "DD"}:
-            conflicted.append(path)
-        files.append({"path": path, "xy": xy})
-    return {
-        "branch": branch,
-        "dirty": dirty,
-        "ahead": ahead,
-        "behind": behind,
-        "conflicted": conflicted,
-        "files": files,
-    }
-
-
 def tool_git_status(_arguments: dict) -> dict:
     root, error = _require_workspace()
     if error or root is None:
         return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
     try:
-        return _json(_git_status(root))
+        return _json(git_status_root(root))
     except Exception as exc:
         return _text(str(exc), error=True)
 
@@ -921,12 +887,10 @@ def tool_git_add(arguments: dict) -> dict:
     paths = [str(p) for p in (arguments.get("paths") or []) if p]
     if not paths:
         return _text("paths is required", error=True)
-    for path in paths:
-        if ".." in path or "\0" in path:
-            return _text(f"Invalid path: {path}", error=True)
-    code, _out, err = _git_run(root, "add", "--", *paths)
-    if code != 0:
-        return _text(err.strip() or "git add failed", error=True)
+    try:
+        git_add_paths(root, paths)
+    except Exception as exc:
+        return _text(str(exc), error=True)
     return _text("ok")
 
 
@@ -937,25 +901,21 @@ def tool_git_commit(arguments: dict) -> dict:
     if arguments.get("confirm") is not True:
         return _text("git commit requires confirm=true", error=True)
     message = str(arguments.get("message") or "").strip()
-    if not message:
-        return _text("message is required", error=True)
-    code, out, err = _git_run(root, "commit", "-m", message)
-    if code != 0:
-        return _text(err.strip() or "git commit failed", error=True)
-    return _text(out.strip() or "ok")
+    try:
+        out = git_commit_message(root, message)
+    except Exception as exc:
+        return _text(str(exc), error=True)
+    return _text(out or "ok")
 
 
 def tool_git_diff_stat(_arguments: dict) -> dict:
     root, error = _require_workspace()
     if error or root is None:
         return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
-    code, out, _err = _git_run(root, "diff", "--stat", "HEAD")
-    if code != 0:
-        _code2, out2, err2 = _git_run(root, "status", "--short")
-        if _code2 != 0:
-            return _text(err2.strip() or "git diff failed", error=True)
-        return _text(out2.strip())
-    return _text(out.strip())
+    try:
+        return _text(git_diff_stat_root(root))
+    except Exception as exc:
+        return _text(str(exc), error=True)
 
 
 def tool_memory_list(arguments: dict) -> dict:
@@ -1219,7 +1179,7 @@ def tool_junit(arguments: dict) -> dict:
 
 
 def tool_mock_start(arguments: dict) -> dict:
-    native = load_native()
+    native = _native()
     if not hasattr(native, "mock_start_json"):
         return _text(
             "pulse_native is outdated (missing mock_start_json). Rebuild with: bun run pulse:cli:install",
@@ -1237,7 +1197,7 @@ def tool_mock_start(arguments: dict) -> dict:
 
 
 def tool_mock_stop(_arguments: dict) -> dict:
-    native = load_native()
+    native = _native()
     if not hasattr(native, "mock_stop"):
         return _text(
             "pulse_native is outdated (missing mock_stop). Rebuild with: bun run pulse:cli:install",
@@ -1276,6 +1236,7 @@ TOOLS: dict[str, Callable[[dict], dict]] = {
     "pulse_export_openapi": tool_export_openapi,
     "pulse_graphql": tool_graphql,
     "pulse_curl": tool_curl,
+    "pulse_format_curl": tool_format_curl,
     "pulse_snippet": tool_snippet,
     "pulse_last_run": tool_last_run,
     "pulse_validate_run": tool_validate_run,
@@ -1525,6 +1486,19 @@ TOOL_DEFS = [
             "properties": {
                 "command": {"type": "string"},
                 "send": {"type": "boolean", "default": False},
+            },
+        },
+    },
+    {
+        "name": "pulse_format_curl",
+        "description": "Format a Pulse HTTP payload as a cURL command (inverse of pulse_curl).",
+        "inputSchema": {
+            "type": "object",
+            "required": ["request"],
+            "properties": {
+                "request": {
+                    "description": "Pulse HTTP payload object or JSON string (method, url, headers, body, …)"
+                },
             },
         },
     },

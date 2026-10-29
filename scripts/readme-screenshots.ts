@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { cpSync, mkdirSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium, type Page } from "playwright";
@@ -22,7 +22,7 @@ const SHOTS: Shot[] = [
   { shot: "auth", file: "auth.png", wait: "text=Your API workspace, locally." },
   { shot: "overview", file: "overview.png", wait: "text=Welcome back, Demo" },
   { shot: "request", file: "request.png", wait: "text=octocat" },
-  { shot: "environments", file: "environments.png", wait: "text=base_url" },
+  { shot: "environments", file: "environments.png", wait: "text=Variables for URLs, headers, auth, and bodies." },
   { shot: "settings", file: "settings.png", wait: "text=Appearance" },
   {
     shot: "agent",
@@ -88,13 +88,7 @@ async function main(): Promise<void> {
       [
         `${process.env.HOME}/Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`,
         `${process.env.HOME}/Library/Caches/ms-playwright/chromium-1228/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`,
-      ].find((path) => {
-        try {
-          return require("node:fs").existsSync(path);
-        } catch {
-          return false;
-        }
-      });
+      ].find((path) => existsSync(path));
     const browser = await chromium.launch(executablePath ? { executablePath } : undefined);
     try {
       for (const item of SHOTS) {

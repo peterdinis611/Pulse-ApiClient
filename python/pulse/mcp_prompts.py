@@ -159,6 +159,54 @@ PROMPTS: list[dict[str, Any]] = [
             },
         ],
     },
+    {
+        "name": "git_status",
+        "description": "Ukáž git branch/dirty/súbory v PULSE_WORKSPACE.",
+        "arguments": [],
+    },
+    {
+        "name": "propose_commit",
+        "description": "Navrhni commit message z git diff --stat a voliteľne commitni (s confirm).",
+        "arguments": [
+            {
+                "name": "commit",
+                "description": "true = po návrhu aj pulse_git_add + pulse_git_commit (confirm=true)",
+                "required": False,
+            },
+        ],
+    },
+    {
+        "name": "remember_fact",
+        "description": "Zapamätaj si fakt do agent memory (key=value).",
+        "arguments": [
+            {"name": "key", "description": "Kľúč faktu", "required": True},
+            {"name": "value", "description": "Hodnota", "required": True},
+            {
+                "name": "scope",
+                "description": "workspace (default) alebo local",
+                "required": False,
+            },
+        ],
+    },
+    {
+        "name": "search_memory",
+        "description": "Hľadaj vo facts podľa substringu.",
+        "arguments": [
+            {"name": "query", "description": "Hľadaný text", "required": True},
+        ],
+    },
+    {
+        "name": "search_rag",
+        "description": "Hybrid search v RAG indexe (história, memory, requesty).",
+        "arguments": [
+            {"name": "query", "description": "Dotaz", "required": True},
+            {
+                "name": "limit",
+                "description": "Max hits (default 8)",
+                "required": False,
+            },
+        ],
+    },
 ]
 
 
@@ -320,6 +368,53 @@ def get_prompt(name: str, arguments: dict | None) -> dict[str, Any] | None:
             "Vráť collection a count. Jednotlivé YAML súbory do chatu nedávaj."
         )
         return _user(text, description="Importuj OpenAPI do YAML workspace")
+    if name == "git_status":
+        text = (
+            "Ukáž git stav PULSE_WORKSPACE.\n"
+            "Zavolaj pulse_git_status (alebo prečítaj pulse://workspace/git).\n"
+            "Vypíš branch, dirty, ahead/behind a krátky zoznam súborov. Celý porcelain dump netreba."
+        )
+        return _user(text, description="Git status workspace")
+    if name == "propose_commit":
+        commit = str(args.get("commit") or "").lower() in {"1", "true", "yes"}
+        text = (
+            "Navrhni commit message pre zmeny v PULSE_WORKSPACE.\n"
+            "1. Zavolaj pulse_git_diff_stat a pulse_git_status.\n"
+            "2. Navrhni jednu krátku commit message (1–2 vety, why not what).\n"
+            + (
+                "3. Ak používateľ súhlasí, pulse_git_add s paths zo statusu a pulse_git_commit "
+                "s message + confirm=true.\n"
+                if commit
+                else "3. Zatiaľ nič necommituj — len navrhni message.\n"
+            )
+        )
+        return _user(text, description="Navrhni (a voliteľne urob) commit")
+    if name == "remember_fact":
+        key = args.get("key") or ""
+        value = args.get("value") or ""
+        scope = args.get("scope") or "workspace"
+        text = (
+            f"Zapamätaj fakt `{key}` = `{value}` (scope={scope}).\n"
+            "Zavolaj pulse_memory_upsert s key, value, scope a confirm=true.\n"
+            "Vráť uložený fakt (key/value/scope). Secret hodnoty do chatu neopakuj."
+        )
+        return _user(text, description="Zapamätaj memory fact")
+    if name == "search_memory":
+        query = args.get("query") or ""
+        text = (
+            f"Hľadaj v agent memory: `{query}`.\n"
+            "Zavolaj pulse_memory_search s query. Vypíš key=value pre každý hit."
+        )
+        return _user(text, description="Hľadaj v memory")
+    if name == "search_rag":
+        query = args.get("query") or ""
+        limit = args.get("limit") or "8"
+        text = (
+            f"RAG search: `{query}` (limit {limit}).\n"
+            "Zavolaj pulse_rag_search s query, limit a markdown=true.\n"
+            "Ak index chýba, najprv pulse_rag_reindex. Celý index do chatu nedávaj."
+        )
+        return _user(text, description="RAG search")
     return None
 
 

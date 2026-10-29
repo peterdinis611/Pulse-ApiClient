@@ -182,6 +182,75 @@ def cmd_curl(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_format_curl(args: argparse.Namespace) -> int:
+    from pulse.curl import payload_to_curl
+
+    raw = Path(args.input).read_text() if Path(args.input).is_file() else args.input
+    payload = json.loads(raw) if isinstance(raw, str) else raw
+    try:
+        native = load_native()
+        if hasattr(native, "format_curl_json"):
+            print(native.format_curl_json(json.dumps(payload)))
+            return 0
+    except SystemExit:
+        pass
+    print(payload_to_curl(payload))
+    return 0
+
+
+def cmd_git(args: argparse.Namespace) -> int:
+    import os
+
+    from pulse.git_cmd import git_add, git_commit, git_diff_stat, git_status
+    from pulse.workspace import workspace_root
+
+    root = args.workspace or os.environ.get("PULSE_WORKSPACE") or workspace_root()
+    if not root:
+        print("No workspace root. Set PULSE_WORKSPACE or pass --workspace.", file=sys.stderr)
+        return 1
+    action = getattr(args, "git_action", None) or "status"
+    try:
+        if action == "status":
+            status = git_status(root)
+            print(json.dumps(status, indent=2) if args.json else _format_git_status(status))
+            return 0
+        if action == "add":
+            paths = list(args.paths or [])
+            if not paths:
+                print("Usage: pulse git add <path>…", file=sys.stderr)
+                return 1
+            git_add(root, paths)
+            print(json.dumps({"ok": True, "paths": paths}, indent=2) if args.json else "ok")
+            return 0
+        if action == "commit":
+            out = git_commit(root, args.message or "")
+            print(json.dumps({"ok": True, "output": out}, indent=2) if args.json else (out or "ok"))
+            return 0
+        if action == "diff":
+            stat = git_diff_stat(root)
+            print(json.dumps({"diffStat": stat}, indent=2) if args.json else (stat or "(clean)"))
+            return 0
+    except Exception as error:  # noqa: BLE001
+        print(str(error), file=sys.stderr)
+        return 1
+    print(f"Unknown git action: {action}", file=sys.stderr)
+    return 1
+
+
+def _format_git_status(status: dict) -> str:
+    lines = [
+        f"branch {status.get('branch') or 'HEAD'}"
+        + (f" ahead {status['ahead']}" if status.get("ahead") else "")
+        + (f" behind {status['behind']}" if status.get("behind") else ""),
+        "dirty" if status.get("dirty") else "clean",
+    ]
+    for item in status.get("files") or []:
+        lines.append(f"  {item.get('xy', '  ')} {item.get('path')}")
+    if status.get("conflicted"):
+        lines.append("conflicts: " + ", ".join(status["conflicted"]))
+    return "\n".join(lines)
+
+
 def cmd_agent(args: argparse.Namespace) -> int:
     from pulse.agent import run_agent
 
@@ -214,7 +283,7 @@ def cmd_agent_memory(args: argparse.Namespace) -> int:
     import os
 
     from pulse.agent import run_agent
-    from pulse.memory import delete_fact, get_fact, list_facts, upsert_fact
+    from pulse.memory import delete_fact, get_fact, list_facts, search_facts, upsert_fact
     from pulse.workspace import workspace_root
 
     root = args.workspace or os.environ.get("PULSE_WORKSPACE") or workspace_root()
@@ -236,6 +305,20 @@ def cmd_agent_memory(args: argparse.Namespace) -> int:
                 print(f"No memory found for `{args.key}`", file=sys.stderr)
                 return 1
             print(json.dumps(fact, indent=2) if args.json else f"{fact['key']}={fact['value']}")
+            return 0
+        if action == "search":
+            query = " ".join(getattr(args, "query", None) or []).strip() or str(getattr(args, "q", "") or "")
+            if not query:
+                print("Usage: pulse agent-memory search <query>", file=sys.stderr)
+                return 1
+            facts = search_facts(root, query)
+            if args.json:
+                print(json.dumps({"query": query, "facts": facts}, indent=2))
+            else:
+                if not facts:
+                    print("(no matches)")
+                for fact in facts:
+                    print(f"{fact.get('key')}={fact.get('value')}")
             return 0
         if action == "set":
             scope = "local" if args.local else "workspace"
@@ -266,7 +349,12 @@ def cmd_agent_memory(args: argparse.Namespace) -> int:
 def cmd_agent_rag(args: argparse.Namespace) -> int:
     import os
 
-    from pulse.rag import format_rag_hits_markdown, rebuild_rag_index, search_rag
+    from pulse.rag import (
+        format_rag_hits_markdown,
+        rebuild_rag_index,
+        related_context,
+        search_rag,
+    )
     from pulse.workspace import workspace_root
 
     root = args.workspace or os.environ.get("PULSE_WORKSPACE") or workspace_root()
@@ -285,6 +373,17 @@ def cmd_agent_rag(args: argparse.Namespace) -> int:
                 print(json.dumps({"query": query, "hits": hits}, indent=2))
             else:
                 print(format_rag_hits_markdown(hits, query))
+            return 0
+        if action == "related":
+            seed = " ".join(getattr(args, "seed", None) or []).strip()
+            if not seed:
+                print("Usage: pulse agent-rag related <seed>", file=sys.stderr)
+                return 1
+            hits = related_context(root, seed, limit=getattr(args, "limit", 6) or 6)
+            if args.json:
+                print(json.dumps({"seed": seed, "hits": hits}, indent=2))
+            else:
+                print(format_rag_hits_markdown(hits, seed))
             return 0
         if action == "reindex":
             count = rebuild_rag_index(root)
@@ -866,8 +965,10 @@ def cmd_help(_args: argparse.Namespace) -> int:
         "pulse CLI — same engine as MCP (pulse_native)",
         "",
         "Core:        interpolate · test · pre-request · run · bench · send · graphql · agent",
+        "Memory/RAG:  agent-memory list|get|search|set|forget · agent-rag search|related|reindex",
+        "Git:         git status|add|commit|diff",
         "Streams:     sse · graphql-ws",
-        "Convert:     openapi [--list|--export] · har [--export] · curl · snippet · diff · schema",
+        "Convert:     openapi [--list|--export] · har [--export] · curl · format-curl · snippet · diff · schema",
         "CI:          junit · report · validate-run · last-run · contract · env",
         "Workspace:   workspace status|init|migrate|list|search|envs|history|pending|read|write|delete|send|import-openapi|export-openapi",
         "Local mock:  mock start|stop",
@@ -882,7 +983,7 @@ def cmd_help(_args: argparse.Namespace) -> int:
 
 
 def cmd_version(_args: argparse.Namespace) -> int:
-    print("pulse-cli 2.3.0")
+    print("pulse-cli 2.5.0")
     print(f"python {sys.version.split()[0]}")
     try:
         native = load_native()
@@ -905,6 +1006,9 @@ def cmd_version(_args: argparse.Namespace) -> int:
                 "mock_start_json",
                 "mock_stop",
                 "run_agent_json",
+                "format_curl_json",
+                "agent_memory_list_json",
+                "agent_rag_search_json",
             )
             if hasattr(native, name)
         )
@@ -1002,6 +1106,34 @@ def main(argv: list[str] | None = None) -> int:
     curl.add_argument("--out")
     curl.set_defaults(func=cmd_curl)
 
+    format_curl = sub.add_parser(
+        "format-curl",
+        help="Format a Pulse HTTP payload JSON as a cURL command (inverse of curl)",
+    )
+    format_curl.add_argument("input", help="Payload JSON string or path to a JSON file")
+    format_curl.set_defaults(func=cmd_format_curl)
+
+    git_cmd = sub.add_parser("git", help="Git porcelain helpers for PULSE_WORKSPACE")
+    git_sub = git_cmd.add_subparsers(dest="git_action", required=True)
+    git_status = git_sub.add_parser("status", help="Branch / dirty / files")
+    git_status.add_argument("--workspace")
+    git_status.add_argument("--json", action="store_true")
+    git_status.set_defaults(func=cmd_git, git_action="status")
+    git_add = git_sub.add_parser("add", help="Stage paths (git add)")
+    git_add.add_argument("paths", nargs="+")
+    git_add.add_argument("--workspace")
+    git_add.add_argument("--json", action="store_true")
+    git_add.set_defaults(func=cmd_git, git_action="add")
+    git_commit = git_sub.add_parser("commit", help="Commit staged changes")
+    git_commit.add_argument("-m", "--message", required=True)
+    git_commit.add_argument("--workspace")
+    git_commit.add_argument("--json", action="store_true")
+    git_commit.set_defaults(func=cmd_git, git_action="commit")
+    git_diff = git_sub.add_parser("diff", help="git diff --stat HEAD")
+    git_diff.add_argument("--workspace")
+    git_diff.add_argument("--json", action="store_true")
+    git_diff.set_defaults(func=cmd_git, git_action="diff")
+
     agent = sub.add_parser(
         "agent",
         help="Local intent router (no LLM): cURL, SSE, workspace status/history, memory, RAG, GraphQL summarize",
@@ -1032,6 +1164,11 @@ def main(argv: list[str] | None = None) -> int:
     mem_get.add_argument("--workspace")
     mem_get.add_argument("--json", action="store_true")
     mem_get.set_defaults(func=cmd_agent_memory, memory_action="get")
+    mem_search = agent_mem_sub.add_parser("search", help="Search facts by substring")
+    mem_search.add_argument("query", nargs="+", help="Search query")
+    mem_search.add_argument("--workspace")
+    mem_search.add_argument("--json", action="store_true")
+    mem_search.set_defaults(func=cmd_agent_memory, memory_action="search")
     mem_set = agent_mem_sub.add_parser("set", help="Remember key=value")
     mem_set.add_argument("key")
     mem_set.add_argument("value")
@@ -1057,6 +1194,12 @@ def main(argv: list[str] | None = None) -> int:
     rag_search.add_argument("--limit", type=int, default=8)
     rag_search.add_argument("--json", action="store_true")
     rag_search.set_defaults(func=cmd_agent_rag, rag_action="search")
+    rag_related = agent_rag_sub.add_parser("related", help="Find docs related to a seed string")
+    rag_related.add_argument("seed", nargs="+", help="Seed text (method URL, name, …)")
+    rag_related.add_argument("--workspace")
+    rag_related.add_argument("--limit", type=int, default=6)
+    rag_related.add_argument("--json", action="store_true")
+    rag_related.set_defaults(func=cmd_agent_rag, rag_action="related")
     rag_reindex = agent_rag_sub.add_parser("reindex", help="Rebuild .pulse/rag-index.json")
     rag_reindex.add_argument("--workspace")
     rag_reindex.add_argument("--json", action="store_true")

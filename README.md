@@ -134,10 +134,19 @@ Opens a Fumadocs site at http://localhost:3000. Content is generated from `src/l
 
 ## Regenerate README screenshots
 
+Captures Overview, Request, Environments, Settings, Agent, MCP, and Sign-in into `docs/screenshots/` (and copies to `docs/site/public/screenshots/`).
+
 ```bash
 bun install
 bunx playwright install chromium
 bun run screenshots:readme
+```
+
+Optional: point at a cached Chromium if Playwright’s download is blocked:
+
+```bash
+PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="$HOME/Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing" \
+  bun run screenshots:readme
 ```
 
 ## Project layout
