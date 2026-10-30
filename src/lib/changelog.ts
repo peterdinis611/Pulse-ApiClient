@@ -367,7 +367,7 @@ export const CHANGELOG: ChangelogRelease[] = [
     ],
   },
   {
-    version: "2.4.0",
+    version: "2.5.0",
     date: "2026-10-17",
     title: {
       en: "Agent tools, Git status & runner dashboard",

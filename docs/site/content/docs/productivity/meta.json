@@ -9,6 +9,7 @@
     "agent",
     "python-cli",
     "mcp",
+    "crates",
     "libraries"
   ]
 }
