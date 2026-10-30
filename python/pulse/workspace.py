@@ -659,6 +659,14 @@ def list_pending(root: Path) -> list[dict[str, Any]]:
 
 
 def append_history(root: Path, entry: dict[str, Any]) -> None:
+    try:
+        import pulse_native
+
+        if hasattr(pulse_native, "append_agent_history_json"):
+            pulse_native.append_agent_history_json(str(root), json.dumps(entry))
+            return
+    except ImportError:
+        pass
     folder = root / ".pulse"
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / "history.jsonl"
@@ -667,6 +675,14 @@ def append_history(root: Path, entry: dict[str, Any]) -> None:
 
 
 def read_history(root: Path, limit: int = 20) -> list[dict[str, Any]]:
+    try:
+        import pulse_native
+
+        if hasattr(pulse_native, "read_agent_history_json"):
+            entries = json.loads(pulse_native.read_agent_history_json(str(root), limit))
+            return list(entries) if isinstance(entries, list) else []
+    except ImportError:
+        pass
     path = root / ".pulse" / "history.jsonl"
     if not path.is_file():
         return []

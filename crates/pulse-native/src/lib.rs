@@ -14,14 +14,16 @@ use pulse_core::graphql_ws::{
     subscribe as gql_subscribe, GRAPHQL_WS_PROTOCOLS,
 };
 use pulse_core::simple_http::send_once;
-use pulse_core::types::EnvVariable;
 use pulse_core::workspace_fs::load_workspace;
 use pulse_core::{
-    breaking_diff, collect_sse, compare_to_schema, delete_fact, format_rag_hits_markdown, get_fact,
-    init_workspace, list_facts, migrate_pulse_json_dumps, parse_sse_text, rebuild_rag_index,
-    routes_from_saved_requests, run_collection_with_progress, run_http_tests,
-    run_pre_request_script_with_env, search_facts, search_rag, start_mock_server_with_delay,
-    substitute_variables, upsert_fact, CollectionRunInput, CollectionRunStep, HttpRequestPayload,
+    append_agent_history, apply_path_params, breaking_diff, collect_sse, compare_to_schema,
+    delete_fact, format_rag_hits_markdown, get_fact, git_add, git_commit, git_diff_stat, git_status,
+    init_workspace, interpolate_request, list_facts, list_pending, migrate_pulse_json_dumps,
+    parse_sse_text, pretty_any, prune_rag_index, read_agent_history, read_json_path,
+    rebuild_rag_index, related_context, routes_from_saved_requests, run_collection_with_progress,
+    run_http_tests, run_pre_request_script_with_env, search_facts, search_rag,
+    start_mock_server_with_delay, substitute_variables, to_http_payload, unified_lines, upsert_fact,
+    ApiRequestDto, CollectionRunInput, CollectionRunStep, EnvVariable, HttpRequestPayload,
     HttpResponsePayload, MemoryScope, MockRoute, MockServer, SseCollectOptions, UpsertFactInput,
 };
 use std::sync::Mutex;
@@ -485,7 +487,18 @@ fn route_agent_json(input: String) -> PyResult<String> {
 }
 
 #[pyfunction]
-#[pyo3(signature = (input, workspace=None, body=None, history_limit=None, source=None, record_history=None))]
+#[pyo3(signature = (
+    input,
+    workspace=None,
+    body=None,
+    history_limit=None,
+    source=None,
+    record_history=None,
+    document=None,
+    diff_left=None,
+    diff_right=None,
+    http_payload_json=None
+))]
 fn run_agent_json(
     input: String,
     workspace: Option<String>,
@@ -493,11 +506,23 @@ fn run_agent_json(
     history_limit: Option<usize>,
     source: Option<String>,
     record_history: Option<bool>,
+    document: Option<String>,
+    diff_left: Option<String>,
+    diff_right: Option<String>,
+    http_payload_json: Option<String>,
 ) -> PyResult<String> {
     let source_owned = source.unwrap_or_else(|| "cli-agent".into());
+    let payload: Option<HttpRequestPayload> = match http_payload_json.as_deref() {
+        Some(raw) if !raw.trim().is_empty() => Some(serde_json::from_str(raw).map_err(py_err)?),
+        _ => None,
+    };
     let opts = pulse_core::AgentExecuteOptions {
         workspace_root: workspace.as_deref(),
         graphql_body: body.as_deref(),
+        document: document.as_deref(),
+        diff_left: diff_left.as_deref(),
+        diff_right: diff_right.as_deref(),
+        http_payload: payload.as_ref(),
         history_limit: history_limit.unwrap_or(15),
         source: &source_owned,
         record_history: record_history.unwrap_or(true),
@@ -605,6 +630,106 @@ fn format_curl_json(payload_json: String) -> PyResult<String> {
     Ok(pulse_core::payload_to_curl(&payload))
 }
 
+#[pyfunction]
+fn git_status_json(root: String) -> PyResult<String> {
+    let status = git_status(&root).map_err(py_err)?;
+    serde_json::to_string(&status).map_err(py_err)
+}
+
+#[pyfunction]
+fn git_add_json(root: String, paths_json: String) -> PyResult<()> {
+    let paths: Vec<String> = serde_json::from_str(&paths_json).map_err(py_err)?;
+    git_add(&root, &paths).map_err(py_err)
+}
+
+#[pyfunction]
+fn git_commit_json(root: String, message: String) -> PyResult<String> {
+    git_commit(&root, &message).map_err(py_err)
+}
+
+#[pyfunction]
+fn git_diff_stat_json(root: String) -> PyResult<String> {
+    git_diff_stat(&root).map_err(py_err)
+}
+
+#[pyfunction]
+fn list_pending_json(root: String) -> PyResult<String> {
+    let pending = list_pending(&root).map_err(py_err)?;
+    serde_json::to_string(&pending).map_err(py_err)
+}
+
+#[pyfunction]
+#[pyo3(signature = (root, limit=None))]
+fn read_agent_history_json(root: String, limit: Option<usize>) -> PyResult<String> {
+    let mut entries = read_agent_history(&root).map_err(py_err)?;
+    if let Some(max) = limit {
+        if entries.len() > max {
+            entries = entries.split_off(entries.len() - max);
+        }
+    }
+    serde_json::to_string(&entries).map_err(py_err)
+}
+
+#[pyfunction]
+fn append_agent_history_json(root: String, entry_json: String) -> PyResult<()> {
+    let entry: serde_json::Value = serde_json::from_str(&entry_json).map_err(py_err)?;
+    append_agent_history(&root, &entry).map_err(py_err)
+}
+
+#[pyfunction]
+fn apply_path_params_json(url: String, params_json: String) -> PyResult<String> {
+    let params: Vec<EnvVariable> = serde_json::from_str(&params_json).map_err(py_err)?;
+    Ok(apply_path_params(&url, &params))
+}
+
+#[pyfunction]
+fn prepare_request_json(request_json: String, env_json: String) -> PyResult<String> {
+    let request: ApiRequestDto = serde_json::from_str(&request_json).map_err(py_err)?;
+    let variables: Vec<EnvVariable> = serde_json::from_str(&env_json).map_err(py_err)?;
+    let prepared = interpolate_request(request, &variables);
+    let payload = to_http_payload(&prepared, None);
+    serde_json::to_string(&serde_json::json!({
+        "request": prepared,
+        "payload": payload,
+    }))
+    .map_err(py_err)
+}
+
+#[pyfunction]
+fn pretty_any_json(raw: String) -> PyResult<String> {
+    Ok(pretty_any(&raw))
+}
+
+#[pyfunction]
+fn unified_lines_json(left: String, right: String) -> PyResult<String> {
+    let rows = unified_lines(&left, &right);
+    serde_json::to_string(&rows).map_err(py_err)
+}
+
+#[pyfunction]
+fn read_json_path_json(value_json: String, path: String) -> PyResult<String> {
+    let value: serde_json::Value = serde_json::from_str(&value_json).map_err(py_err)?;
+    let found = read_json_path(&value, &path);
+    serde_json::to_string(&found).map_err(py_err)
+}
+
+#[pyfunction]
+#[pyo3(signature = (workspace, seed, limit=None))]
+fn agent_rag_related_json(workspace: String, seed: String, limit: Option<u32>) -> PyResult<String> {
+    let hits = related_context(&workspace, &seed, limit.unwrap_or(5) as usize);
+    serde_json::to_string(&hits).map_err(py_err)
+}
+
+#[pyfunction]
+#[pyo3(signature = (workspace, older_than_days=None, max_docs=None))]
+fn agent_rag_prune_json(
+    workspace: String,
+    older_than_days: Option<u64>,
+    max_docs: Option<usize>,
+) -> PyResult<usize> {
+    prune_rag_index(&workspace, older_than_days, max_docs).map_err(py_err)
+}
+
 #[pymodule]
 fn pulse_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(interpolate, m)?)?;
@@ -647,7 +772,21 @@ fn pulse_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(agent_rag_search_json, m)?)?;
     m.add_function(wrap_pyfunction!(agent_rag_search_markdown, m)?)?;
     m.add_function(wrap_pyfunction!(agent_rag_reindex_json, m)?)?;
+    m.add_function(wrap_pyfunction!(agent_rag_related_json, m)?)?;
+    m.add_function(wrap_pyfunction!(agent_rag_prune_json, m)?)?;
     m.add_function(wrap_pyfunction!(mock_start_json, m)?)?;
     m.add_function(wrap_pyfunction!(mock_stop, m)?)?;
+    m.add_function(wrap_pyfunction!(git_status_json, m)?)?;
+    m.add_function(wrap_pyfunction!(git_add_json, m)?)?;
+    m.add_function(wrap_pyfunction!(git_commit_json, m)?)?;
+    m.add_function(wrap_pyfunction!(git_diff_stat_json, m)?)?;
+    m.add_function(wrap_pyfunction!(list_pending_json, m)?)?;
+    m.add_function(wrap_pyfunction!(read_agent_history_json, m)?)?;
+    m.add_function(wrap_pyfunction!(append_agent_history_json, m)?)?;
+    m.add_function(wrap_pyfunction!(apply_path_params_json, m)?)?;
+    m.add_function(wrap_pyfunction!(prepare_request_json, m)?)?;
+    m.add_function(wrap_pyfunction!(pretty_any_json, m)?)?;
+    m.add_function(wrap_pyfunction!(unified_lines_json, m)?)?;
+    m.add_function(wrap_pyfunction!(read_json_path_json, m)?)?;
     Ok(())
 }

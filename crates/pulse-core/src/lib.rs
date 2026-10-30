@@ -68,6 +68,7 @@ pub use json_diff::{
 };
 pub use json_schema::validate_json as validate_json_schema;
 pub use openapi_ops::{convert as openapi_convert, export_spec as openapi_export_spec, list_operations as openapi_list_operations};
+pub use path_params::apply_path_params;
 pub use prepare::{interpolate_request, to_http_payload};
 pub use snippets::generate as generate_snippet;
 pub use sse::{
@@ -76,7 +77,9 @@ pub use sse::{
     summarize_events as summarize_sse_events, ws_close_code_label, ParsedSseEvent, SseBuffer,
     SseCollectOptions,
 };
-pub use types::{AuthConfig, EnvVariable, HttpRequestPayload, HttpResponsePayload, KeyValue};
+pub use types::{
+    ApiRequestDto, AuthConfig, EnvVariable, HttpRequestPayload, HttpResponsePayload, KeyValue,
+};
 pub use vars::substitute_variables;
 pub use workspace_fs::{
     append_agent_history, delete_request, init_workspace, is_mutating_method, list_pending, load_workspace,

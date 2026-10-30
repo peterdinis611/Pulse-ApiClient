@@ -427,6 +427,20 @@ def prune_rag_index(
     older_than_days: int = DEFAULT_PRUNE_4XX_DAYS,
     max_docs: int = 5000,
 ) -> int:
+    try:
+        import pulse_native
+
+        if hasattr(pulse_native, "agent_rag_prune_json"):
+            return int(
+                pulse_native.agent_rag_prune_json(
+                    str(root),
+                    older_than_days,
+                    max_docs,
+                )
+            )
+    except ImportError:
+        pass
+
     root_p = Path(root)
     payload = _load_index(root_p)
     docs = list(payload.get("docs") or [])
@@ -486,6 +500,13 @@ def related_context(root: str | Path, seed: str, limit: int = 5) -> list[dict[st
     seed = (seed or "").strip()
     if not seed:
         return []
+    try:
+        import pulse_native
+
+        if hasattr(pulse_native, "agent_rag_related_json"):
+            return json.loads(pulse_native.agent_rag_related_json(str(root), seed, limit))
+    except ImportError:
+        pass
     return search_rag(root, seed, limit)
 
 

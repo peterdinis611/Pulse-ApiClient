@@ -52,3 +52,35 @@ pub fn apply_path_params(url: &str, params: &[EnvVariable]) -> String {
     }
     format!("{}{query}{hash}", replace_path(&base))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn param(key: &str, value: &str) -> EnvVariable {
+        EnvVariable {
+            id: key.into(),
+            key: key.into(),
+            value: value.into(),
+            enabled: true,
+            secret: false,
+        }
+    }
+
+    #[test]
+    fn replaces_colon_and_brace_tokens() {
+        let params = vec![param("id", "42"), param("slug", "hello world")];
+        assert_eq!(
+            apply_path_params("https://api.test/users/:id/{slug}?x=1#top", &params),
+            "https://api.test/users/42/hello%20world?x=1#top"
+        );
+    }
+
+    #[test]
+    fn leaves_missing_tokens() {
+        assert_eq!(
+            apply_path_params("/pets/:petId", &[]),
+            "/pets/:petId"
+        );
+    }
+}

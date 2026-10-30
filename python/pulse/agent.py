@@ -433,9 +433,18 @@ def run_agent(
     history_limit: int = 15,
     source: str = "cli-agent",
     record_history: bool = True,
+    document: str | None = None,
+    diff_left: str | None = None,
+    diff_right: str | None = None,
+    http_payload: dict[str, Any] | str | None = None,
 ) -> dict[str, Any]:
     """Route + execute. Prefers Rust `run_agent_json` when pulse_native is available."""
     root = workspace or os.environ.get("PULSE_WORKSPACE") or workspace_root()
+    payload_json: str | None = None
+    if isinstance(http_payload, dict):
+        payload_json = json.dumps(http_payload)
+    elif isinstance(http_payload, str) and http_payload.strip():
+        payload_json = http_payload
     try:
         import pulse_native
 
@@ -448,6 +457,10 @@ def run_agent(
                     history_limit,
                     source,
                     record_history,
+                    document,
+                    diff_left,
+                    diff_right,
+                    payload_json,
                 )
             )
     except ImportError:

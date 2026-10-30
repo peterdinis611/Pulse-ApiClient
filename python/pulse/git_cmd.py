@@ -1,7 +1,8 @@
-"""Thin git CLI wrappers shared by MCP and the Pulse CLI."""
+"""Thin git CLI wrappers shared by MCP and the Pulse CLI. Prefers pulse_native."""
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,14 @@ def git_run(root: str | Path, *args: str) -> tuple[int, str, str]:
 
 
 def git_status(root: str | Path) -> dict[str, Any]:
+    try:
+        import pulse_native
+
+        if hasattr(pulse_native, "git_status_json"):
+            return json.loads(pulse_native.git_status_json(str(root)))
+    except ImportError:
+        pass
+
     code, out, err = git_run(root, "status", "--porcelain=v1", "-b")
     if code != 0:
         raise RuntimeError(err.strip() or "git status failed")
@@ -75,6 +84,15 @@ def git_status(root: str | Path) -> dict[str, Any]:
 def git_add(root: str | Path, paths: list[str]) -> None:
     if not paths:
         raise ValueError("No paths to stage")
+    try:
+        import pulse_native
+
+        if hasattr(pulse_native, "git_add_json"):
+            pulse_native.git_add_json(str(root), json.dumps(list(paths)))
+            return
+    except ImportError:
+        pass
+
     for path in paths:
         if ".." in path or "\0" in path:
             raise ValueError(f"Invalid path: {path}")
@@ -87,6 +105,14 @@ def git_commit(root: str | Path, message: str) -> str:
     message = (message or "").strip()
     if not message:
         raise ValueError("Commit message is required")
+    try:
+        import pulse_native
+
+        if hasattr(pulse_native, "git_commit_json"):
+            return pulse_native.git_commit_json(str(root), message)
+    except ImportError:
+        pass
+
     code, out, err = git_run(root, "commit", "-m", message)
     if code != 0:
         raise RuntimeError(err.strip() or "git commit failed")
@@ -94,6 +120,14 @@ def git_commit(root: str | Path, message: str) -> str:
 
 
 def git_diff_stat(root: str | Path) -> str:
+    try:
+        import pulse_native
+
+        if hasattr(pulse_native, "git_diff_stat_json"):
+            return pulse_native.git_diff_stat_json(str(root))
+    except ImportError:
+        pass
+
     code, out, _err = git_run(root, "diff", "--stat", "HEAD")
     if code != 0:
         code2, out2, err2 = git_run(root, "status", "--short")
