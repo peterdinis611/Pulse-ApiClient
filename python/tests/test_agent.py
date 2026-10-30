@@ -64,6 +64,16 @@ class AgentRouterTests(unittest.TestCase):
             )
             self.assertIn("Forgot", forgot["markdown"])
 
+    def test_expanded_offline_phrases(self) -> None:
+        self.assertEqual(route_agent_input("check contract")["kind"], "contract_check")
+        self.assertEqual(route_agent_input("show env")["kind"], "env_show")
+        self.assertEqual(route_agent_input("start mock")["kind"], "mock_start")
+        self.assertEqual(route_agent_input("diff response")["kind"], "response_diff")
+        self.assertEqual(route_agent_input("export curl")["kind"], "curl_export")
+        self.assertEqual(route_agent_input("import openapi")["kind"], "openapi_import")
+        self.assertEqual(route_agent_input("list openapi ops")["kind"], "openapi_list")
+        self.assertEqual(route_agent_input("quick:mock")["kind"], "mock_start")
+
     def test_rag_intents(self) -> None:
         import tempfile
 

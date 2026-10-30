@@ -24,12 +24,21 @@ export type AgentIntent =
   | { kind: "rag_reindex" }
   | { kind: "draft_tests" }
   | { kind: "draft_pre_request" }
+  | { kind: "openapi_import"; spec: string }
+  | { kind: "openapi_list"; spec: string }
+  | { kind: "response_diff" }
+  | { kind: "mock_start" }
+  | { kind: "env_show" }
+  | { kind: "curl_export" }
+  | { kind: "contract_check" }
   | { kind: "unknown"; input: string };
 
 const HELP_KEYS: Record<AgentCapability, MessageKey> = {
   import_curl: "agent.md.cap.import_curl",
   explain_response: "agent.md.cap.explain_response",
   explain_tests: "agent.md.cap.explain_tests",
+  draft_tests: "agent.md.cap.draft_tests",
+  draft_pre_request: "agent.md.cap.draft_pre_request",
   workspace_status: "agent.md.cap.workspace_status",
   workspace_history: "agent.md.cap.workspace_history",
   run_collection: "agent.md.cap.run_collection",
@@ -37,6 +46,12 @@ const HELP_KEYS: Record<AgentCapability, MessageKey> = {
   sse_parse: "agent.md.cap.sse_parse",
   memory: "agent.md.cap.memory",
   memory_rag: "agent.md.cap.memory_rag",
+  openapi: "agent.md.cap.openapi",
+  mock: "agent.md.cap.mock",
+  diff: "agent.md.cap.diff",
+  env_show: "agent.md.cap.env_show",
+  curl_export: "agent.md.cap.curl_export",
+  contract_check: "agent.md.cap.contract_check",
 };
 
 /** Route via pulse-core (`route_agent_intent`). Desktop-only. */

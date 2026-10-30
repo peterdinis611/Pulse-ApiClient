@@ -16,6 +16,8 @@ export const AGENT_CAPABILITIES = [
   "import_curl",
   "explain_response",
   "explain_tests",
+  "draft_tests",
+  "draft_pre_request",
   "workspace_status",
   "workspace_history",
   "run_collection",
@@ -23,6 +25,12 @@ export const AGENT_CAPABILITIES = [
   "sse_parse",
   "memory",
   "memory_rag",
+  "openapi",
+  "mock",
+  "diff",
+  "env_show",
+  "curl_export",
+  "contract_check",
 ] as const;
 
 export type AgentCapability = (typeof AGENT_CAPABILITIES)[number];
@@ -273,6 +281,15 @@ export function capabilityForIntent(kind: string): AgentCapability | null {
   }
   if (kind === "rag_search" || kind === "rag_reindex") {
     return "memory_rag";
+  }
+  if (kind === "openapi_import" || kind === "openapi_list") {
+    return "openapi";
+  }
+  if (kind === "response_diff") {
+    return "diff";
+  }
+  if (kind === "mock_start") {
+    return "mock";
   }
   if ((AGENT_CAPABILITIES as readonly string[]).includes(kind)) {
     return kind as AgentCapability;

@@ -202,6 +202,8 @@ export function useApp() {
       const imported = await importOpenApiCollection(raw);
       send({ type: "IMPORT_OPENAPI", collection: imported.collection, requests: imported.requests });
     },
+    applyOpenApiImport: (collection: CollectionGroup, requests: SavedRequest[]) =>
+      send({ type: "IMPORT_OPENAPI", collection, requests }),
     importEnvironments: (raw: string) => send({ type: "IMPORT_ENVIRONMENTS", raw }),
     exportEnvironments: () => exportEnvironmentsJson(context.persisted.environments),
     addCollectionGroup: (name: string) => send({ type: "ADD_COLLECTION_GROUP", name }),

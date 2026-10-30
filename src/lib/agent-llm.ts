@@ -80,6 +80,51 @@ export const AGENT_TOOLS: AgentToolDefinition[] = [
     parameters: { type: "object", properties: {}, additionalProperties: false },
   },
   {
+    name: "import_openapi_spec",
+    description:
+      "Propose importing an OpenAPI/Swagger JSON document into the workspace as a collection (requires confirm).",
+    parameters: {
+      type: "object",
+      properties: {
+        spec: { type: "string", description: "Raw OpenAPI/Swagger JSON string" },
+      },
+      required: ["spec"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "switch_environment",
+    description: "Propose switching the active environment by id or name (requires confirm).",
+    parameters: {
+      type: "object",
+      properties: {
+        environmentId: { type: "string" },
+        environmentName: { type: "string" },
+        name: { type: "string" },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "set_header",
+    description: "Propose setting a header on the active request (requires confirm).",
+    parameters: {
+      type: "object",
+      properties: {
+        key: { type: "string" },
+        value: { type: "string" },
+      },
+      required: ["key"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "diff_response_example",
+    description:
+      "Diff the last response body against the most recent saved response example on the active request.",
+    parameters: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
     name: "propose_commit_message",
     description:
       "Propose a git commit message for dirty workspace files (requires confirm to stage+commit).",

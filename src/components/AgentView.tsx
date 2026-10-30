@@ -13,14 +13,18 @@ import {
   type AgentActionResult,
   type AgentConfirmKind,
 } from "@/lib/agent-actions";
-import { routeAgentInputAsync } from "@/lib/agent-router";
+import { routeAgentInputAsync, buildAgentHelpText } from "@/lib/agent-router";
 import type { AgentRagCitation } from "@/lib/agent-rag";
-import { hydrateAgentApiKey, type AgentCapability } from "@/lib/agent-settings";
+import {
+  AGENT_CAPABILITIES,
+  hydrateAgentApiKey,
+  type AgentCapability,
+} from "@/lib/agent-settings";
 import type { MessageKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { shallowEqualAppSlice, useAppActions, useAppSelector } from "@/machines";
 import { selectActiveEnvironment, selectActiveTab } from "@/machines/appMachine";
-import type { ApiRequest } from "@/types";
+import type { ApiRequest, CollectionGroup, SavedRequest } from "@/types";
 
 type ChatRole = "user" | "assistant";
 
@@ -35,6 +39,9 @@ type ChatMessage = {
   busy?: boolean;
 };
 
+const CHAT_STORAGE_KEY = "pulse-agent-chat-v1";
+const CHAT_STORAGE_LIMIT = 40;
+
 const QUICK_ACTIONS: Array<{
   id: string;
   labelKey: MessageKey;
@@ -45,12 +52,67 @@ const QUICK_ACTIONS: Array<{
   { id: "quick:workspace", labelKey: "agent.quick.workspace", capability: "workspace_status" },
   { id: "quick:run", labelKey: "agent.quick.run", capability: "run_collection" },
   { id: "quick:tests", labelKey: "agent.quick.tests", capability: "explain_tests" },
-  { id: "quick:draft-tests", labelKey: "agent.quick.draftTests", capability: "explain_tests" },
-  { id: "quick:draft-prerequest", labelKey: "agent.quick.draftPreRequest", capability: "explain_response" },
+  { id: "quick:draft-tests", labelKey: "agent.quick.draftTests", capability: "draft_tests" },
+  {
+    id: "quick:draft-prerequest",
+    labelKey: "agent.quick.draftPreRequest",
+    capability: "draft_pre_request",
+  },
   { id: "quick:history", labelKey: "agent.quick.history", capability: "workspace_history" },
   { id: "quick:memory", labelKey: "agent.quick.memory", capability: "memory" },
   { id: "quick:rag", labelKey: "agent.quick.rag", capability: "memory_rag" },
+  { id: "quick:openapi", labelKey: "agent.quick.openapi", capability: "openapi" },
+  { id: "quick:mock", labelKey: "agent.quick.mock", capability: "mock" },
+  { id: "quick:diff", labelKey: "agent.quick.diff", capability: "diff" },
+  { id: "quick:env", labelKey: "agent.quick.env", capability: "env_show" },
+  { id: "quick:curl-export", labelKey: "agent.quick.curlExport", capability: "curl_export" },
+  { id: "quick:contract", labelKey: "agent.quick.contract", capability: "contract_check" },
 ];
+
+const CAP_GRID_LABEL: Partial<Record<AgentCapability, MessageKey>> = {
+  import_curl: "agent.capability.import_curl",
+  explain_response: "agent.capability.explain_response",
+  draft_tests: "agent.capability.draft_tests",
+  openapi: "agent.capability.openapi",
+  mock: "agent.capability.mock",
+  diff: "agent.capability.diff",
+  env_show: "agent.capability.env_show",
+  curl_export: "agent.capability.curl_export",
+  contract_check: "agent.capability.contract_check",
+  memory: "agent.capability.memory",
+  run_collection: "agent.capability.run_collection",
+};
+
+function loadPersistedMessages(): ChatMessage[] {
+  try {
+    const raw = sessionStorage.getItem(CHAT_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as ChatMessage[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item) => item && (item.role === "user" || item.role === "assistant") && item.id)
+      .map((item) => ({
+        ...item,
+        busy: false,
+        pendingConfirm: item.pendingConfirm,
+      }))
+      .slice(-CHAT_STORAGE_LIMIT);
+  } catch {
+    return [];
+  }
+}
+
+function persistMessages(messages: ChatMessage[]) {
+  try {
+    const slim = messages
+      .filter((item) => !item.busy)
+      .slice(-CHAT_STORAGE_LIMIT)
+      .map(({ busy: _busy, ...rest }) => rest);
+    sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(slim));
+  } catch {
+    /* ignore quota */
+  }
+}
 
 function renderAgentMarkdown(text: string) {
   const blocks = text.split(/(```[\s\S]*?```)/g);
@@ -107,6 +169,11 @@ function nextId(prefix: string) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+function confirmToolLabel(kind: AgentConfirmKind, payload?: AgentActionResult["confirmPayload"]) {
+  if (payload?.toolName) return payload.toolName;
+  return kind;
+}
+
 export function AgentView() {
   const t = useT();
   const agentSettings = useAgentSettings();
@@ -117,6 +184,7 @@ export function AgentView() {
     activeCollectionId,
     collectionGroups,
     collections,
+    environments,
     activeEnvironment,
   } = useAppSelector((state) => {
     const tab = selectActiveTab(state.context);
@@ -127,23 +195,38 @@ export function AgentView() {
       activeCollectionId: state.context.persisted.activeCollectionId,
       collectionGroups: state.context.persisted.collectionGroups,
       collections: state.context.persisted.collections,
+      environments: state.context.persisted.environments,
       activeEnvironment: selectActiveEnvironment(state.context),
     };
   }, shallowEqualAppSlice);
-  const { openRequestTab, setMainView, updateRequest, sendCurrentRequest } = useAppActions();
+  const {
+    send,
+    openRequestTab,
+    setMainView,
+    updateRequest,
+    sendCurrentRequest,
+    setActiveEnvironmentId,
+  } = useAppActions();
 
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => loadPersistedMessages());
   const [working, setWorking] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const streamIdRef = useRef<string | null>(null);
   const quickActions = QUICK_ACTIONS.filter(
     (action) => agentSettings.enabled && agentSettings.capabilities[action.capability],
   );
+  const emptyCaps = AGENT_CAPABILITIES.filter(
+    (id) => agentSettings.capabilities[id] && CAP_GRID_LABEL[id],
+  );
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, working]);
+
+  useEffect(() => {
+    persistMessages(messages);
+  }, [messages]);
 
   useEffect(() => {
     void hydrateAgentApiKey().then(() => undefined);
@@ -156,12 +239,16 @@ export function AgentView() {
     activeCollectionId,
     collectionGroups,
     collections,
+    environments,
     environment: activeEnvironment,
     openRequestTab,
     setMainView,
     onStreamDelta,
     sendActiveRequest: sendCurrentRequest,
     updateActiveRequest: updateRequest,
+    importOpenApi: (collection: CollectionGroup, requests: SavedRequest[]) =>
+      send({ type: "IMPORT_OPENAPI", collection, requests }),
+    setActiveEnvironmentId,
   });
 
   const applyResult = (result: AgentActionResult, replaceId?: string) => {
@@ -267,8 +354,16 @@ export function AgentView() {
   const handleOpenAndSend = (apiRequest: ApiRequest) => {
     openRequestTab(apiRequest);
     setMainView("request");
-    // Defer send until the tab is active in the machine.
     window.setTimeout(() => sendCurrentRequest(), 0);
+  };
+
+  const clearChat = () => {
+    setMessages([]);
+    try {
+      sessionStorage.removeItem(CHAT_STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
   };
 
   if (!agentSettings.enabled) {
@@ -326,7 +421,7 @@ export function AgentView() {
               variant="outline"
               size="sm"
               disabled={messages.length === 0}
-              onClick={() => setMessages([])}
+              onClick={clearChat}
             >
               <Trash2 className="size-3.5" />
               {t("agent.clear")}
@@ -355,9 +450,25 @@ export function AgentView() {
         <PanelBody className="flex min-h-0 flex-1 flex-col gap-3">
           <div className="min-h-[280px] flex-1 space-y-3 overflow-y-auto pr-1">
             {messages.length === 0 && (
-              <p className="rounded-lg border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
-                {t("agent.empty")}
-              </p>
+              <div className="rounded-lg border border-dashed border-border px-3 py-6">
+                <p className="text-center text-sm text-muted-foreground">{t("agent.empty")}</p>
+                <p className="mt-4 text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {t("agent.empty.capabilities")}
+                </p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {emptyCaps.map((id) => (
+                    <div
+                      key={id}
+                      className="rounded-md border border-border bg-surface-1 px-2.5 py-2 text-[12px] text-foreground"
+                    >
+                      {CAP_GRID_LABEL[id] ? t(CAP_GRID_LABEL[id]!) : id}
+                    </div>
+                  ))}
+                </div>
+                <pre className="mt-4 max-h-40 overflow-auto rounded-md border border-border bg-muted/30 p-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
+                  {buildAgentHelpText(agentSettings)}
+                </pre>
+              </div>
             )}
             {messages.map((message) => (
               <div
@@ -382,68 +493,96 @@ export function AgentView() {
                 {(message.pendingConfirm ||
                   message.openRequest ||
                   (message.citations && message.citations.length > 0)) && (
-                  <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-2">
+                  <div className="mt-3 space-y-2 border-t border-border pt-2">
                     {message.pendingConfirm && (
-                      <>
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={working}
-                          onClick={() => void handleConfirm(message)}
-                        >
-                          {t("agent.confirm")}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled={working}
-                          onClick={() =>
-                            setMessages((prev) =>
-                              prev.map((item) =>
-                                item.id === message.id
-                                  ? { ...item, pendingConfirm: undefined }
-                                  : item,
-                              ),
-                            )
-                          }
-                        >
-                          {t("agent.cancel")}
-                        </Button>
-                      </>
+                      <div className="rounded-md border border-amber-500/35 bg-amber-500/5 px-2.5 py-2">
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                          {t("agent.confirm.title")}
+                        </p>
+                        <p className="mt-1 text-[12px] text-muted-foreground">
+                          {t("agent.confirm.tool", {
+                            tool: confirmToolLabel(message.pendingConfirm, message.confirmPayload),
+                          })}
+                        </p>
+                        {message.confirmPayload &&
+                          Object.keys(message.confirmPayload).some(
+                            (key) => key !== "toolName" && message.confirmPayload?.[key as keyof typeof message.confirmPayload],
+                          ) && (
+                            <pre className="mt-2 max-h-28 overflow-auto rounded border border-border bg-muted/40 p-2 font-mono text-[11px]">
+                              {JSON.stringify(
+                                Object.fromEntries(
+                                  Object.entries(message.confirmPayload).filter(
+                                    ([key, value]) => key !== "toolName" && value != null && value !== "",
+                                  ),
+                                ),
+                                null,
+                                2,
+                              )}
+                            </pre>
+                          )}
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={working}
+                            onClick={() => void handleConfirm(message)}
+                          >
+                            {t("agent.confirm")}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={working}
+                            onClick={() =>
+                              setMessages((prev) =>
+                                prev.map((item) =>
+                                  item.id === message.id
+                                    ? { ...item, pendingConfirm: undefined }
+                                    : item,
+                                ),
+                              )
+                            }
+                          >
+                            {t("agent.cancel")}
+                          </Button>
+                        </div>
+                      </div>
                     )}
-                    {message.openRequest && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => handleOpenRequest(message.openRequest!)}
-                      >
-                        {t("agent.openRequest")}
-                      </Button>
-                    )}
-                    {message.citations?.map((citation) => (
-                      <div key={citation.id} className="flex flex-wrap gap-1.5">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleOpenRequest(citation.request)}
-                        >
-                          {citation.label}
-                        </Button>
+                    <div className="flex flex-wrap gap-2">
+                      {message.openRequest && (
                         <Button
                           type="button"
                           size="sm"
                           variant="secondary"
-                          onClick={() => handleOpenAndSend(citation.request)}
-                          title={t("agent.sendCitation")}
+                          onClick={() => handleOpenRequest(message.openRequest!)}
                         >
-                          <Send className="size-3.5" />
-                          {t("agent.send")}
+                          {t("agent.openRequest")}
                         </Button>
-                      </div>
-                    ))}
+                      )}
+                      {message.citations?.map((citation) => (
+                        <div key={citation.id} className="flex flex-wrap gap-1.5">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleOpenRequest(citation.request)}
+                          >
+                            {citation.label}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => handleOpenAndSend(citation.request)}
+                            title={t("agent.sendCitation")}
+                          >
+                            <Send className="size-3.5" />
+                            {t("agent.send")}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

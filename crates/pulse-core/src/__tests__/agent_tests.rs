@@ -194,3 +194,49 @@ fn desktop_only_intents_are_flagged() {
     assert_eq!(result.kind, "explain_response");
     assert_eq!(result.data.unwrap()["desktopOnly"], true);
 }
+
+#[test]
+fn routes_new_offline_intents() {
+    assert_eq!(route_agent_input("quick:mock"), AgentIntent::MockStart);
+    assert_eq!(route_agent_input("start mock"), AgentIntent::MockStart);
+    assert_eq!(route_agent_input("show env"), AgentIntent::EnvShow);
+    assert_eq!(route_agent_input("export curl"), AgentIntent::CurlExport);
+    assert_eq!(route_agent_input("check contract"), AgentIntent::ContractCheck);
+    assert_eq!(route_agent_input("diff response"), AgentIntent::ResponseDiff);
+    assert!(matches!(
+        route_agent_input("import openapi"),
+        AgentIntent::OpenapiImport { .. }
+    ));
+    assert!(matches!(
+        route_agent_input("list openapi ops"),
+        AgentIntent::OpenapiList { .. }
+    ));
+}
+
+#[test]
+fn executes_openapi_import_and_diff() {
+    let spec = r#"{"openapi":"3.0.0","info":{"title":"Demo"},"paths":{"/ping":{"get":{"summary":"Ping"}}}}"#;
+    let result = run_agent(
+        spec,
+        &AgentExecuteOptions {
+            record_history: false,
+            ..Default::default()
+        },
+    )
+    .expect("openapi");
+    assert_eq!(result.kind, "openapi_import");
+    assert!(result.markdown.contains("Ping") || result.markdown.contains("request"));
+
+    let diff = execute_agent_intent(
+        &AgentIntent::ResponseDiff,
+        &AgentExecuteOptions {
+            diff_left: Some(r#"{"a":1}"#),
+            diff_right: Some(r#"{"a":2}"#),
+            record_history: false,
+            ..Default::default()
+        },
+    )
+    .expect("diff");
+    assert_eq!(diff.kind, "response_diff");
+    assert!(diff.markdown.contains("diff") || diff.markdown.contains("+") || diff.markdown.contains("−") || diff.markdown.contains("-"));
+}

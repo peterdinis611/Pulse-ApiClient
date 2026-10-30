@@ -443,11 +443,26 @@ Pulse does not operate a cloud. Your workspace stays on this device unless you s
 
 > If you self-host docs or redistribute Pulse, keep this policy with the app. Changing network behavior (telemetry, accounts, sync) would require an updated policy.
 
+### In-app Agent
+
+Local intent router (pulse-core) plus optional cloud tools with confirm — OpenAPI, mock, diff, env, cURL export, contract, drafts.
+
+- Offline intents: help, import cURL, explain response/tests, draft tests/pre-request, workspace status/history, run collection (confirm), GraphQL summarize, SSE parse, memory + RAG
+- Also: `import openapi` / list ops, `diff response`, `start mock` (confirm), `show env`, `export curl`, `check contract`
+- Optional LLM tools (when cloud tools job is on): send, run collection, remember, apply drafts, write fields, mock, import OpenAPI, switch env, set header, diff vs example — all mutating tools need Confirm
+- Quick-action chips + capability toggles in Settings → Agent / LLM; chat persists in session storage until Clear
+- CLI/MCP `pulse_agent` shares the same router via `run_agent_json`
+
+**How to**
+
+1. Open Agent in the left rail. Try `show env`, paste OpenAPI JSON after `import openapi`, or Confirm when the model proposes a write.
+2. `bun run pulse:cli agent "check contract"` with `PULSE_WORKSPACE` set for the same offline path.
+
 ### Python CLI & CI
 
 Satellite around the Rust engine — collection runs, Git workspace, mock, GraphQL, OpenAPI/HAR. Not inside the desktop app.
 
-- `bun run pulse:cli agent "workspace status"` — local intent router (cURL/SSE/workspace/GraphQL summarize; same engine as MCP `pulse_agent`)
+- `bun run pulse:cli agent "workspace status"` — local intent router (cURL/SSE/workspace/OpenAPI/env/contract/mock phrases; same engine as MCP `pulse_agent` + in-app Agent)
 - `bun run pulse:cli run collection.json` — Pulse export or CollectionRunInput, optional `.env` / CSV iterations; stores last-run for `last-run` / `validate-run`
 - `workspace status|list|search|envs|history|pending|read|write|delete|send|import-openapi|export-openapi` — MCP parity for a Git YAML folder (`PULSE_WORKSPACE`)
 - `contract` — validate YAML examples vs responseSchema / `*.previous.json` (path or `PULSE_WORKSPACE`)

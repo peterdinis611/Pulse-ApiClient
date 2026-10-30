@@ -1253,7 +1253,7 @@ def main(argv: list[str] | None = None) -> int:
 
     agent = sub.add_parser(
         "agent",
-        help="Local intent router (no LLM): cURL, SSE, workspace status/history, memory, RAG, GraphQL summarize",
+        help="Local intent router (no LLM): cURL, SSE, workspace, memory, RAG, GraphQL, OpenAPI, env, contract, mock phrases",
     )
     agent.add_argument(
         "utterance",

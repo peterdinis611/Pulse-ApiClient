@@ -790,7 +790,7 @@ fn tools() -> Value {
         },
         {
             "name": "pulse_agent",
-            "description": "Local intent router (no LLM). Offline-safe: help, parse curl/sse, workspace status/history, memory (remember/recall/forget/list memory), RAG (search history / reindex rag), GraphQL summarize from body.",
+            "description": "Local intent router (no LLM). Offline-safe: help, curl/sse, workspace status/history, memory, RAG, GraphQL summarize, OpenAPI import/list, show env, export curl, check contract, response diff, start mock (phrases match desktop Agent).",
             "inputSchema": {
                 "type": "object",
                 "required": ["input"],
