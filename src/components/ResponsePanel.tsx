@@ -68,9 +68,26 @@ export function ResponsePanel() {
   const isMediaPreview =
     previewKind === "image" || previewKind === "pdf" || previewKind === "excel";
 
-  const formattedBody = useMemo(() => {
-    if (!response || view !== "body") return { text: "", jsonValid: null as boolean | null };
-    return formatResponseBody(response.body, response.contentType, bodyFormat);
+  const [formattedBody, setFormattedBody] = useState<{
+    text: string;
+    jsonValid: boolean | null;
+  }>({ text: "", jsonValid: null });
+  const [diffRows, setDiffRows] = useState<Array<{ kind: "same" | "add" | "del"; text: string }>>(
+    [],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!response || view !== "body") {
+      setFormattedBody({ text: "", jsonValid: null });
+      return;
+    }
+    void formatResponseBody(response.body, response.contentType, bodyFormat).then((next) => {
+      if (!cancelled) setFormattedBody(next);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [bodyFormat, response, view]);
 
   const bodyTruncated =
@@ -89,20 +106,33 @@ export function ResponsePanel() {
   );
 
   const examples = request?.examples ?? [];
-  const diffRows = useMemo(() => {
-    if (view !== "diff" || !response) return [];
-    const example =
-      examples.find((item) => item.id === diffExampleId) ?? examples[0] ?? null;
-    if (!example) return [];
-    const left = prettyMaybeJson(example.response.body);
-    const right = prettyMaybeJson(response.body);
-    if (left.length + right.length > MAX_DIFF_CHARS * 2) {
-      return unifiedLineDiff(left.slice(0, MAX_DIFF_CHARS), right.slice(0, MAX_DIFF_CHARS)).slice(
-        0,
-        2_000,
-      );
+  useEffect(() => {
+    let cancelled = false;
+    if (view !== "diff" || !response) {
+      setDiffRows([]);
+      return;
     }
-    return unifiedLineDiff(left, right).slice(0, 2_000);
+    const example = examples.find((item) => item.id === diffExampleId) ?? examples[0] ?? null;
+    if (!example) {
+      setDiffRows([]);
+      return;
+    }
+    void (async () => {
+      try {
+        const left = await prettyMaybeJson(example.response.body);
+        const right = await prettyMaybeJson(response.body);
+        const rows =
+          left.length + right.length > MAX_DIFF_CHARS * 2
+            ? await unifiedLineDiff(left.slice(0, MAX_DIFF_CHARS), right.slice(0, MAX_DIFF_CHARS))
+            : await unifiedLineDiff(left, right);
+        if (!cancelled) setDiffRows(rows.slice(0, 2_000));
+      } catch {
+        if (!cancelled) setDiffRows([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [diffExampleId, examples, response, view]);
 
   const jsonTree = useMemo(() => {

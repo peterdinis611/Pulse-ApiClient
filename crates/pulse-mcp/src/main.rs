@@ -5,6 +5,7 @@ use std::sync::Mutex;
 
 mod catalog;
 
+use pulse_core::apply_path_params;
 use pulse_core::breaking_diff;
 use pulse_core::check_workspace;
 use pulse_core::compare_to_schema;
@@ -16,6 +17,7 @@ use pulse_core::delete_fact;
 use pulse_core::diff_compare;
 use pulse_core::format_graphql_response;
 use pulse_core::format_rag_hits_markdown;
+use pulse_core::generate_snippet;
 use pulse_core::get_fact;
 use pulse_core::git_add;
 use pulse_core::git_commit;
@@ -23,11 +25,18 @@ use pulse_core::git_diff_stat;
 use pulse_core::git_status;
 use pulse_core::list_facts;
 use pulse_core::list_graphql_operations;
+use pulse_core::openapi_convert;
+use pulse_core::openapi_export_spec;
+use pulse_core::payload_to_curl;
+use pulse_core::pretty_any;
+use pulse_core::prune_rag_index;
+use pulse_core::read_json_path;
 use pulse_core::rebuild_rag_index;
 use pulse_core::related_context;
 use pulse_core::search_facts;
 use pulse_core::search_rag;
 use pulse_core::summarize_graphql_schema;
+use pulse_core::unified_lines;
 use pulse_core::upsert_fact;
 use pulse_core::INTROSPECTION_QUERY;
 use pulse_core::graphql_ws::{
@@ -52,8 +61,8 @@ use pulse_core::start_mock_server_with_delay;
 use pulse_core::substitute_variables;
 use pulse_core::to_http_payload;
 use pulse_core::types::{
-    AuthConfig, EnvVariable, HttpRequestPayload, HttpResponsePayload, KeyValue, ResponseHeader,
-    SavedRequestDto,
+    ApiRequestDto, AuthConfig, EnvVariable, HttpRequestPayload, HttpResponsePayload, KeyValue,
+    ResponseHeader, SavedRequestDto,
 };
 use pulse_core::workspace_fs::{
     append_agent_history, delete_request, is_mutating_method, list_pending, load_workspace, read_agent_history,
@@ -64,7 +73,7 @@ use pulse_core::{
 };
 use serde_json::{json, Map, Value};
 
-use catalog::{GIT_MEMORY_RAG_TOOLS, STREAM_AND_CONTRACT_TOOLS};
+use catalog::{GIT_MEMORY_RAG_TOOLS, PREPARE_AND_SNIPPET_TOOLS, STREAM_AND_CONTRACT_TOOLS};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -117,6 +126,45 @@ fn kv_list(value: Option<&Value>) -> Vec<KeyValue> {
         Some(Value::Array(_)) => serde_json::from_value(value.cloned().unwrap_or(Value::Null)).unwrap_or_default(),
         _ => Vec::new(),
     }
+}
+
+fn http_payload_from_args(args: &Value) -> Result<HttpRequestPayload, String> {
+    for key in ["request", "payload"] {
+        if let Some(value) = args.get(key) {
+            match value {
+                Value::String(raw) => {
+                    return serde_json::from_str(raw).map_err(|e| e.to_string());
+                }
+                other => return serde_json::from_value(other.clone()).map_err(|e| e.to_string()),
+            }
+        }
+    }
+    let method = arg_str(args, "method");
+    let url = arg_str(args, "url");
+    if method.trim().is_empty() || url.trim().is_empty() {
+        return Err("request/payload object (or method+url) is required".into());
+    }
+    Ok(HttpRequestPayload {
+        method,
+        url,
+        headers: kv_list(args.get("headers")),
+        query: kv_list(args.get("query")),
+        body_kind: {
+            let kind = arg_str(args, "bodyKind");
+            if kind.is_empty() {
+                "none".into()
+            } else {
+                kind
+            }
+        },
+        body: arg_str(args, "body"),
+        form: kv_list(args.get("form")),
+        multipart: Vec::new(),
+        auth: AuthConfig::default(),
+        use_cache: Some(false),
+        request_id: None,
+        timeout_ms: None,
+    })
 }
 
 fn extra_vars(args: &Value) -> Vec<EnvVariable> {
@@ -790,15 +838,140 @@ fn tools() -> Value {
         },
         {
             "name": "pulse_agent",
-            "description": "Local intent router (no LLM). Offline-safe: help, parse curl/sse, workspace status/history, memory (remember/recall/forget/list memory), RAG (search history / reindex rag), GraphQL summarize from body.",
+            "description": "Local intent router (no LLM). Offline-safe: help, curl/sse, workspace status/history, memory, RAG, GraphQL summarize, OpenAPI import/list, show env, export curl, check contract, response diff, start mock (phrases match desktop Agent).",
             "inputSchema": {
                 "type": "object",
                 "required": ["input"],
                 "properties": {
                     "input": { "type": "string", "description": "Natural utterance, pasted curl/SSE, memory, or RAG command" },
                     "body": { "type": "string", "description": "GraphQL introspection/response JSON for summarize" },
+                    "document": { "type": "string", "description": "OpenAPI JSON for import/list intents" },
+                    "diffLeft": { "type": "string", "description": "Left body for response_diff" },
+                    "diffRight": { "type": "string", "description": "Right body for response_diff" },
+                    "payload": { "description": "HttpRequestPayload object or JSON string for export curl" },
                     "workspace": { "type": "string", "description": "Override PULSE_WORKSPACE" },
                     "historyLimit": { "type": "integer", "default": 15 }
+                }
+            }
+        },
+        {
+            "name": "pulse_format_curl",
+            "description": "Format an HttpRequestPayload as a cURL command",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "request": { "description": "HttpRequestPayload object" },
+                    "payload": { "description": "Alias for request" }
+                }
+            }
+        },
+        {
+            "name": "pulse_snippet",
+            "description": "Generate a code snippet (curl/fetch/httpie/python/axios/okhttp/reqwest/swift/all) from a request payload",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "request": { "description": "HttpRequestPayload object" },
+                    "payload": { "description": "Alias for request" },
+                    "format": { "type": "string", "default": "curl" }
+                }
+            }
+        },
+        {
+            "name": "pulse_openapi_convert",
+            "description": "Convert an OpenAPI/Swagger document into a Pulse collection dump",
+            "inputSchema": {
+                "type": "object",
+                "required": ["spec"],
+                "properties": {
+                    "spec": { "description": "OpenAPI document as a JSON object or string" }
+                }
+            }
+        },
+        {
+            "name": "pulse_openapi_export",
+            "description": "Export Pulse collection dump JSON as an OpenAPI 3 document",
+            "inputSchema": {
+                "type": "object",
+                "required": ["payload"],
+                "properties": {
+                    "payload": { "description": "Pulse collectionGroups/collections dump" }
+                }
+            }
+        },
+        {
+            "name": "pulse_path_params",
+            "description": "Apply :id / {id} path params to a URL",
+            "inputSchema": {
+                "type": "object",
+                "required": ["url"],
+                "properties": {
+                    "url": { "type": "string" },
+                    "params": {
+                        "type": "array",
+                        "description": "EnvVariable-like objects: {key,value,enabled?}",
+                        "items": { "type": "object" }
+                    }
+                }
+            }
+        },
+        {
+            "name": "pulse_prepare",
+            "description": "Interpolate a Pulse ApiRequest with env vars and return prepared request + HttpRequestPayload",
+            "inputSchema": {
+                "type": "object",
+                "required": ["request"],
+                "properties": {
+                    "request": { "description": "ApiRequestDto JSON object" },
+                    "env": {
+                        "type": "array",
+                        "description": "EnvVariable[] for substitution",
+                        "items": { "type": "object" }
+                    }
+                }
+            }
+        },
+        {
+            "name": "pulse_json_path",
+            "description": "Read a dotted/bracket JSON path from a JSON value",
+            "inputSchema": {
+                "type": "object",
+                "required": ["value", "path"],
+                "properties": {
+                    "value": { "description": "JSON value or stringified JSON" },
+                    "path": { "type": "string", "description": "e.g. data.items[0].id" }
+                }
+            }
+        },
+        {
+            "name": "pulse_pretty",
+            "description": "Pretty-print JSON when possible (pulse-core pretty_any)",
+            "inputSchema": {
+                "type": "object",
+                "required": ["raw"],
+                "properties": { "raw": { "type": "string" } }
+            }
+        },
+        {
+            "name": "pulse_unified_lines",
+            "description": "Unified line diff rows (same/add/del) for two text bodies",
+            "inputSchema": {
+                "type": "object",
+                "required": ["left", "right"],
+                "properties": {
+                    "left": { "type": "string" },
+                    "right": { "type": "string" }
+                }
+            }
+        },
+        {
+            "name": "pulse_rag_prune",
+            "description": "Prune old 4xx docs from the workspace RAG index",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "olderThanDays": { "type": "integer", "default": 30 },
+                    "maxDocs": { "type": "integer", "default": 5000 }
                 }
             }
         },
@@ -922,6 +1095,9 @@ async fn dispatch_tool(name: &str, arguments: &Value) -> Value {
         "pulse_agent" => {
             let input = arg_str(arguments, "input");
             let body = arg_str(arguments, "body");
+            let document = arg_str(arguments, "document");
+            let diff_left = arg_str(arguments, "diffLeft");
+            let diff_right = arg_str(arguments, "diffRight");
             let workspace = arguments
                 .get("workspace")
                 .and_then(|v| v.as_str())
@@ -932,9 +1108,26 @@ async fn dispatch_tool(name: &str, arguments: &Value) -> Value {
                 .and_then(|v| v.as_u64())
                 .map(|n| n as usize)
                 .unwrap_or(15);
+            let payload = http_payload_from_args(arguments).ok();
             let opts = AgentExecuteOptions {
                 workspace_root: workspace.as_deref(),
                 graphql_body: if body.is_empty() { None } else { Some(body.as_str()) },
+                document: if document.is_empty() {
+                    None
+                } else {
+                    Some(document.as_str())
+                },
+                diff_left: if diff_left.is_empty() {
+                    None
+                } else {
+                    Some(diff_left.as_str())
+                },
+                diff_right: if diff_right.is_empty() {
+                    None
+                } else {
+                    Some(diff_right.as_str())
+                },
+                http_payload: payload.as_ref(),
                 history_limit,
                 source: "mcp-agent",
                 record_history: true,
@@ -952,6 +1145,10 @@ async fn dispatch_tool(name: &str, arguments: &Value) -> Value {
                 json!(STREAM_AND_CONTRACT_TOOLS),
             );
             catalog.insert("gitMemoryRagTools".into(), json!(GIT_MEMORY_RAG_TOOLS));
+            catalog.insert(
+                "prepareAndSnippetTools".into(),
+                json!(PREPARE_AND_SNIPPET_TOOLS),
+            );
             catalog.insert(
                 "resources".into(),
                 json!(workspace_root()
@@ -1314,7 +1511,122 @@ async fn dispatch_tool(name: &str, arguments: &Value) -> Value {
                 Ok(hits) => json_text(&serde_json::to_value(hits).unwrap_or(Value::Null), false),
                 Err(error) => text(error, true),
             }
+        }
+        "pulse_rag_prune" => {
+            let older = arguments
+                .get("olderThanDays")
+                .and_then(|v| v.as_u64());
+            let max_docs = arguments
+                .get("maxDocs")
+                .and_then(|v| v.as_u64())
+                .map(|n| n as usize);
+            match workspace_root().and_then(|root| prune_rag_index(&root, older, max_docs)) {
+                Ok(count) => json_text(&json!({ "documents": count }), false),
+                Err(error) => text(error, true),
+            }
+        }
+        "pulse_format_curl" => match http_payload_from_args(arguments) {
+            Ok(payload) => text(payload_to_curl(&payload), false),
+            Err(error) => text(error, true),
         },
+        "pulse_snippet" => {
+            let format = arg_str(arguments, "format");
+            let format = if format.trim().is_empty() {
+                "curl".to_string()
+            } else {
+                format
+            };
+            match http_payload_from_args(arguments)
+                .and_then(|payload| generate_snippet(&payload, &format))
+            {
+                Ok(snippet) => text(snippet, false),
+                Err(error) => text(error, true),
+            }
+        }
+        "pulse_openapi_convert" => {
+            let spec = match arguments.get("spec") {
+                Some(Value::String(raw)) => match serde_json::from_str::<Value>(raw) {
+                    Ok(value) => value,
+                    Err(error) => return text(error.to_string(), true),
+                },
+                Some(value) => value.clone(),
+                None => return text("spec is required", true),
+            };
+            let converted = openapi_convert(&spec);
+            json_text(&converted, false)
+        }
+        "pulse_openapi_export" => {
+            let Some(payload) = arguments.get("payload") else {
+                return text("payload is required", true);
+            };
+            let exported = openapi_export_spec(payload);
+            json_text(&exported, false)
+        }
+        "pulse_path_params" => {
+            let url = arg_str(arguments, "url");
+            if url.is_empty() {
+                return text("url is required", true);
+            }
+            let params: Vec<EnvVariable> = arguments
+                .get("params")
+                .cloned()
+                .and_then(|v| serde_json::from_value(v).ok())
+                .unwrap_or_default();
+            text(apply_path_params(&url, &params), false)
+        }
+        "pulse_prepare" => {
+            let Some(request_val) = arguments.get("request") else {
+                return text("request is required", true);
+            };
+            let request: ApiRequestDto = match serde_json::from_value(request_val.clone()) {
+                Ok(request) => request,
+                Err(error) => return text(error.to_string(), true),
+            };
+            let vars: Vec<EnvVariable> = arguments
+                .get("env")
+                .cloned()
+                .and_then(|v| serde_json::from_value(v).ok())
+                .unwrap_or_default();
+            let prepared = interpolate_request(request, &vars);
+            let payload = to_http_payload(&prepared, None);
+            json_text(
+                &json!({ "request": prepared, "payload": payload }),
+                false,
+            )
+        }
+        "pulse_json_path" => {
+            let Some(value) = arguments.get("value") else {
+                return text("value is required", true);
+            };
+            let value = match value {
+                Value::String(raw) => match serde_json::from_str::<Value>(raw) {
+                    Ok(parsed) => parsed,
+                    Err(_) => Value::String(raw.clone()),
+                },
+                other => other.clone(),
+            };
+            let path = arg_str(arguments, "path");
+            if path.is_empty() {
+                return text("path is required", true);
+            }
+            json_text(&json!(read_json_path(&value, &path)), false)
+        }
+        "pulse_pretty" => {
+            let raw = arg_str(arguments, "raw");
+            if raw.is_empty() {
+                return text("raw is required", true);
+            }
+            text(pretty_any(&raw), false)
+        }
+        "pulse_unified_lines" => {
+            let left = arg_str(arguments, "left");
+            let right = arg_str(arguments, "right");
+            if left.is_empty() && right.is_empty() {
+                return text("left and right are required", true);
+            }
+            let rows = unified_lines(&left, &right);
+            json_text(&serde_json::to_value(rows).unwrap_or(Value::Null), false)
+        }
         "pulse_workspace_init" => {
             let root = arguments
                 .get("workspace")

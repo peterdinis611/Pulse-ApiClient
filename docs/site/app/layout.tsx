@@ -1,16 +1,6 @@
-import { Fraunces, Figtree, IBM_Plex_Mono } from 'next/font/google';
+import { IBM_Plex_Mono } from 'next/font/google';
 import { Provider } from '@/components/provider';
 import './global.css';
-
-const display = Fraunces({
-  subsets: ['latin'],
-  variable: '--font-pulse-display',
-});
-
-const sans = Figtree({
-  subsets: ['latin'],
-  variable: '--font-pulse-sans',
-});
 
 const mono = IBM_Plex_Mono({
   subsets: ['latin'],
@@ -20,7 +10,7 @@ const mono = IBM_Plex_Mono({
 
 export const metadata = {
   title: {
-    default: 'Pulse field manual',
+    default: 'Pulse manual',
     template: '%s · Pulse',
   },
   description:
@@ -29,12 +19,17 @@ export const metadata = {
 
 export default function Layout({ children }: LayoutProps<'/'>) {
   return (
-    <html
-      lang="en"
-      className={`${display.variable} ${sans.variable} ${mono.variable}`}
-      suppressHydrationWarning
-    >
-      <body className="flex min-h-screen flex-col">
+    <html lang="en" className={`dark ${mono.variable}`} suppressHydrationWarning>
+      <head>
+        <link rel="preconnect" href="https://api.fontshare.com" />
+        <link rel="preconnect" href="https://cdn.fontshare.com" crossOrigin="" />
+        <link
+          href="https://api.fontshare.com/v2/css?f[]=switzer@400,500,600&display=swap"
+          rel="stylesheet"
+        />
+        <style>{`:root{--font-pulse-sans:'Switzer',ui-sans-serif,sans-serif}`}</style>
+      </head>
+      <body className="flex min-h-screen flex-col font-sans antialiased">
         <Provider>{children}</Provider>
       </body>
     </html>

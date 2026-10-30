@@ -1,0 +1,47 @@
+---
+title: "Rust crates & modules"
+description: "Shared engine under crates/ — pulse-core modules, pulse-native (PyO3), pulse-mcp, and pulse-contract. Desktop src-tauri consumes the same core."
+---
+
+Shared engine under crates/ — pulse-core modules, pulse-native (PyO3), pulse-mcp, and pulse-contract. Desktop src-tauri consumes the same core.
+
+## In the product
+
+- Layout — `crates/pulse-core` (library), `crates/pulse-native` (PyO3 abi3-py310), `crates/pulse-mcp` (optional Rust stdio MCP), `pulse-contract` binary in pulse-core; desktop `src-tauri` depends on pulse-core for IPC
+- Versions — keep `crates/*/Cargo.toml`, `src-tauri/Cargo.toml`, and root `package.json` in lockstep (currently 2.5.0)
+- `pulse-core` · `workspace_fs` — load/save Git YAML workspace, pending mutations, agent history append/read, dotenv secrets strip, migrate legacy `*.pulse.json`
+- `pulse-core` · `vars` / `secrets` / `prepare` — variable substitute, secret placeholders, interpolate → `HttpRequestPayload`
+- `pulse-core` · `script_engine` / `test_runner` / `collection_run` — boa_engine pre-request + tests, collection runner with progress callbacks
+- `pulse-core` · `types` / `inherit` / `path_params` — shared DTOs, folder/collection auth+var inheritance, path-param expand
+- `pulse-core` · `curl` / `snippets` / `simple_http` — parse/format cURL, code snippets (curl/fetch/httpie/python/axios/okhttp/reqwest/swift), one-shot HTTP send
+- `pulse-core` · `openapi_ops` — convert OpenAPI → Pulse dump, list operations, export spec
+- `pulse-core` · `json_diff` / `json_path` / `json_schema` / `json_assertions` — unified line diff, path read, schema validate, assertion helpers for scripts
+- `pulse-core` · `contract` — workspace example vs `responseSchema` / `*.previous.json` (`check_workspace`, breaking diff)
+- `pulse-core` · `graphql` / `graphql_ws` — introspection summarize, validate, body build; graphql-ws frame helpers
+- `pulse-core` · `sse` — parse SSE text, collect stream, event filters / retry id helpers
+- `pulse-core` · `mock_server` — local mock on locked `:4010` (+ delay) from saved examples
+- `pulse-core` · `git_cmd` — status / add / commit / diff-stat porcelain wrappers
+- `pulse-core` · `agent` / `agent_memory` / `agent_rag` — offline intent router + execute, facts YAML, TF-IDF RAG index over history+facts
+- `pulse-native` — JSON-string PyO3 surface: interpolate, prepare_request, apply_path_params, run_tests, run_pre_request, run_collection_json, send_once_json, workspace load/save/init/migrate/contract/pending/history/delete_request, git status/add/commit/diff-stat, SSE parse/filter/summarize/collect, GraphQL + graphql-ws + example queries, mock start/stop, curl parse/format, OpenAPI convert/list/export, snippet, schema/diff/pretty/unified_lines/json_path, `route_agent_json` / `run_agent_json` (document + diff bodies + http_payload), memory + RAG search/related/prune/reindex
+- `pulse-mcp` — Rust stdio MCP twin on pulse-core: workspace CRUD/send/search, contract, interpolate, tests, collection, openapi_list/convert/export, mock, curl/format_curl/snippet, sse/graphql, prepare/path_params/json_path/pretty/unified_lines, agent (+ document/diff/payload), git, memory/RAG (+ prune); default Cursor entry remains Python `pulse`
+- `pulse-contract` — `cargo run -p pulse-core --bin pulse-contract -- <workspace>` (or CLI `contract`)
+
+## Walkthrough
+
+1. Browse modules in `crates/pulse-core/src/lib.rs` (`pub mod …` + re-exports).
+2. Build native for CLI/MCP: `bun run pulse:cli:install` (maturin → `.venv`).
+3. Optional Rust MCP: `cargo run -p pulse-mcp` with `PULSE_WORKSPACE` set.
+4. Unit tests: `cargo test -p pulse-core`.
+
+<Callout title="Tip">
+
+Desktop, Python CLI, and both MCP servers should call pulse-core — avoid reimplementing parse/diff/agent in TypeScript or pure Python when a native binding exists.
+
+</Callout>
+
+
+<Callout title="Tip">
+
+New offline agent intents belong in `pulse-core::agent` first; desktop/CLI/MCP are thin adapters.
+
+</Callout>

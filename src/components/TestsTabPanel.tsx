@@ -38,7 +38,10 @@ export function TestsTabPanel() {
     setRunning(true);
     setRunError(null);
     try {
-      const schemaResults = validateResponseAgainstSchema(response, request.responseSchema ?? "");
+      const schemaResults = await validateResponseAgainstSchema(
+        response,
+        request.responseSchema ?? "",
+      );
       const scriptResults = request.tests.trim()
         ? await runHttpTests(request.tests, response)
         : null;

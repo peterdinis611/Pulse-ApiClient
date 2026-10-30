@@ -1,0 +1,21 @@
+---
+title: "In-app Agent"
+description: "Local intent router (pulse-core) plus optional cloud tools with confirm — OpenAPI, mock, diff, env, cURL export, contract, drafts."
+---
+
+Local intent router (pulse-core) plus optional cloud tools with confirm — OpenAPI, mock, diff, env, cURL export, contract, drafts.
+
+![Pulse agent](/screenshots/agent.png)
+
+## In the product
+
+- Offline intents: help, import cURL, explain response/tests, draft tests/pre-request, workspace status/history, run collection (confirm), GraphQL summarize, SSE parse, memory + RAG
+- Also: `import openapi` / list ops, `diff response`, `start mock` (confirm), `show env`, `export curl`, `check contract`
+- Optional LLM tools (when cloud tools job is on): send, run collection, remember, apply drafts, write fields, mock, import OpenAPI, switch env, set header, diff vs example — all mutating tools need Confirm
+- Quick-action chips + capability toggles in Settings → Agent / LLM; chat persists in session storage until Clear
+- CLI/MCP `pulse_agent` shares the same router via `run_agent_json`
+
+## Walkthrough
+
+1. Open Agent in the left rail. Try `show env`, paste OpenAPI JSON after `import openapi`, or Confirm when the model proposes a write.
+2. `bun run pulse:cli agent "check contract"` with `PULSE_WORKSPACE` set for the same offline path.

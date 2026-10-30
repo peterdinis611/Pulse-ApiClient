@@ -1,8 +1,9 @@
-import type { ApiRequest, Environment, HttpResponse } from "../types";
+import { invoke } from "@tauri-apps/api/core";
+import type { ApiRequest, Environment, HttpResponse, KeyValue } from "../types";
 import { substituteVariables } from "./env";
 import { applyPathParams } from "./path-params";
-import { buildGraphqlBody } from "./graphql";
 import { normalizeRequest } from "./helpers";
+import { canUseTauriIpc } from "./tauri-runtime";
 import { runEffect } from "./effect/run";
 import {
   cancelAllHttpRequests,
@@ -56,6 +57,11 @@ function enabledPairs(items: Array<{ key: string; value: string; enabled: boolea
     }));
 }
 
+export function envVariablesForPrepare(environment: Environment | null): KeyValue[] {
+  return environment?.variables.filter((item) => item.enabled && item.key.trim()) ?? [];
+}
+
+/** Sync preview helper for URL/VariableField — does not build GraphQL POST bodies. */
 export function prepareRequest(request: ApiRequest, environment: Environment | null): ApiRequest {
   const normalized = normalizeRequest(request);
   const pathParams = normalized.pathParams.map((item) => ({
@@ -63,7 +69,7 @@ export function prepareRequest(request: ApiRequest, environment: Environment | n
     key: substituteVariables(item.key, environment),
     value: substituteVariables(item.value, environment),
   }));
-  const prepared: ApiRequest = {
+  return {
     ...normalized,
     url: applyPathParams(substituteVariables(normalized.url, environment), pathParams),
     pathParams,
@@ -108,12 +114,35 @@ export function prepareRequest(request: ApiRequest, environment: Environment | n
       oauthAuthCode: substituteVariables(normalized.auth.oauthAuthCode, environment),
     },
   };
+}
 
-  if (prepared.bodyKind === "graphql") {
-    prepared.body = buildGraphqlBody(prepared);
+/** Full request prep via pulse-core (`prepare_request`) when Tauri is available. */
+export async function prepareRequestAsync(
+  request: ApiRequest,
+  environment: Environment | null,
+): Promise<ApiRequest> {
+  if (!canUseTauriIpc()) {
+    return prepareRequest(request, environment);
   }
+  const normalized = normalizeRequest(request);
+  return invoke<ApiRequest>("prepare_request", {
+    request: normalized,
+    variables: envVariablesForPrepare(environment),
+  });
+}
 
-  return prepared;
+/** Substitute via pulse-core when Tauri is available; sync env helper otherwise. */
+export async function substituteVariablesAsync(
+  template: string,
+  environment: Environment | null,
+): Promise<string> {
+  if (!canUseTauriIpc()) {
+    return substituteVariables(template, environment);
+  }
+  return invoke<string>("substitute_variables", {
+    template,
+    variables: envVariablesForPrepare(environment),
+  });
 }
 
 function buildPayload(prepared: ApiRequest, options?: { requestId?: string; timeoutMs?: number }) {
@@ -154,15 +183,17 @@ export async function sendRequest(
   environment: Environment | null,
   options?: { requestId?: string; timeoutMs?: number },
 ): Promise<HttpResponse> {
-  const prepared = prepareRequest(request, environment);
+  const prepared = await prepareRequestAsync(request, environment);
   return runEffect(sendRequestEffect(buildPayload(prepared, options)));
 }
 
 export async function sendRequestsBatch(
   requests: Array<{ request: ApiRequest; environment: Environment | null; requestId?: string }>,
 ): Promise<Array<{ response?: HttpResponse; error?: string }>> {
-  const payloads = requests.map(({ request, environment, requestId }) =>
-    buildPayload(prepareRequest(request, environment), { requestId }),
+  const payloads = await Promise.all(
+    requests.map(async ({ request, environment, requestId }) =>
+      buildPayload(await prepareRequestAsync(request, environment), { requestId }),
+    ),
   );
 
   return runEffect(sendRequestsBatchEffect(payloads));

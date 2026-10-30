@@ -15,9 +15,14 @@ use crate::agent_rag::{
     format_rag_hits_markdown, prune_rag_index, rebuild_rag_index, related_context, search_rag,
     upsert_rag_docs,
 };
-use crate::curl::curl_to_payload;
+use crate::contract::check_workspace;
+use crate::curl::{curl_to_payload, payload_to_curl};
 use crate::graphql::summarize_schema;
+use crate::json_diff::{compare_raw_report, format_unified, pretty_any, unified_lines};
+use crate::mock_server::routes_from_saved_requests;
+use crate::openapi_ops::{convert as openapi_convert, list_operations as openapi_list_operations};
 use crate::sse::parse_sse_text;
+use crate::types::{EnvVariable, HttpRequestPayload};
 use crate::workspace_fs::{
     append_agent_history, list_pending, load_workspace, read_agent_history,
 };
@@ -46,6 +51,13 @@ pub enum AgentIntent {
     RagReindex,
     DraftTests,
     DraftPreRequest,
+    OpenapiImport { spec: String },
+    OpenapiList { spec: String },
+    ResponseDiff,
+    MockStart,
+    EnvShow,
+    CurlExport,
+    ContractCheck,
     Unknown { input: String },
 }
 
@@ -53,6 +65,11 @@ pub enum AgentIntent {
 pub struct AgentExecuteOptions<'a> {
     pub workspace_root: Option<&'a str>,
     pub graphql_body: Option<&'a str>,
+    /// Optional document override (OpenAPI JSON, etc.).
+    pub document: Option<&'a str>,
+    pub diff_left: Option<&'a str>,
+    pub diff_right: Option<&'a str>,
+    pub http_payload: Option<&'a HttpRequestPayload>,
     pub history_limit: usize,
     pub source: &'a str,
     pub record_history: bool,
@@ -63,6 +80,10 @@ impl Default for AgentExecuteOptions<'_> {
         Self {
             workspace_root: None,
             graphql_body: None,
+            document: None,
+            diff_left: None,
+            diff_right: None,
+            http_payload: None,
             history_limit: 15,
             source: "cli-agent",
             record_history: true,
@@ -82,6 +103,12 @@ pub struct AgentResult {
 pub const AGENT_HELP_TEXT: &str = "I understand these intents (local, no LLM):
 
 • **Import cURL** — paste a curl command → JSON request payload
+• **Export cURL** — `export curl` / `as curl` (needs active request / `--payload`)
+• **OpenAPI** — paste a spec or `import openapi` / `list openapi ops`
+• **Env show** — `show env` / `list variables`
+• **Response diff** — `diff response` (needs left/right bodies)
+• **Mock start** — `start mock` (workspace examples → routes)
+• **Contract check** — `check contract` on the Git workspace
 • **Workspace status** — Git workspace root + pending mutations
 • **Agent history** — recent entries from `.pulse/history.jsonl`
 • **Memory** — `remember key=value`, `recall key`, `forget key`, `list memory`
@@ -91,7 +118,7 @@ pub const AGENT_HELP_TEXT: &str = "I understand these intents (local, no LLM):
 
 Desktop-only (use the in-app Agent view):
 • Explain last response / test failures
-• Run active collection (needs confirm)
+• Run active collection / draft tests (needs confirm)
 
 Examples: `pulse agent \"workspace status\"` · `pulse agent 'remember env=staging'`";
 
@@ -114,6 +141,13 @@ fn kind_name(intent: &AgentIntent) -> String {
         AgentIntent::RagReindex => "rag_reindex".into(),
         AgentIntent::DraftTests => "draft_tests".into(),
         AgentIntent::DraftPreRequest => "draft_pre_request".into(),
+        AgentIntent::OpenapiImport { .. } => "openapi_import".into(),
+        AgentIntent::OpenapiList { .. } => "openapi_list".into(),
+        AgentIntent::ResponseDiff => "response_diff".into(),
+        AgentIntent::MockStart => "mock_start".into(),
+        AgentIntent::EnvShow => "env_show".into(),
+        AgentIntent::CurlExport => "curl_export".into(),
+        AgentIntent::ContractCheck => "contract_check".into(),
         AgentIntent::Unknown { .. } => "unknown".into(),
     }
 }
@@ -208,6 +242,50 @@ fn parse_sse_re() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"parse\s+sse").unwrap())
 }
 
+fn openapi_import_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"(?:import\s+openapi|openapi\s+import)").unwrap())
+}
+
+fn openapi_list_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"(?:list\s+openapi|openapi\s+(?:list|ops|operations))").unwrap())
+}
+
+fn response_diff_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"(?:diff\s+response|compare\s+example|response\s+diff)").unwrap()
+    })
+}
+
+fn mock_start_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"(?:start\s+mock|mock\s+start|mock\s+server)").unwrap())
+}
+
+fn env_show_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"(?:show\s+env|list\s+variables|list\s+env|environment\s+vars?)").unwrap()
+    })
+}
+
+fn curl_export_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"(?:export\s+curl|as\s+curl|to\s+curl|curl\s+export)").unwrap())
+}
+
+fn contract_check_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"(?:check\s+contract|contract\s+check)").unwrap())
+}
+
+fn json_fence_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"(?is)```(?:json)?\s*([\s\S]*?)```").unwrap())
+}
+
 fn remember_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(r"^remember\s+(.+)$").unwrap())
@@ -283,6 +361,50 @@ fn extract_sse_doc(input: &str) -> Option<String> {
     None
 }
 
+fn looks_like_openapi(value: &Value) -> bool {
+    let Some(obj) = value.as_object() else {
+        return false;
+    };
+    (obj.contains_key("openapi") || obj.contains_key("swagger")) && obj.contains_key("paths")
+}
+
+fn extract_openapi_doc(input: &str) -> Option<String> {
+    if let Some(caps) = json_fence_re().captures(input) {
+        let block = caps.get(1)?.as_str().trim();
+        if let Ok(value) = serde_json::from_str::<Value>(block) {
+            if looks_like_openapi(&value) {
+                return Some(block.to_string());
+            }
+        }
+    }
+    let trimmed = input.trim();
+    if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
+        if looks_like_openapi(&value) {
+            return Some(trimmed.to_string());
+        }
+    }
+    None
+}
+
+fn resolve_document<'a>(opts: &'a AgentExecuteOptions<'_>, fallback: &'a str) -> Option<&'a str> {
+    opts.document
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .or_else(|| {
+            opts.graphql_body
+                .map(str::trim)
+                .filter(|item| !item.is_empty())
+        })
+        .or_else(|| {
+            let trimmed = fallback.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
+        })
+}
+
 /// Map a user utterance (or quick-action id) to a structured intent.
 pub fn route_agent_input(raw: &str) -> AgentIntent {
     let input = raw.trim();
@@ -343,6 +465,35 @@ pub fn route_agent_input(raw: &str) -> AgentIntent {
     {
         return AgentIntent::RagReindex;
     }
+    if quick == "quick:openapi"
+        || quick == "quick:openapi-import"
+        || openapi_import_re().is_match(&quick)
+    {
+        let spec = extract_openapi_doc(input).unwrap_or_default();
+        return AgentIntent::OpenapiImport { spec };
+    }
+    if quick == "quick:openapi-list" || openapi_list_re().is_match(&quick) {
+        let spec = extract_openapi_doc(input).unwrap_or_default();
+        return AgentIntent::OpenapiList { spec };
+    }
+    if quick == "quick:diff"
+        || quick == "quick:response-diff"
+        || response_diff_re().is_match(&quick)
+    {
+        return AgentIntent::ResponseDiff;
+    }
+    if quick == "quick:mock" || mock_start_re().is_match(&quick) {
+        return AgentIntent::MockStart;
+    }
+    if quick == "quick:env" || env_show_re().is_match(&quick) {
+        return AgentIntent::EnvShow;
+    }
+    if quick == "quick:curl-export" || curl_export_re().is_match(&quick) {
+        return AgentIntent::CurlExport;
+    }
+    if quick == "quick:contract" || contract_check_re().is_match(&quick) {
+        return AgentIntent::ContractCheck;
+    }
     if let Some(caps) = rag_search_re().captures(&quick) {
         let query = caps.get(1).map(|m| m.as_str().trim()).unwrap_or("").to_string();
         return AgentIntent::RagSearch { query };
@@ -399,6 +550,10 @@ pub fn route_agent_input(raw: &str) -> AgentIntent {
         return AgentIntent::Unknown {
             input: "Paste an SSE document to parse (event/data blocks).".into(),
         };
+    }
+
+    if let Some(spec) = extract_openapi_doc(input) {
+        return AgentIntent::OpenapiImport { spec };
     }
 
     AgentIntent::Unknown {
@@ -842,6 +997,233 @@ CLI and MCP support offline intents: cURL import, SSE parse, workspace status/hi
                     "Rebuilt RAG index with **{count}** documents (history + facts), **{pruned}** after prune.\n\n_Embedding runtime: hashed n-gram TF-IDF · hybrid filters: `method:POST status:4xx`_"
                 ),
                 data: Some(json!({ "count": count, "afterPrune": pruned })),
+            })
+        }
+        AgentIntent::OpenapiImport { spec } => {
+            let raw = resolve_document(opts, spec).ok_or_else(|| {
+                "Paste an OpenAPI JSON document, or pass --body / document.".to_string()
+            })?;
+            let value: Value =
+                serde_json::from_str(raw).map_err(|e| format!("Invalid OpenAPI JSON: {e}"))?;
+            if !looks_like_openapi(&value) {
+                return Err("JSON is not an OpenAPI/Swagger document with paths.".into());
+            }
+            let converted = openapi_convert(&value);
+            let groups = converted
+                .get("collectionGroups")
+                .and_then(|v| v.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0);
+            let requests = converted
+                .get("collections")
+                .and_then(|v| v.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0);
+            let title = converted
+                .pointer("/collectionGroups/0/name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("OpenAPI Collection");
+            record_history(
+                opts,
+                "openapi_import",
+                json!({ "requests": requests, "title": title }),
+            );
+            Ok(AgentResult {
+                kind,
+                markdown: format!(
+                    "Converted **{title}** → **{requests}** request(s) in {groups} collection group(s). Apply in the desktop Agent to import into the workspace."
+                ),
+                data: Some(converted),
+            })
+        }
+        AgentIntent::OpenapiList { spec } => {
+            let raw = resolve_document(opts, spec).ok_or_else(|| {
+                "Paste an OpenAPI JSON document, or pass --body / document.".to_string()
+            })?;
+            let value: Value =
+                serde_json::from_str(raw).map_err(|e| format!("Invalid OpenAPI JSON: {e}"))?;
+            let ops = openapi_list_operations(&value);
+            if ops.is_empty() {
+                return Ok(AgentResult {
+                    kind,
+                    markdown: "No HTTP operations found in the OpenAPI document.".into(),
+                    data: Some(json!({ "operations": [] })),
+                });
+            }
+            let mut lines = vec![
+                format!("**{} OpenAPI operation(s):**", ops.len()),
+                String::new(),
+            ];
+            for op in ops.iter().take(80) {
+                lines.push(format!(
+                    "- `{}` `{}` — {}",
+                    op.method, op.path, op.summary
+                ));
+            }
+            if ops.len() > 80 {
+                lines.push(format!("…+{} more", ops.len() - 80));
+            }
+            record_history(opts, "openapi_list", json!({ "count": ops.len() }));
+            Ok(AgentResult {
+                kind,
+                markdown: lines.join("\n"),
+                data: Some(json!({ "operations": ops })),
+            })
+        }
+        AgentIntent::ResponseDiff => {
+            let left = opts
+                .diff_left
+                .map(str::trim)
+                .filter(|item| !item.is_empty())
+                .ok_or_else(|| {
+                    "No left body for diff. Pass diff_left / example body (desktop supplies active example)."
+                        .to_string()
+                })?;
+            let right = opts
+                .diff_right
+                .map(str::trim)
+                .filter(|item| !item.is_empty())
+                .ok_or_else(|| {
+                    "No right body for diff. Pass diff_right / last response body.".to_string()
+                })?;
+            let left_pretty = pretty_any(left);
+            let right_pretty = pretty_any(right);
+            let rows = unified_lines(&left_pretty, &right_pretty);
+            let report = compare_raw_report(left, right);
+            let added = rows.iter().filter(|row| row.kind == "add").count();
+            let removed = rows.iter().filter(|row| row.kind == "del").count();
+            let unified = format_unified(&rows, 2);
+            record_history(
+                opts,
+                "response_diff",
+                json!({ "added": added, "removed": removed }),
+            );
+            Ok(AgentResult {
+                kind,
+                markdown: format!(
+                    "**Response diff** — +{added} / −{removed}\n\n```diff\n{unified}\n```"
+                ),
+                data: Some(report),
+            })
+        }
+        AgentIntent::MockStart => {
+            let root = require_workspace(opts)?;
+            let payload = load_workspace(root)?;
+            let routes = routes_from_saved_requests(&payload.collections);
+            if routes.is_empty() {
+                return Ok(AgentResult {
+                    kind,
+                    markdown: "No mock routes — save response examples on requests first.".into(),
+                    data: Some(json!({ "routes": [], "desktopOnly": true })),
+                });
+            }
+            record_history(opts, "mock_start", json!({ "routeCount": routes.len() }));
+            Ok(AgentResult {
+                kind,
+                markdown: format!(
+                    "Prepared **{}** mock route(s) from workspace examples. Confirm in the desktop Agent to bind `:4010`.",
+                    routes.len()
+                ),
+                data: Some(json!({
+                    "routes": routes,
+                    "desktopOnly": true,
+                    "needsConfirm": "mock_start",
+                })),
+            })
+        }
+        AgentIntent::EnvShow => {
+            let root = require_workspace(opts)?;
+            let payload = load_workspace(root)?;
+            if payload.environments.is_empty() {
+                return Ok(AgentResult {
+                    kind,
+                    markdown: "No environments in this workspace.".into(),
+                    data: Some(json!({ "environments": [] })),
+                });
+            }
+            let mut lines = vec!["**Environments**".into(), String::new()];
+            let mut summary = Vec::new();
+            for env in &payload.environments {
+                lines.push(format!("### {}", env.name));
+                let vars: Vec<&EnvVariable> = env.variables.iter().filter(|v| v.enabled).collect();
+                if vars.is_empty() {
+                    lines.push("_No enabled variables._".into());
+                }
+                for var in vars.iter().take(40) {
+                    let value = if var.secret || var.key.starts_with("secret.") {
+                        "••••".into()
+                    } else if var.value.len() > 80 {
+                        format!("{}…", &var.value[..80])
+                    } else {
+                        var.value.clone()
+                    };
+                    lines.push(format!("- `{}` = `{value}`", var.key));
+                }
+                if vars.len() > 40 {
+                    lines.push(format!("…+{} more", vars.len() - 40));
+                }
+                lines.push(String::new());
+                summary.push(json!({
+                    "id": env.id,
+                    "name": env.name,
+                    "variableCount": vars.len(),
+                }));
+            }
+            record_history(
+                opts,
+                "env_show",
+                json!({ "environments": summary.len() }),
+            );
+            Ok(AgentResult {
+                kind,
+                markdown: lines.join("\n"),
+                data: Some(json!({ "environments": summary })),
+            })
+        }
+        AgentIntent::CurlExport => {
+            let payload = opts.http_payload.ok_or_else(|| {
+                "No active request payload. Use the desktop Agent on an open tab, or pass http_payload."
+                    .to_string()
+            })?;
+            let command = payload_to_curl(payload);
+            record_history(
+                opts,
+                "curl_export",
+                json!({ "method": payload.method, "url": payload.url }),
+            );
+            Ok(AgentResult {
+                kind,
+                markdown: format!("```bash\n{command}\n```"),
+                data: Some(json!({ "curl": command })),
+            })
+        }
+        AgentIntent::ContractCheck => {
+            let root = require_workspace(opts)?;
+            let report = check_workspace(root)?;
+            record_history(
+                opts,
+                "contract_check",
+                json!({ "ok": report.ok, "errors": report.errors.len() }),
+            );
+            let markdown = if report.ok {
+                "**Contract check passed** — no schema/snapshot breaks found.".into()
+            } else {
+                let mut lines = vec![
+                    format!("**Contract check failed** — {} issue(s):", report.errors.len()),
+                    String::new(),
+                ];
+                for err in report.errors.iter().take(40) {
+                    lines.push(format!("- {err}"));
+                }
+                if report.errors.len() > 40 {
+                    lines.push(format!("…+{} more", report.errors.len() - 40));
+                }
+                lines.join("\n")
+            };
+            Ok(AgentResult {
+                kind,
+                markdown,
+                data: Some(serde_json::to_value(&report).map_err(|e| e.to_string())?),
             })
         }
     }

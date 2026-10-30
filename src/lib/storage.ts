@@ -27,7 +27,7 @@ import { importPostmanCollection, isPostmanCollection } from "./postman-import";
 import { importBrunoIntoState, isBrunoCollection } from "./bruno-import";
 import { importInsomniaIntoState, isInsomniaExport } from "./insomnia-import";
 import { exportPulseCollection, importPulseCollection, isPulseCollection } from "./pulse-collection";
-import { isOpenApiSpec, importOpenApiIntoState } from "./openapi-import";
+import { isOpenApiSpec } from "./openapi-import";
 import { importDotenvAsEnvironment, isDotenvText } from "./env-io";
 import { getAppSettings } from "./http-client";
 import {
@@ -394,7 +394,7 @@ export function importCollectionJson(
   state: PersistedState,
 ): Pick<PersistedState, "collectionGroups" | "collections" | "activeCollectionId"> {
   if (isOpenApiSpec(raw)) {
-    return importOpenApiIntoState(raw, state);
+    throw new Error("OpenAPI import requires the desktop OpenAPI path (importOpenApiCollection)");
   }
 
   if (isInsomniaExport(raw)) {

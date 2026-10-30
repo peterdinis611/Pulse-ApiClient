@@ -1,36 +1,11 @@
-import { describe, expect, it } from "vitest";
-import {
-  mergeTestResults,
-  validateJsonSchema,
-  validateResponseAgainstSchema,
-} from "@/lib/json-schema";
+import { describe, expect, it, vi } from "vitest";
+import { mergeTestResults } from "@/lib/json-schema";
+
+vi.mock("@/lib/tauri-runtime", () => ({
+  canUseTauriIpc: () => false,
+}));
 
 describe("json schema", () => {
-  it("validates required object properties", () => {
-    const errors = validateJsonSchema(
-      { id: 1 },
-      { type: "object", required: ["id", "name"], properties: { id: { type: "integer" } } },
-    );
-    expect(errors.some((item) => item.includes("name"))).toBe(true);
-  });
-
-  it("asserts 2xx and body against a response schema", () => {
-    const result = validateResponseAgainstSchema(
-      { status: 200, body: '{"id":1}', bodyEncoding: "utf8" },
-      JSON.stringify({ type: "object", required: ["id"], properties: { id: { type: "integer" } } }),
-    );
-    expect(result?.failed).toBe(0);
-    expect(result?.total).toBe(2);
-  });
-
-  it("fails a 404 against the schema contract", () => {
-    const result = validateResponseAgainstSchema(
-      { status: 404, body: "{}", bodyEncoding: "utf8" },
-      '{"type":"object"}',
-    );
-    expect(result?.results.some((item) => item.name.includes("2xx") && !item.passed)).toBe(true);
-  });
-
   it("merges schema and script results", () => {
     const merged = mergeTestResults(
       { passed: 1, failed: 0, total: 1, results: [{ name: "schema", passed: true }] },
@@ -38,5 +13,18 @@ describe("json schema", () => {
     );
     expect(merged?.total).toBe(2);
     expect(merged?.failed).toBe(1);
+  });
+
+  it("requires desktop IPC for validation", async () => {
+    const { validateJsonSchemaAsync, validateResponseAgainstSchema } = await import(
+      "@/lib/json-schema"
+    );
+    await expect(validateJsonSchemaAsync({}, { type: "object" })).rejects.toThrow(/desktop/i);
+    await expect(
+      validateResponseAgainstSchema(
+        { status: 200, body: "{}", bodyEncoding: "utf8" },
+        '{"type":"object"}',
+      ),
+    ).rejects.toThrow(/desktop/i);
   });
 });

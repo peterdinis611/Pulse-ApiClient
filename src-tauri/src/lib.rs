@@ -141,6 +141,98 @@ fn openapi_export_collection(payload: serde_json::Value) -> Result<serde_json::V
 }
 
 #[tauri::command]
+fn openapi_list_operations(spec: serde_json::Value) -> Result<serde_json::Value, String> {
+    serde_json::to_value(pulse_core::openapi_list_operations(&spec)).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn unified_lines(left: String, right: String) -> Result<Vec<pulse_core::json_diff::DiffRow>, String> {
+    Ok(pulse_core::unified_lines(&left, &right))
+}
+
+#[tauri::command]
+fn pretty_any(raw: String) -> Result<String, String> {
+    Ok(pulse_core::pretty_any(&raw))
+}
+
+#[tauri::command]
+fn parse_sse_text(text: String) -> Result<Vec<pulse_core::ParsedSseEvent>, String> {
+    pulse_core::parse_sse_text(&text)
+}
+
+#[tauri::command]
+fn graphql_build_body(
+    query: String,
+    variables_json: Option<String>,
+    operation_name: Option<String>,
+) -> Result<String, String> {
+    pulse_core::build_graphql_body_raw(
+        &query,
+        variables_json.as_deref().unwrap_or("{}"),
+        operation_name.as_deref(),
+    )
+}
+
+#[tauri::command]
+fn graphql_format_response(body: String) -> Result<String, String> {
+    Ok(pulse_core::format_graphql_response(&body))
+}
+
+#[tauri::command]
+fn graphql_summarize_schema(body: String) -> Result<Option<serde_json::Value>, String> {
+    match pulse_core::summarize_graphql_schema(&body) {
+        Some(summary) => Ok(Some(serde_json::to_value(summary).map_err(|e| e.to_string())?)),
+        None => Ok(None),
+    }
+}
+
+#[tauri::command]
+fn graphql_validate(
+    query: String,
+    variables_json: Option<String>,
+    operation_name: Option<String>,
+) -> Result<Option<String>, String> {
+    Ok(pulse_core::validate_graphql(
+        &query,
+        variables_json.as_deref().unwrap_or("{}"),
+        operation_name.as_deref(),
+    ))
+}
+
+#[tauri::command]
+fn graphql_list_operations(document: String) -> Result<serde_json::Value, String> {
+    serde_json::to_value(pulse_core::list_graphql_operations(&document)).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn graphql_introspection_query() -> Result<String, String> {
+    Ok(pulse_core::INTROSPECTION_QUERY.to_string())
+}
+
+#[tauri::command]
+fn prepare_request(
+    request: pulse_core::types::ApiRequestDto,
+    variables: Vec<pulse_core::EnvVariable>,
+) -> Result<pulse_core::types::ApiRequestDto, String> {
+    Ok(pulse_core::interpolate_request(request, &variables))
+}
+
+#[tauri::command]
+fn substitute_variables(
+    template: String,
+    variables: Vec<pulse_core::EnvVariable>,
+) -> Result<String, String> {
+    Ok(pulse_core::substitute_variables(&template, &variables))
+}
+
+#[tauri::command]
+fn mock_routes_from_collections(
+    collections: Vec<pulse_core::types::SavedRequestDto>,
+) -> Result<Vec<pulse_core::MockRoute>, String> {
+    Ok(pulse_core::routes_from_saved_requests(&collections))
+}
+
+#[tauri::command]
 fn route_agent_intent(input: String) -> Result<serde_json::Value, String> {
     serde_json::to_value(pulse_core::route_agent_input(&input)).map_err(|e| e.to_string())
 }
@@ -618,6 +710,19 @@ pub fn run() {
             generate_code_snippet,
             openapi_convert_spec,
             openapi_export_collection,
+            openapi_list_operations,
+            unified_lines,
+            pretty_any,
+            parse_sse_text,
+            graphql_build_body,
+            graphql_format_response,
+            graphql_summarize_schema,
+            graphql_validate,
+            graphql_list_operations,
+            graphql_introspection_query,
+            prepare_request,
+            substitute_variables,
+            mock_routes_from_collections,
             route_agent_intent,
             get_theme,
             set_theme,

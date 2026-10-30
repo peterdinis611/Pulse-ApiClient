@@ -116,10 +116,10 @@ export function useAppActions() {
         const { collectionGroups, collections } = actorRef.getSnapshot().context.persisted;
         return exportCollectionJson({ collectionGroups, collections });
       },
-      exportCollection: (
+      exportCollection: async (
         collectionId: string,
         format: "pulse" | "postman" | "openapi" | "bruno" | "insomnia",
-      ) => {
+      ): Promise<string | null> => {
         const { collectionGroups, collections } = actorRef.getSnapshot().context.persisted;
         const group = collectionGroups.find((item) => item.id === collectionId);
         if (!group) return null;

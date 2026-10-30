@@ -165,41 +165,40 @@ export function DocsView() {
   return (
     <PageShell resetKey="docs" width="wide">
       <div className="docs-masthead" data-tour="docs">
-        <p className="docs-masthead__kicker">Field manual</p>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0 max-w-xl space-y-2">
-            <h2 className="text-heading">What Pulse can do</h2>
+            <h2 className="text-heading tracking-tight">Manual</h2>
             <p className="text-body text-muted-foreground">
-              {FEATURE_DOC_SECTIONS.length} topics across five desks — same pages as the public
-              guide. Search, or pick a chapter.
+              {FEATURE_DOC_SECTIONS.length} topics on five desks — same guide as the public site.
+              Search, or open a chapter.
             </p>
           </div>
-          <div className="relative w-full lg:max-w-xs">
+          <div className="relative w-full lg:max-w-sm">
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search the manual…"
-              className="h-9 border-border/70 bg-background/80 pl-9 shadow-sm"
+              placeholder="Search topics…"
+              className="h-10 border-border/70 bg-background/90 pl-9"
+              aria-label="Search documentation"
             />
           </div>
         </div>
         <div className="docs-masthead__rule" />
-        <div className="flex flex-wrap gap-2">
-          {FEATURE_DOC_GROUPS.map((group, index) => {
+        <div className="flex flex-wrap gap-2" role="tablist" aria-label="Chapters">
+          {FEATURE_DOC_GROUPS.map((group) => {
             const count = FEATURE_DOC_SECTIONS.filter((section) => section.group === group).length;
             const selected = groupFilter === group;
             return (
               <button
                 key={group}
                 type="button"
+                role="tab"
+                aria-selected={selected}
                 onClick={() => setGroupFilter(selected ? null : group)}
                 title={FEATURE_DOC_GROUP_BLURBS[group]}
                 className={cn("docs-chip", selected && "docs-chip--on")}
               >
-                <span className="font-mono text-[10px] tracking-wider opacity-60">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
                 {group}
                 <span className="tabular-nums opacity-70">{count}</span>
               </button>
@@ -208,18 +207,21 @@ export function DocsView() {
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[252px_minmax(0,1fr)]">
-        <Panel className="h-fit lg:sticky lg:top-0">
-          <PanelHeader label="Chapters" title={`${filtered.length} shown`} />
-          <PanelBody className="max-h-[min(70vh,640px)] space-y-4 overflow-auto p-2">
+      <div className="grid gap-4 lg:grid-cols-[minmax(220px,260px)_minmax(0,1fr)]">
+        <nav className="docs-toc h-fit lg:sticky lg:top-0" aria-label="Topics">
+          <div className="docs-toc__head">
+            <span>Topics</span>
+            <span className="tabular-nums text-muted-foreground">{filtered.length}</span>
+          </div>
+          <div className="docs-toc__body max-h-[min(70vh,640px)] space-y-4 overflow-auto">
             {grouped.length === 0 && (
-              <p className="px-2 py-6 text-center text-body text-muted-foreground">
+              <p className="px-2 py-8 text-center text-body text-muted-foreground">
                 Nothing matches that search.
               </p>
             )}
             {grouped.map(({ group, sections }) => (
               <div key={group}>
-                <p className="mb-1.5 px-2 text-caption">{group}</p>
+                <p className="docs-toc__group">{group}</p>
                 <div className="space-y-0.5">
                   {sections.map((section) => {
                     const selected = active?.id === section.id;
@@ -228,38 +230,19 @@ export function DocsView() {
                         key={section.id}
                         type="button"
                         onClick={() => setActiveId(section.id)}
-                        className={cn(
-                          "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors",
-                          selected
-                            ? "bg-primary/12 text-primary shadow-[inset_0_0_0_1px] shadow-primary/20"
-                            : "text-muted-foreground hover:bg-muted/55 hover:text-foreground",
-                        )}
+                        aria-current={selected ? "page" : undefined}
+                        className={cn("docs-toc__item", selected && "docs-toc__item--on")}
                       >
-                        <span
-                          className={cn(
-                            "flex size-7 shrink-0 items-center justify-center rounded-md",
-                            selected ? "bg-primary/15 text-primary" : "bg-muted/60 text-foreground/70",
-                          )}
-                        >
-                          <SectionIcon id={section.id} className="size-3.5" />
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[13px] font-medium leading-tight">
-                            {section.title}
-                          </span>
-                          <span className="block truncate text-[11px] text-muted-foreground">
-                            {section.items.length} notes
-                            {section.howTo?.length ? ` · ${section.howTo.length}-step walkthrough` : ""}
-                          </span>
-                        </span>
+                        <SectionIcon id={section.id} className="size-3.5 shrink-0 opacity-80" />
+                        <span className="min-w-0 flex-1 truncate">{section.title}</span>
                       </button>
                     );
                   })}
                 </div>
               </div>
             ))}
-          </PanelBody>
-        </Panel>
+          </div>
+        </nav>
 
         {active ? (
           <DocArticle
@@ -323,24 +306,21 @@ function DocArticle({
           </div>
         }
       />
-      <PanelBody className="docs-article space-y-6 p-5 sm:p-7">
+      <PanelBody className="docs-article space-y-8 p-5 sm:p-8">
         <header className="docs-article__lede">
-          <div className="flex size-12 shrink-0 items-center justify-center rounded-none bg-primary/12 text-primary">
-            <SectionIcon id={section.id} className="size-5" />
-          </div>
           <div className="min-w-0">
-            <p className="text-caption">{section.group}</p>
-            <h3 className="text-title mt-0.5">{section.title}</h3>
-            <p className="mt-2 max-w-2xl text-body leading-relaxed text-muted-foreground">
+            <p className="text-caption text-primary">{section.group}</p>
+            <h3 className="text-title mt-1 text-[clamp(1.35rem,1.1rem+1vw,1.75rem)] tracking-tight">
+              {section.title}
+            </h3>
+            <p className="mt-3 max-w-[42ch] text-body leading-relaxed text-muted-foreground">
               {section.summary}
             </p>
           </div>
         </header>
 
-        <section className="space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            In the product
-          </p>
+        <section className="space-y-3">
+          <h4 className="docs-section-label">In the product</h4>
           <ul className="docs-notes">
             {section.items.map((item) => (
               <li key={item}>
@@ -352,13 +332,13 @@ function DocArticle({
 
         {section.howTo && section.howTo.length > 0 && (
           <section className="space-y-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              Walkthrough
-            </p>
+            <h4 className="docs-section-label">Walkthrough</h4>
             <ol className="docs-walk">
               {section.howTo.map((step, index) => (
                 <li key={step}>
-                  <span className="docs-walk__n">{index + 1}</span>
+                  <span className="docs-walk__n" aria-hidden>
+                    {index + 1}
+                  </span>
                   <p className="min-w-0 text-body leading-relaxed text-foreground/90">
                     <DocInlineText text={step} />
                   </p>
@@ -369,16 +349,16 @@ function DocArticle({
         )}
 
         {section.tips?.map((tip) => (
-          <div key={tip} className="docs-tip">
-            <Lightbulb className="mt-0.5 size-4 shrink-0 text-primary" />
+          <aside key={tip} className="docs-tip">
+            <Lightbulb className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
             <p className="text-body leading-relaxed text-foreground/90">
               <DocInlineText text={tip} />
             </p>
-          </div>
+          </aside>
         ))}
 
         {(prev || next) && (
-          <div className="grid gap-2 border-t border-border/50 pt-4 sm:grid-cols-2">
+          <div className="grid gap-2 border-t border-border/50 pt-5 sm:grid-cols-2">
             <NavChip label="Previous" section={prev} align="left" onSelect={onSelect} />
             <NavChip label="Next" section={next} align="right" onSelect={onSelect} />
           </div>

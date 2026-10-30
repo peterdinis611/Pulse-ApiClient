@@ -142,7 +142,7 @@ export function exportHistoryAsHar(entries: HistoryEntry[]): string {
     {
       log: {
         version: "1.2",
-        creator: { name: "Pulse", version: "2.4.0" },
+        creator: { name: "Pulse", version: "2.5.0" },
         entries: entries.map(entryToHar),
       },
     },

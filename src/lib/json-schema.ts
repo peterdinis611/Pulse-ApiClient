@@ -14,71 +14,19 @@ export type JsonSchema = {
   maxItems?: number;
 };
 
-/** Prefer pulse-core via Tauri; sync JS fallback otherwise. */
+function requireTauri(): void {
+  if (!canUseTauriIpc()) {
+    throw new Error("JSON Schema validation requires the desktop app");
+  }
+}
+
+/** Validate via pulse-core (`validate_json_schema`). Desktop-only. */
 export async function validateJsonSchemaAsync(
   instance: unknown,
   schema: JsonSchema,
 ): Promise<string[]> {
-  if (canUseTauriIpc()) {
-    try {
-      return await invoke<string[]>("validate_json_schema", { instance, schema });
-    } catch {
-      // fall through
-    }
-  }
-  return validateJsonSchema(instance, schema);
-}
-
-export function validateJsonSchema(instance: unknown, schema: JsonSchema, path = "$"): string[] {
-  const errors: string[] = [];
-  if (schema.type) {
-    const expected = Array.isArray(schema.type) ? schema.type : [schema.type];
-    const actual = jsonTypeName(instance);
-    const matches = expected.some((name) => {
-      if (name === "number") return actual === "number" || actual === "integer";
-      return name === actual;
-    });
-    if (!matches) {
-      errors.push(`${path}: expected ${expected.join("|")}, got ${actual}`);
-      return errors;
-    }
-  }
-
-  if (instance && typeof instance === "object" && !Array.isArray(instance)) {
-    const record = instance as Record<string, unknown>;
-    for (const key of schema.required ?? []) {
-      if (!(key in record)) errors.push(`${path}: missing required property '${key}'`);
-    }
-    const properties = schema.properties ?? {};
-    for (const [key, child] of Object.entries(properties)) {
-      if (key in record) errors.push(...validateJsonSchema(record[key], child, `${path}.${key}`));
-    }
-    if (schema.additionalProperties === false) {
-      const extras = Object.keys(record).filter((key) => !(key in properties));
-      if (extras.length > 0) errors.push(`${path}: unexpected properties ${extras.join(", ")}`);
-    }
-  }
-
-  if (Array.isArray(instance) && schema.items) {
-    instance.forEach((item, index) => {
-      errors.push(...validateJsonSchema(item, schema.items as JsonSchema, `${path}[${index}]`));
-    });
-    if (schema.minItems != null && instance.length < schema.minItems) {
-      errors.push(`${path}: expected at least ${schema.minItems} items`);
-    }
-    if (schema.maxItems != null && instance.length > schema.maxItems) {
-      errors.push(`${path}: expected at most ${schema.maxItems} items`);
-    }
-  }
-
-  if ("const" in schema && instance !== schema.const) {
-    errors.push(`${path}: expected ${JSON.stringify(schema.const)}`);
-  }
-  if (schema.enum && !schema.enum.some((value) => Object.is(value, instance))) {
-    errors.push(`${path}: expected one of ${JSON.stringify(schema.enum)}`);
-  }
-
-  return errors;
+  requireTauri();
+  return invoke<string[]>("validate_json_schema", { instance, schema });
 }
 
 export function parseJsonSchema(raw: string): JsonSchema | null {
@@ -91,16 +39,6 @@ export function parseJsonSchema(raw: string): JsonSchema | null {
   }
 }
 
-function jsonTypeName(value: unknown): string {
-  if (value === null) return "null";
-  if (typeof value === "boolean") return "boolean";
-  if (typeof value === "number") return Number.isInteger(value) ? "integer" : "number";
-  if (typeof value === "string") return "string";
-  if (Array.isArray(value)) return "array";
-  if (typeof value === "object") return "object";
-  return typeof value;
-}
-
 export function mergeTestResults(...parts: Array<TestRunResult | null | undefined>): TestRunResult | null {
   const results = parts.flatMap((part) => part?.results ?? []);
   if (results.length === 0) return parts.find((part) => part != null) ?? null;
@@ -109,10 +47,10 @@ export function mergeTestResults(...parts: Array<TestRunResult | null | undefine
   return { passed, failed, total: results.length, results };
 }
 
-export function validateResponseAgainstSchema(
+export async function validateResponseAgainstSchema(
   response: Pick<HttpResponse, "status" | "body" | "bodyEncoding">,
   schemaRaw: string,
-): TestRunResult | null {
+): Promise<TestRunResult | null> {
   const raw = schemaRaw.trim();
   if (!raw) return null;
 
@@ -155,7 +93,7 @@ export function validateResponseAgainstSchema(
     return mergeTestResults({ passed: 0, failed: 0, total: 0, results })!;
   }
 
-  const errors = validateJsonSchema(instance, schema);
+  const errors = await validateJsonSchemaAsync(instance, schema);
   results.push({
     name: "Body matches JSON Schema",
     passed: errors.length === 0,

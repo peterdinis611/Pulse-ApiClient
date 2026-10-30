@@ -7,7 +7,7 @@ export function baseOptions(): BaseLayoutProps {
       title: (
         <span className="pulse-brand">
           <span className="pulse-brand__mark" aria-hidden />
-          <span className="font-semibold tracking-tight">{appName}</span>
+          <span>{appName}</span>
           <em>manual</em>
         </span>
       ),

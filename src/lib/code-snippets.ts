@@ -1,6 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { requestToCurl } from "./curl";
-import { prepareRequest } from "./http-client";
+import { prepareRequest, prepareRequestAsync } from "./http-client";
 import { canUseTauriIpc } from "./tauri-runtime";
 import type { ApiRequest, Environment } from "@/types";
 
@@ -49,344 +48,106 @@ function withAuthHeaders(request: ApiRequest): Array<{ key: string; value: strin
     const token = btoa(`${request.auth.basicUsername}:${request.auth.basicPassword}`);
     headers.push({ key: "Authorization", value: `Basic ${token}` });
   }
-  if (request.auth.authType === "apiKey" && request.auth.apiKeyKey.trim()) {
-    if (request.auth.apiKeyIn === "header") {
-      const exists = headers.some(
-        (item) => item.key.toLowerCase() === request.auth.apiKeyKey.trim().toLowerCase(),
-      );
-      if (!exists) {
-        headers.push({ key: request.auth.apiKeyKey.trim(), value: request.auth.apiKeyValue });
-      }
-    }
-  }
-  if (
-    (request.bodyKind === "json" || request.bodyKind === "graphql") &&
-    !headers.some((item) => item.key.toLowerCase() === "content-type")
-  ) {
-    headers.push({ key: "Content-Type", value: "application/json" });
-  }
   return headers;
 }
 
-function requestBody(request: ApiRequest): string | null {
-  if (request.bodyKind === "json" || request.bodyKind === "raw" || request.bodyKind === "graphql") {
-    return request.body.trim() ? request.body : null;
-  }
+function bodyText(request: ApiRequest): string {
+  if (request.bodyKind === "none") return "";
   if (request.bodyKind === "form") {
-    const fields = request.form.filter((item) => item.enabled && item.key.trim());
-    if (!fields.length) return null;
-    return fields
+    return request.form
+      .filter((item) => item.enabled && item.key.trim())
       .map((item) => `${encodeURIComponent(item.key.trim())}=${encodeURIComponent(item.value)}`)
       .join("&");
   }
-  return null;
+  return request.body;
 }
 
-function jsString(value: string): string {
-  return JSON.stringify(value);
-}
-
-function pythonString(value: string): string {
-  return JSON.stringify(value);
-}
-
-function goString(value: string): string {
-  return JSON.stringify(value);
-}
-
-function toFetch(request: ApiRequest): string {
-  const headers = withAuthHeaders(request);
-  const body = requestBody(request);
-  const headerLines = headers.map((item) => `    ${jsString(item.key)}: ${jsString(item.value)},`).join("\n");
-  const init: string[] = [`  method: ${jsString(request.method)},`];
-  if (headers.length) init.push(`  headers: {\n${headerLines}\n  },`);
-  if (body && request.method !== "GET" && request.method !== "HEAD") {
-    init.push(`  body: ${jsString(body)},`);
-  }
-  return `const response = await fetch(${jsString(request.url)}, {\n${init.join("\n")}\n});\nconst data = await response.json();`;
-}
-
-function toAxios(request: ApiRequest): string {
-  const headers = withAuthHeaders(request);
-  const body = requestBody(request);
-  const lines = [
-    `method: ${jsString(request.method.toLowerCase())},`,
-    `url: ${jsString(request.url)},`,
-  ];
-  if (headers.length) {
-    lines.push(
-      `headers: {\n${headers.map((item) => `    ${jsString(item.key)}: ${jsString(item.value)},`).join("\n")}\n  },`,
-    );
-  }
-  if (body && request.method !== "GET" && request.method !== "HEAD") {
-    lines.push(`data: ${jsString(body)},`);
-  }
-  return `import axios from "axios";\n\nconst response = await axios({\n  ${lines.join("\n  ")}\n});`;
-}
-
-function shellEscape(value: string): string {
-  if (/^[A-Za-z0-9_./:?&=-]+$/.test(value)) return value;
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
-
-function toHttpie(request: ApiRequest): string {
-  const headers = withAuthHeaders(request);
-  const parts = ["http", request.method, shellEscape(request.url)];
-  for (const header of headers) {
-    parts.push(`${header.key}:${shellEscape(header.value)}`);
-  }
-  const body = requestBody(request);
-  if (body && (request.bodyKind === "json" || request.bodyKind === "graphql")) {
-    return `${parts.join(" ")} <<< ${shellEscape(body)}`;
-  }
-  if (body) {
-    parts.push(`body='${body.replace(/'/g, `'\\''`)}'`);
-  }
-  return parts.join(" ");
-}
-
-function toPython(request: ApiRequest): string {
-  const headers = withAuthHeaders(request);
-  const body = requestBody(request);
-  const lines = ["import requests", "", `url = ${pythonString(request.url)}`];
-  if (headers.length) {
-    lines.push("headers = {");
-    for (const header of headers) {
-      lines.push(`    ${pythonString(header.key)}: ${pythonString(header.value)},`);
-    }
-    lines.push("}");
-  }
-  const args = ["url"];
-  if (headers.length) args.push("headers=headers");
-  if (body && request.method !== "GET" && request.method !== "HEAD") {
-    if (request.bodyKind === "json" || request.bodyKind === "graphql") {
-      lines.push(`payload = ${body.trim().startsWith("{") || body.trim().startsWith("[") ? body : pythonString(body)}`);
-      args.push("json=payload");
-    } else {
-      lines.push(`data = ${pythonString(body)}`);
-      args.push("data=data");
-    }
-  }
-  const method = request.method.toLowerCase();
-  const fn = ["get", "post", "put", "patch", "delete", "head", "options"].includes(method)
-    ? method
-    : "request";
-  if (fn === "request") {
-    lines.push(`response = requests.request(${pythonString(request.method)}, ${args.join(", ")})`);
-  } else {
-    lines.push(`response = requests.${fn}(${args.join(", ")})`);
-  }
-  lines.push("print(response.status_code)", "print(response.text)");
-  return lines.join("\n");
-}
-
+/** Go remains local — pulse-core snippets do not emit net/http yet. */
 function toGo(request: ApiRequest): string {
   const headers = withAuthHeaders(request);
-  const body = requestBody(request);
+  const body = bodyText(request);
   const lines = [
     "package main",
     "",
-    `import (`,
-    `  "fmt"`,
-    `  "io"`,
-    `  "net/http"`,
-    `  "strings"`,
-    `)`,
+    'import (',
+    '\t"fmt"',
+    '\t"io"',
+    '\t"net/http"',
+    '\t"strings"',
+    ")",
     "",
     "func main() {",
+    `\tmethod := ${JSON.stringify(request.method)}`,
+    `\turl := ${JSON.stringify(request.url)}`,
   ];
   if (body && request.method !== "GET" && request.method !== "HEAD") {
-    lines.push(`  body := strings.NewReader(${goString(body)})`);
-    lines.push(
-      `  req, err := http.NewRequest(${goString(request.method)}, ${goString(request.url)}, body)`,
-    );
+    lines.push(`\tbody := strings.NewReader(${JSON.stringify(body)})`);
+    lines.push("\treq, err := http.NewRequest(method, url, body)");
   } else {
-    lines.push(
-      `  req, err := http.NewRequest(${goString(request.method)}, ${goString(request.url)}, nil)`,
-    );
+    lines.push("\treq, err := http.NewRequest(method, url, nil)");
   }
-  lines.push(`  if err != nil { panic(err) }`);
+  lines.push("\tif err != nil { panic(err) }");
   for (const header of headers) {
-    lines.push(`  req.Header.Set(${goString(header.key)}, ${goString(header.value)})`);
+    lines.push(`\treq.Header.Set(${JSON.stringify(header.key)}, ${JSON.stringify(header.value)})`);
   }
   lines.push(
-    `  res, err := http.DefaultClient.Do(req)`,
-    `  if err != nil { panic(err) }`,
-    `  defer res.Body.Close()`,
-    `  data, _ := io.ReadAll(res.Body)`,
-    `  fmt.Println(res.Status)`,
-    `  fmt.Println(string(data))`,
-    `}`,
-  );
-  return lines.join("\n");
-}
-
-function javaString(value: string): string {
-  return JSON.stringify(value);
-}
-
-function toOkHttp(request: ApiRequest): string {
-  const headers = withAuthHeaders(request);
-  const body = requestBody(request);
-  const lines = [
-    "OkHttpClient client = new OkHttpClient();",
-    "",
-  ];
-  if (body && request.method !== "GET" && request.method !== "HEAD") {
-    const media =
-      request.bodyKind === "json" || request.bodyKind === "graphql"
-        ? "application/json"
-        : "text/plain";
-    lines.push(
-      `RequestBody body = RequestBody.create(${javaString(body)}, MediaType.parse(${javaString(media)}));`,
-    );
-  }
-  lines.push("Request.Builder builder = new Request.Builder()");
-  lines.push(`    .url(${javaString(request.url)})`);
-  lines.push(`    .method(${javaString(request.method)}, ${body && request.method !== "GET" && request.method !== "HEAD" ? "body" : "null"});`);
-  for (const header of headers) {
-    lines.push(`builder.addHeader(${javaString(header.key)}, ${javaString(header.value)});`);
-  }
-  lines.push(
-    "Request request = builder.build();",
-    "try (Response response = client.newCall(request).execute()) {",
-    "    System.out.println(response.code());",
-    "    System.out.println(response.body() != null ? response.body().string() : \"\");",
+    "\tres, err := http.DefaultClient.Do(req)",
+    "\tif err != nil { panic(err) }",
+    "\tdefer res.Body.Close()",
+    "\tdata, _ := io.ReadAll(res.Body)",
+    '\tfmt.Println(res.StatusCode)',
+    "\tfmt.Println(string(data))",
     "}",
   );
   return lines.join("\n");
 }
 
-function toReqwest(request: ApiRequest): string {
-  const headers = withAuthHeaders(request);
-  const body = requestBody(request);
-  const lines = [
-    "use reqwest::header::{HeaderMap, HeaderName, HeaderValue};",
-    "",
-    "#[tokio::main]",
-    "async fn main() -> Result<(), Box<dyn std::error::Error>> {",
-    "    let client = reqwest::Client::new();",
-    "    let mut headers = HeaderMap::new();",
-  ];
-  for (const header of headers) {
-    lines.push(
-      `    headers.insert(HeaderName::from_bytes(${JSON.stringify(header.key)}.as_bytes())?, HeaderValue::from_str(${JSON.stringify(header.value)})?);`,
-    );
-  }
-  lines.push(
-    `    let mut builder = client.request(reqwest::Method::from_bytes(${JSON.stringify(request.method)}.as_bytes())?, ${JSON.stringify(request.url)});`,
-    "    builder = builder.headers(headers);",
-  );
-  if (body && request.method !== "GET" && request.method !== "HEAD") {
-    lines.push(`    builder = builder.body(${JSON.stringify(body)}.to_string());`);
-  }
-  lines.push(
-    "    let response = builder.send().await?;",
-    "    println!(\"{}\", response.status());",
-    "    println!(\"{}\", response.text().await?);",
-    "    Ok(())",
-    "}",
-  );
-  return lines.join("\n");
+function toSnippetPayload(prepared: ApiRequest) {
+  return {
+    method: prepared.method,
+    url: prepared.url,
+    headers: prepared.headers.filter((item) => item.enabled && item.key.trim()),
+    query: prepared.query.filter((item) => item.enabled && item.key.trim()),
+    bodyKind: prepared.bodyKind,
+    body: prepared.body,
+    form: prepared.form.filter((item) => item.enabled && item.key.trim()),
+    multipart: prepared.multipart
+      .filter((item) => item.enabled && item.key.trim())
+      .map((item) => ({
+        key: item.key.trim(),
+        enabled: true,
+        fieldType: item.fieldType,
+        value: item.value,
+        fileName: item.fileName ?? null,
+        mimeType: item.mimeType ?? null,
+      })),
+    auth: {
+      authType: prepared.auth.authType === "inherit" ? "none" : prepared.auth.authType,
+      bearerToken: prepared.auth.bearerToken,
+      basicUsername: prepared.auth.basicUsername,
+      basicPassword: prepared.auth.basicPassword,
+      apiKeyKey: prepared.auth.apiKeyKey,
+      apiKeyValue: prepared.auth.apiKeyValue,
+      apiKeyIn: prepared.auth.apiKeyIn,
+    },
+  };
 }
 
-function toSwift(request: ApiRequest): string {
-  const headers = withAuthHeaders(request);
-  const body = requestBody(request);
-  const lines = [
-    "import Foundation",
-    "",
-    `var request = URLRequest(url: URL(string: ${JSON.stringify(request.url)})!)`,
-    `request.httpMethod = ${JSON.stringify(request.method)}`,
-  ];
-  for (const header of headers) {
-    lines.push(
-      `request.setValue(${JSON.stringify(header.value)}, forHTTPHeaderField: ${JSON.stringify(header.key)})`,
-    );
-  }
-  if (body && request.method !== "GET" && request.method !== "HEAD") {
-    lines.push(`request.httpBody = ${JSON.stringify(body)}.data(using: .utf8)`);
-  }
-  lines.push(
-    "let task = URLSession.shared.dataTask(with: request) { data, response, error in",
-    "    if let error = error { print(error); return }",
-    "    if let http = response as? HTTPURLResponse { print(http.statusCode) }",
-    "    if let data = data, let text = String(data: data, encoding: .utf8) { print(text) }",
-    "}",
-    "task.resume()",
-  );
-  return lines.join("\n");
-}
-
-export function requestToSnippet(
-  id: CodeSnippetId,
-  request: ApiRequest,
-  environment: Environment | null = null,
-): string {
-  if (id === "curl") return requestToCurl(request, environment);
-  const prepared = prepareRequest(request, environment);
-  switch (id) {
-    case "fetch":
-      return toFetch(prepared);
-    case "axios":
-      return toAxios(prepared);
-    case "httpie":
-      return toHttpie(prepared);
-    case "python":
-      return toPython(prepared);
-    case "go":
-      return toGo(prepared);
-    case "okhttp":
-      return toOkHttp(prepared);
-    case "reqwest":
-      return toReqwest(prepared);
-    case "swift":
-      return toSwift(prepared);
-  }
-}
-
-/** Prefer pulse-core via Tauri when available (go stays JS-only). */
+/** Generate a code snippet via pulse-core (`generate_code_snippet`). Go stays local. */
 export async function requestToSnippetAsync(
   id: CodeSnippetId,
   request: ApiRequest,
   environment: Environment | null = null,
 ): Promise<string> {
-  if (id === "go") return requestToSnippet(id, request, environment);
-  if (canUseTauriIpc()) {
-    try {
-      const prepared = prepareRequest(request, environment);
-      const payload = {
-        method: prepared.method,
-        url: prepared.url,
-        headers: prepared.headers.filter((item) => item.enabled && item.key.trim()),
-        query: prepared.query.filter((item) => item.enabled && item.key.trim()),
-        bodyKind: prepared.bodyKind,
-        body: prepared.body,
-        form: prepared.form.filter((item) => item.enabled && item.key.trim()),
-        multipart: prepared.multipart
-          .filter((item) => item.enabled && item.key.trim())
-          .map((item) => ({
-            key: item.key.trim(),
-            enabled: true,
-            fieldType: item.fieldType,
-            value: item.value,
-            fileName: item.fileName ?? null,
-            mimeType: item.mimeType ?? null,
-          })),
-        auth: {
-          authType: prepared.auth.authType === "inherit" ? "none" : prepared.auth.authType,
-          bearerToken: prepared.auth.bearerToken,
-          basicUsername: prepared.auth.basicUsername,
-          basicPassword: prepared.auth.basicPassword,
-          apiKeyKey: prepared.auth.apiKeyKey,
-          apiKeyValue: prepared.auth.apiKeyValue,
-          apiKeyIn: prepared.auth.apiKeyIn,
-        },
-      };
-      return await invoke<string>("generate_code_snippet", { payload, format: id });
-    } catch {
-      // fall through
-    }
+  const prepared = canUseTauriIpc()
+    ? await prepareRequestAsync(request, environment)
+    : prepareRequest(request, environment);
+  if (id === "go") return toGo(prepared);
+  if (!canUseTauriIpc()) {
+    throw new Error("Code snippets require the desktop app");
   }
-  return requestToSnippet(id, request, environment);
+  return invoke<string>("generate_code_snippet", {
+    payload: toSnippetPayload(prepared),
+    format: id,
+  });
 }

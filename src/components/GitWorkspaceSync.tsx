@@ -90,9 +90,13 @@ export function GitWorkspaceSync() {
           const editor = JSON.stringify(active.request);
           const previous = lastDisk.current.get(saved.id);
           if (previous && disk !== previous && editor !== previous) {
+            const [prettyDisk, prettyEditor] = await Promise.all([
+              prettyMaybeJson(disk),
+              prettyMaybeJson(editor),
+            ]);
             const nextConflict = {
-              disk: prettyMaybeJson(disk),
-              editor: prettyMaybeJson(editor),
+              disk: prettyDisk,
+              editor: prettyEditor,
               filePath: saved.filePath ?? saved.name,
             };
             setConflict(nextConflict);
@@ -164,11 +168,29 @@ export function GitWorkspaceSync() {
     };
   }, [actorRef]);
 
-  if (!conflict && pending.length === 0) return null;
+  const [diffRows, setDiffRows] = useState<Array<{ kind: "same" | "add" | "del"; text: string }>>(
+    [],
+  );
 
-  const diffRows = conflict
-    ? unifiedLineDiff(conflict.disk, conflict.editor).filter((row) => row.kind !== "same")
-    : [];
+  useEffect(() => {
+    let cancelled = false;
+    if (!conflict) {
+      setDiffRows([]);
+      return;
+    }
+    void unifiedLineDiff(conflict.disk, conflict.editor)
+      .then((rows) => {
+        if (!cancelled) setDiffRows(rows.filter((row) => row.kind !== "same"));
+      })
+      .catch(() => {
+        if (!cancelled) setDiffRows([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [conflict]);
+
+  if (!conflict && pending.length === 0) return null;
 
   return (
     <div className="pointer-events-auto fixed bottom-6 right-6 z-50 w-[min(420px,calc(100vw-2rem))] space-y-3">

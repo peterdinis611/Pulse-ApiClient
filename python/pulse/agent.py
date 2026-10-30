@@ -38,12 +38,17 @@ AGENT_HELP_TEXT = """I understand these intents (local, no LLM):
 • **RAG** — `search history …` / `rag method:POST status:4xx …` (TF-IDF + filters; `reindex rag`)
 • **GraphQL summarize** — pass introspection/response body via `--body` / `body`
 • **Parse SSE** — paste an SSE document (event/data blocks)
+• **OpenAPI** — `import openapi` / paste OpenAPI JSON · `list openapi ops`
+• **Show env** — `show env` / `list variables` (secrets masked)
+• **Export cURL** — `export curl` (needs active request / desktop)
+• **Contract check** — `check contract` against workspace schemas
+• **Response diff** / **Start mock** — desktop Agent (or mock via MCP)
 
 Desktop-only (use the in-app Agent view):
-• Explain last response / test failures
-• Run active collection (needs confirm)
+• Explain last response / test failures / draft tests
+• Run active collection, start mock (needs confirm)
 
-Examples: `pulse agent "workspace status"` · `pulse agent 'remember env=staging'`"""
+Examples: `pulse agent "workspace status"` · `pulse agent 'remember env=staging'` · `pulse agent "check contract"`"""
 
 _CURL_BLOCK = re.compile(r"```(?:bash|sh|shell|zsh)?\s*([\s\S]*?curl[\s\S]*?)```", re.I)
 _CURL_LINE = re.compile(r"((?:^|\n)\s*curl\b[\s\S]+)", re.I)
@@ -112,6 +117,30 @@ def route_agent_input(raw: str) -> dict[str, Any]:
         return {"kind": "memory_list"}
     if quick in {"quick:rag", "reindex rag", "rag reindex", "rebuild rag"}:
         return {"kind": "rag_reindex"}
+    if quick in {"quick:openapi", "quick:openapi-import"} or re.search(
+        r"(?:import\s+openapi|openapi\s+import)", quick
+    ):
+        return {"kind": "openapi_import", "spec": ""}
+    if quick == "quick:openapi-list" or re.search(
+        r"(?:list\s+openapi|openapi\s+(?:list|ops|operations))", quick
+    ):
+        return {"kind": "openapi_list", "spec": ""}
+    if quick in {"quick:diff", "quick:response-diff"} or re.search(
+        r"(?:diff\s+response|compare\s+example|response\s+diff)", quick
+    ):
+        return {"kind": "response_diff"}
+    if quick == "quick:mock" or re.search(r"(?:start\s+mock|mock\s+start|mock\s+server)", quick):
+        return {"kind": "mock_start"}
+    if quick == "quick:env" or re.search(
+        r"(?:show\s+env|list\s+variables|list\s+env|environment\s+vars?)", quick
+    ):
+        return {"kind": "env_show"}
+    if quick == "quick:curl-export" or re.search(
+        r"(?:export\s+curl|as\s+curl|to\s+curl|curl\s+export)", quick
+    ):
+        return {"kind": "curl_export"}
+    if quick == "quick:contract" or re.search(r"(?:check\s+contract|contract\s+check)", quick):
+        return {"kind": "contract_check"}
     rag_match = re.match(
         r"^(?:rag|search\s+history|find\s+in\s+history|search\s+memory)\s+(.+)$", quick
     )
@@ -191,14 +220,35 @@ def _execute_py(
     if kind == "unknown":
         message = intent.get("input") or ""
         return {"kind": kind, "markdown": f"{message}\n\n---\n{AGENT_HELP_TEXT}", "data": None}
-    if kind in {"explain_response", "explain_tests", "run_collection"}:
+    if kind in {
+        "explain_response",
+        "explain_tests",
+        "run_collection",
+        "draft_tests",
+        "draft_pre_request",
+        "response_diff",
+        "mock_start",
+        "curl_export",
+    }:
         return {
             "kind": kind,
             "markdown": (
-                "This intent needs the desktop in-app Agent (active tab / confirm UI). "
-                "CLI and MCP support offline intents: cURL import, SSE parse, workspace status/history, GraphQL summarize."
+                "This intent needs the desktop in-app Agent (active tab / confirm UI), "
+                "or rebuild with pulse_native so `run_agent_json` can execute it offline. "
+                "CLI/MCP also cover: cURL, SSE, workspace, memory/RAG, GraphQL summarize, "
+                "OpenAPI import/list, show env, check contract."
             ),
             "data": {"desktopOnly": True},
+        }
+    if kind in {"env_show", "contract_check", "openapi_import", "openapi_list"}:
+        # Prefer pulse_native via run_agent(); Python fallback points at rebuild / desktop.
+        return {
+            "kind": kind,
+            "markdown": (
+                f"**{kind}** is handled by pulse-core (`run_agent_json`). "
+                "Rebuild the native module or use the desktop Agent / `pulse:cli contract` / workspace OpenAPI tools."
+            ),
+            "data": {"needsNative": True},
         }
     if kind == "import_curl":
         payload = curl_to_payload(str(intent.get("curl") or ""))
@@ -383,9 +433,18 @@ def run_agent(
     history_limit: int = 15,
     source: str = "cli-agent",
     record_history: bool = True,
+    document: str | None = None,
+    diff_left: str | None = None,
+    diff_right: str | None = None,
+    http_payload: dict[str, Any] | str | None = None,
 ) -> dict[str, Any]:
     """Route + execute. Prefers Rust `run_agent_json` when pulse_native is available."""
     root = workspace or os.environ.get("PULSE_WORKSPACE") or workspace_root()
+    payload_json: str | None = None
+    if isinstance(http_payload, dict):
+        payload_json = json.dumps(http_payload)
+    elif isinstance(http_payload, str) and http_payload.strip():
+        payload_json = http_payload
     try:
         import pulse_native
 
@@ -398,6 +457,10 @@ def run_agent(
                     history_limit,
                     source,
                     record_history,
+                    document,
+                    diff_left,
+                    diff_right,
+                    payload_json,
                 )
             )
     except ImportError:

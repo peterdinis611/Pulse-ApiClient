@@ -121,7 +121,7 @@ describe("feature-docs", () => {
       ),
     ).toBe(true);
     expect(
-      FEATURE_DOC_SECTIONS.find((section) => section.id === "libraries")?.items.some((item) =>
+      FEATURE_DOC_SECTIONS.find((section) => section.id === "crates")?.items.some((item) =>
         item.toLowerCase().includes("boa_engine"),
       ),
     ).toBe(true);

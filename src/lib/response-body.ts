@@ -1,4 +1,5 @@
 import { formatGraphqlResponse, parseGraphqlResponse } from "@/lib/graphql";
+import { canUseTauriIpc } from "@/lib/tauri-runtime";
 import { prettyJson } from "@/lib/helpers";
 import type { HttpResponse } from "@/types";
 
@@ -67,11 +68,11 @@ export function defaultResponseBodyFormat(
   return "pretty";
 }
 
-export function formatResponseBody(
+export async function formatResponseBody(
   body: string,
   contentType: string | null | undefined,
   format: ResponseBodyFormat,
-): { text: string; jsonValid: boolean | null } {
+): Promise<{ text: string; jsonValid: boolean | null }> {
   if (format === "preview") {
     return { text: body, jsonValid: null };
   }
@@ -93,7 +94,10 @@ export function formatResponseBody(
 
   const graphql = parseGraphqlResponse(body);
   if (graphql) {
-    return { text: formatGraphqlResponse(body), jsonValid: null };
+    if (canUseTauriIpc()) {
+      return { text: await formatGraphqlResponse(body), jsonValid: null };
+    }
+    return { text: prettyJson(body), jsonValid: null };
   }
 
   if (isJsonContentType(contentType) || looksLikeJson(body)) {

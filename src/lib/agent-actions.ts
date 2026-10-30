@@ -1,4 +1,4 @@
-import { curlToRequestAsync } from "@/lib/curl";
+import { curlToRequestAsync, requestToCurlAsync } from "@/lib/curl";
 import { formatGraphqlResponse, parseGraphqlResponse, summarizeGraphqlSchemaLike } from "@/lib/agent-format";
 import { runCollectionAuto, type CollectionRunResult } from "@/lib/collection-runner";
 import {
@@ -22,6 +22,7 @@ import {
   withDraftScripts,
 } from "@/lib/agent-draft";
 import { completeAgentLlm, streamAgentLlm, type AgentToolCall } from "@/lib/agent-llm";
+import { checkWorkspaceContract } from "@/lib/contract";
 import {
   appendGitAgentHistory,
   getGitWorkspaceRoot,
@@ -31,6 +32,8 @@ import {
   listGitAgentHistory,
   listGitPending,
 } from "@/lib/git-workspace";
+import { unifiedLineDiff, prettyMaybeJson } from "@/lib/line-diff";
+import { importOpenApiCollection, listOpenApiOperations } from "@/lib/openapi-import";
 import type { AgentIntent } from "@/lib/agent-router";
 import { buildAgentHelpText } from "@/lib/agent-router";
 import {
@@ -44,6 +47,7 @@ import {
 import { mockRoutesFromCollections, startMockServer } from "@/lib/mock-server";
 import { isBetaFeatureEnabled } from "@/lib/release-channel";
 import { t } from "@/lib/i18n";
+import { createId } from "@/lib/helpers";
 import type {
   ApiRequest,
   CollectionGroup,
@@ -62,6 +66,7 @@ export type AgentActionContext = {
   activeCollectionId: string | null;
   collectionGroups: CollectionGroup[];
   collections: SavedRequest[];
+  environments: Environment[];
   environment: Environment | null;
   openRequestTab: (request: ApiRequest) => void;
   setMainView: (view: MainView) => void;
@@ -70,6 +75,10 @@ export type AgentActionContext = {
   sendActiveRequest?: () => void;
   /** Apply partial fields to the active request tab. */
   updateActiveRequest?: (patch: Partial<ApiRequest>) => void;
+  /** Import OpenAPI collection into app state. */
+  importOpenApi?: (collection: CollectionGroup, requests: SavedRequest[]) => void;
+  /** Switch the active environment. */
+  setActiveEnvironmentId?: (id: string | null) => void;
 };
 
 export type AgentConfirmKind =
@@ -79,23 +88,34 @@ export type AgentConfirmKind =
   | "apply_draft_tests"
   | "write_request"
   | "mock_start"
-  | "git_commit";
+  | "git_commit"
+  | "import_openapi"
+  | "switch_environment"
+  | "set_header";
+
+export type AgentConfirmPayload = {
+  key?: string;
+  value?: string;
+  scope?: "workspace" | "local";
+  name?: string;
+  url?: string;
+  method?: string;
+  body?: string;
+  message?: string;
+  spec?: string;
+  environmentId?: string;
+  environmentName?: string;
+  headerKey?: string;
+  headerValue?: string;
+  toolName?: string;
+};
 
 export type AgentActionResult = {
   markdown: string;
   /** When set, UI should show Confirm before calling `confirmAgentAction`. */
   needsConfirm?: AgentConfirmKind;
   /** Payload for remember / write / commit confirms. */
-  confirmPayload?: {
-    key?: string;
-    value?: string;
-    scope?: "workspace" | "local";
-    name?: string;
-    url?: string;
-    method?: string;
-    body?: string;
-    message?: string;
-  };
+  confirmPayload?: AgentConfirmPayload;
   openRequest?: ApiRequest;
   /** Apply these fields to the active request (draft tests / pre-request). */
   applyToActive?: Partial<ApiRequest>;
@@ -155,21 +175,36 @@ async function maybeEnrichWithLlm(
   }
 }
 
+function withToolName(
+  result: AgentActionResult,
+  toolName: string,
+): AgentActionResult {
+  return {
+    ...result,
+    confirmPayload: { ...result.confirmPayload, toolName },
+  };
+}
+
 function toolCallsToConfirm(toolCalls: AgentToolCall[]): AgentActionResult | null {
   const call = toolCalls[0];
   if (!call) return null;
-  const betaWrites = isBetaFeatureEnabled("agent_write_tools");
   if (call.name === "run_active_collection") {
-    return {
-      markdown: t("agent.md.toolRunCollection"),
-      needsConfirm: "run_collection",
-    };
+    return withToolName(
+      {
+        markdown: t("agent.md.toolRunCollection"),
+        needsConfirm: "run_collection",
+      },
+      call.name,
+    );
   }
   if (call.name === "send_active_request") {
-    return {
-      markdown: t("agent.md.toolSendRequest"),
-      needsConfirm: "send_request",
-    };
+    return withToolName(
+      {
+        markdown: t("agent.md.toolSendRequest"),
+        needsConfirm: "send_request",
+      },
+      call.name,
+    );
   }
   if (call.name === "remember_fact") {
     try {
@@ -179,26 +214,32 @@ function toolCallsToConfirm(toolCalls: AgentToolCall[]): AgentActionResult | nul
         scope?: string;
       };
       if (!args.key?.trim() || args.value == null) return null;
-      return {
-        markdown: t("agent.md.toolRemember", { key: args.key, value: String(args.value) }),
-        needsConfirm: "remember",
-        confirmPayload: {
-          key: args.key.trim(),
-          value: String(args.value),
-          scope: args.scope === "local" ? "local" : "workspace",
+      return withToolName(
+        {
+          markdown: t("agent.md.toolRemember", { key: args.key, value: String(args.value) }),
+          needsConfirm: "remember",
+          confirmPayload: {
+            key: args.key.trim(),
+            value: String(args.value),
+            scope: args.scope === "local" ? "local" : "workspace",
+          },
         },
-      };
+        call.name,
+      );
     } catch {
       return null;
     }
   }
-  if (betaWrites && call.name === "apply_draft_tests") {
-    return {
-      markdown: "Apply drafted tests from the last response to the active request?",
-      needsConfirm: "apply_draft_tests",
-    };
+  if (call.name === "apply_draft_tests") {
+    return withToolName(
+      {
+        markdown: t("agent.md.toolApplyDraftTests"),
+        needsConfirm: "apply_draft_tests",
+      },
+      call.name,
+    );
   }
-  if (betaWrites && call.name === "write_request_fields") {
+  if (call.name === "write_request_fields") {
     try {
       const args = JSON.parse(call.arguments) as {
         name?: string;
@@ -206,19 +247,94 @@ function toolCallsToConfirm(toolCalls: AgentToolCall[]): AgentActionResult | nul
         method?: string;
         body?: string;
       };
-      return {
-        markdown: `Update active request fields?\n\n\`\`\`json\n${JSON.stringify(args, null, 2)}\n\`\`\``,
-        needsConfirm: "write_request",
-        confirmPayload: args,
-      };
+      return withToolName(
+        {
+          markdown: `${t("agent.md.toolWriteRequest")}\n\n\`\`\`json\n${JSON.stringify(args, null, 2)}\n\`\`\``,
+          needsConfirm: "write_request",
+          confirmPayload: args,
+        },
+        call.name,
+      );
     } catch {
       return null;
     }
   }
-  if (betaWrites && call.name === "start_mock_server") {
+  if (call.name === "start_mock_server") {
+    return withToolName(
+      {
+        markdown: t("agent.md.toolMockStart"),
+        needsConfirm: "mock_start",
+      },
+      call.name,
+    );
+  }
+  if (call.name === "import_openapi_spec") {
+    try {
+      const args = JSON.parse(call.arguments) as { spec?: string };
+      const spec = args.spec?.trim();
+      if (!spec) return null;
+      return withToolName(
+        {
+          markdown: t("agent.md.toolImportOpenapi"),
+          needsConfirm: "import_openapi",
+          confirmPayload: { spec },
+        },
+        call.name,
+      );
+    } catch {
+      return null;
+    }
+  }
+  if (call.name === "switch_environment") {
+    try {
+      const args = JSON.parse(call.arguments) as {
+        environmentId?: string;
+        environmentName?: string;
+        name?: string;
+      };
+      const environmentName = args.environmentName?.trim() || args.name?.trim() || args.environmentId?.trim();
+      if (!environmentName && !args.environmentId?.trim()) return null;
+      return withToolName(
+        {
+          markdown: t("agent.md.toolSwitchEnv", { name: environmentName || args.environmentId || "" }),
+          needsConfirm: "switch_environment",
+          confirmPayload: {
+            environmentId: args.environmentId?.trim(),
+            environmentName: environmentName || undefined,
+          },
+        },
+        call.name,
+      );
+    } catch {
+      return null;
+    }
+  }
+  if (call.name === "set_header") {
+    try {
+      const args = JSON.parse(call.arguments) as { key?: string; value?: string };
+      if (!args.key?.trim()) return null;
+      return withToolName(
+        {
+          markdown: t("agent.md.toolSetHeader", {
+            key: args.key.trim(),
+            value: args.value ?? "",
+          }),
+          needsConfirm: "set_header",
+          confirmPayload: {
+            headerKey: args.key.trim(),
+            headerValue: args.value ?? "",
+          },
+        },
+        call.name,
+      );
+    } catch {
+      return null;
+    }
+  }
+  if (call.name === "diff_response_example") {
     return {
-      markdown: "Start the local mock server from collection examples?",
-      needsConfirm: "mock_start",
+      markdown: t("agent.md.toolDiff"),
+      meta: { tool: "diff_response_example" },
     };
   }
   if (isBetaFeatureEnabled("git_commit") && call.name === "propose_commit_message") {
@@ -226,11 +342,14 @@ function toolCallsToConfirm(toolCalls: AgentToolCall[]): AgentActionResult | nul
       const args = JSON.parse(call.arguments) as { message?: string };
       const message = args.message?.trim();
       if (!message) return null;
-      return {
-        markdown: `Stage dirty files and commit with:\n\n> ${message}`,
-        needsConfirm: "git_commit",
-        confirmPayload: { message },
-      };
+      return withToolName(
+        {
+          markdown: `Stage dirty files and commit with:\n\n> ${message}`,
+          needsConfirm: "git_commit",
+          confirmPayload: { message },
+        },
+        call.name,
+      );
     } catch {
       return null;
     }
@@ -238,9 +357,68 @@ function toolCallsToConfirm(toolCalls: AgentToolCall[]): AgentActionResult | nul
   return null;
 }
 
+async function runResponseDiff(ctx: AgentActionContext): Promise<AgentActionResult> {
+  const examples = ctx.activeRequest?.examples ?? [];
+  const exampleBody = examples[examples.length - 1]?.response?.body?.trim() ?? "";
+  const responseBody = ctx.activeResponse?.body?.trim() ?? "";
+  if (!exampleBody || !responseBody) {
+    return { markdown: t("agent.md.noDiffBodies") };
+  }
+  try {
+    const left = await prettyMaybeJson(exampleBody).catch(() => exampleBody);
+    const right = await prettyMaybeJson(responseBody).catch(() => responseBody);
+    const rows = await unifiedLineDiff(left, right);
+    const added = rows.filter((row) => row.kind === "add").length;
+    const removed = rows.filter((row) => row.kind === "del").length;
+    const unified = rows
+      .map((row) => {
+        if (row.kind === "add") return `+${row.text}`;
+        if (row.kind === "del") return `-${row.text}`;
+        return ` ${row.text}`;
+      })
+      .join("\n");
+    await recordAgentHistory("response_diff", { added, removed });
+    return {
+      markdown: `${t("agent.md.diffTitle", { added, removed })}\n\n\`\`\`diff\n${unified}\n\`\`\``,
+      meta: { added, removed },
+    };
+  } catch (error) {
+    return {
+      markdown: `Diff failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+function formatEnvMarkdown(environments: Environment[]): string {
+  if (environments.length === 0) {
+    return t("agent.md.envEmpty");
+  }
+  const lines = [t("agent.md.envTitle"), ""];
+  for (const env of environments) {
+    lines.push(`### ${env.name}`);
+    const vars = env.variables.filter((item) => item.enabled);
+    if (vars.length === 0) {
+      lines.push(t("agent.md.envNoVars"));
+    }
+    for (const variable of vars.slice(0, 40)) {
+      const masked =
+        variable.secret || variable.key.startsWith("secret.")
+          ? "••••"
+          : variable.value.length > 80
+            ? `${variable.value.slice(0, 80)}…`
+            : variable.value;
+      lines.push(`- \`${variable.key}\` = \`${masked}\``);
+    }
+    if (vars.length > 40) lines.push(`…+${vars.length - 40} more`);
+    lines.push("");
+  }
+  return lines.join("\n");
+}
+
 async function maybeToolCallFromUnknown(
   input: string,
   ragBlock: string,
+  ctx: AgentActionContext,
 ): Promise<AgentActionResult | null> {
   const settings = loadAgentSettings();
   if (settings.provider === "none" || !canUseCloudForJob("tools", settings)) {
@@ -261,12 +439,20 @@ async function maybeToolCallFromUnknown(
             "RAG context:",
             ragBlock.trim() || "(none)",
             "",
-            "If you can help by proposing send_active_request, run_active_collection, or remember_fact, call the tool. Otherwise answer briefly without tools.",
+            "If you can help by proposing a tool, call one of: send_active_request, run_active_collection, remember_fact, apply_draft_tests, write_request_fields, start_mock_server, import_openapi_spec, switch_environment, set_header, diff_response_example. Otherwise answer briefly without tools.",
           ].join("\n"),
         },
       ],
     });
     if (result.toolCalls.length > 0) {
+      const call = result.toolCalls[0];
+      if (call?.name === "diff_response_example") {
+        const diff = await runResponseDiff(ctx);
+        if (result.text.trim()) {
+          diff.markdown = `${result.text.trim()}\n\n---\n${diff.markdown}`;
+        }
+        return diff;
+      }
       const confirm = toolCallsToConfirm(result.toolCalls);
       if (confirm) {
         if (result.text.trim()) {
@@ -307,7 +493,7 @@ async function recordAgentHistory(
   }).catch(() => undefined);
 }
 
-function summarizeHttpResponse(response: HttpResponse): string {
+async function summarizeHttpResponse(response: HttpResponse): Promise<string> {
   const lines = [
     t("agent.md.statusLabel", {
       status: `${response.status} ${response.statusText || ""}`.trim(),
@@ -321,7 +507,7 @@ function summarizeHttpResponse(response: HttpResponse): string {
   const gql = parseGraphqlResponse(response.body);
   if (gql) {
     lines.push("");
-    lines.push(formatGraphqlResponse(response.body));
+    lines.push(await formatGraphqlResponse(response.body));
   } else {
     const body = response.body?.trim() ?? "";
     const preview = body.length > 1200 ? `${body.slice(0, 1200)}\n…` : body;
@@ -388,7 +574,7 @@ export async function runAgentIntent(
           /* best-effort */
         }
       }
-      const toolResult = await maybeToolCallFromUnknown(intent.input, ragBlock);
+      const toolResult = await maybeToolCallFromUnknown(intent.input, ragBlock, ctx);
       if (toolResult) return toolResult;
       const markdown = await maybeEnrichWithLlm(
         local,
@@ -424,7 +610,7 @@ export async function runAgentIntent(
       await recordAgentHistory("explain_response", {
         response: { status: ctx.activeResponse.status },
       });
-      let local = summarizeHttpResponse(ctx.activeResponse);
+      let local = await summarizeHttpResponse(ctx.activeResponse);
       const root = getGitWorkspaceRoot();
       let citations: AgentRagCitation[] | undefined;
       let ragBlock = "";
@@ -614,7 +800,7 @@ export async function runAgentIntent(
       if (!body?.trim()) {
         return { markdown: t("agent.md.noGraphqlBody") };
       }
-      const summary = summarizeGraphqlSchemaLike(body);
+      const summary = await summarizeGraphqlSchemaLike(body);
       if (!summary) {
         return { markdown: t("agent.md.notGraphql") };
       }
@@ -623,7 +809,7 @@ export async function runAgentIntent(
     }
     case "sse_parse": {
       const { parseSseTextLocal } = await import("@/lib/agent-format");
-      const events = parseSseTextLocal(intent.text);
+      const events = await parseSseTextLocal(intent.text);
       if (events.length === 0) {
         return { markdown: t("agent.md.noSse") };
       }
@@ -791,6 +977,122 @@ export async function runAgentIntent(
         };
       }
     }
+    case "openapi_import": {
+      const spec = intent.spec?.trim();
+      if (!spec) {
+        return { markdown: t("agent.md.pasteOpenapi") };
+      }
+      try {
+        const imported = await importOpenApiCollection(spec);
+        ctx.importOpenApi?.(imported.collection, imported.requests);
+        await recordAgentHistory("openapi_import", {
+          requests: imported.requests.length,
+          title: imported.collection.name,
+        });
+        return {
+          markdown: t("agent.md.openapiImported", {
+            name: imported.collection.name,
+            count: imported.requests.length,
+          }),
+          meta: { collection: imported.collection, requests: imported.requests },
+        };
+      } catch (error) {
+        return {
+          markdown: `OpenAPI import failed: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
+    }
+    case "openapi_list": {
+      const spec = intent.spec?.trim();
+      if (!spec) {
+        return { markdown: t("agent.md.pasteOpenapi") };
+      }
+      try {
+        const ops = await listOpenApiOperations(spec);
+        if (ops.length === 0) {
+          return { markdown: t("agent.md.openapiListEmpty") };
+        }
+        const lines = [t("agent.md.openapiListTitle", { count: ops.length }), ""];
+        for (const op of ops.slice(0, 80)) {
+          lines.push(`- \`${op.method}\` \`${op.path}\` — ${op.summary}`);
+        }
+        if (ops.length > 80) lines.push(`…+${ops.length - 80} more`);
+        await recordAgentHistory("openapi_list", { count: ops.length });
+        return { markdown: lines.join("\n"), meta: { operations: ops } };
+      } catch (error) {
+        return {
+          markdown: `OpenAPI list failed: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
+    }
+    case "response_diff":
+      return runResponseDiff(ctx);
+    case "mock_start": {
+      const routes = await mockRoutesFromCollections(ctx.collections).catch(() => []);
+      if (routes.length === 0) {
+        return { markdown: "No mock routes — save response examples on requests first." };
+      }
+      return {
+        markdown: t("agent.md.mockReady"),
+        needsConfirm: "mock_start",
+        confirmPayload: { toolName: "start_mock_server" },
+        meta: { routeCount: routes.length },
+      };
+    }
+    case "env_show": {
+      const markdown = formatEnvMarkdown(ctx.environments ?? []);
+      await recordAgentHistory("env_show", { environments: ctx.environments?.length ?? 0 });
+      return { markdown };
+    }
+    case "curl_export": {
+      if (!ctx.activeRequest) {
+        return { markdown: t("agent.md.curlExportMissing") };
+      }
+      try {
+        const command = await requestToCurlAsync(ctx.activeRequest, ctx.environment);
+        await recordAgentHistory("curl_export", {
+          method: ctx.activeRequest.method,
+          url: ctx.activeRequest.url,
+        });
+        return {
+          markdown: `\`\`\`bash\n${command}\n\`\`\``,
+          meta: { curl: command },
+        };
+      } catch (error) {
+        return {
+          markdown: `cURL export failed: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
+    }
+    case "contract_check": {
+      const root = getGitWorkspaceRoot();
+      if (!root) {
+        return { markdown: t("agent.md.noWorkspace") };
+      }
+      try {
+        const report = await checkWorkspaceContract(root);
+        await recordAgentHistory("contract_check", {
+          ok: report.ok,
+          errors: report.errors.length,
+        });
+        if (report.ok) {
+          return { markdown: t("agent.md.contractOk"), meta: { report } };
+        }
+        const lines = [
+          t("agent.md.contractFail", { count: report.errors.length }),
+          "",
+          ...report.errors.slice(0, 40).map((err) => `- ${err}`),
+        ];
+        if (report.errors.length > 40) {
+          lines.push(`…+${report.errors.length - 40} more`);
+        }
+        return { markdown: lines.join("\n"), meta: { report } };
+      } catch (error) {
+        return {
+          markdown: `Contract check failed: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
+    }
     default:
       return { markdown: buildAgentHelpText(settings) };
   }
@@ -799,19 +1101,79 @@ export async function runAgentIntent(
 export async function confirmAgentAction(
   kind: AgentConfirmKind,
   ctx: AgentActionContext,
-  payload?: {
-    key?: string;
-    value?: string;
-    scope?: "workspace" | "local";
-    name?: string;
-    url?: string;
-    method?: string;
-    body?: string;
-    message?: string;
-  },
+  payload?: AgentConfirmPayload,
 ): Promise<AgentActionResult> {
   if (!isAgentEnabled()) {
     return { markdown: buildAgentHelpText() };
+  }
+  if (kind === "import_openapi") {
+    const spec = payload?.spec?.trim();
+    if (!spec) return { markdown: t("agent.md.pasteOpenapi") };
+    try {
+      const imported = await importOpenApiCollection(spec);
+      ctx.importOpenApi?.(imported.collection, imported.requests);
+      await recordAgentHistory("openapi_import", {
+        requests: imported.requests.length,
+        title: imported.collection.name,
+      });
+      return {
+        markdown: t("agent.md.openapiImported", {
+          name: imported.collection.name,
+          count: imported.requests.length,
+        }),
+        meta: { collection: imported.collection, requests: imported.requests },
+      };
+    } catch (error) {
+      return {
+        markdown: `OpenAPI import failed: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
+  if (kind === "switch_environment") {
+    const envs = ctx.environments ?? [];
+    const match =
+      envs.find((env) => env.id === payload?.environmentId) ||
+      envs.find(
+        (env) =>
+          env.name.toLowerCase() === (payload?.environmentName ?? "").toLowerCase(),
+      );
+    if (!match) {
+      return { markdown: `Environment not found: ${payload?.environmentName || payload?.environmentId || "—"}` };
+    }
+    ctx.setActiveEnvironmentId?.(match.id);
+    return { markdown: `Switched active environment to **${match.name}**.` };
+  }
+  if (kind === "set_header") {
+    if (!ctx.activeRequest) {
+      return { markdown: t("agent.md.noResponse") };
+    }
+    const headerKey = payload?.headerKey?.trim();
+    if (!headerKey) return { markdown: "Header key is required." };
+    const headers = [...(ctx.activeRequest.headers ?? [])];
+    const existing = headers.findIndex(
+      (item) => item.key.toLowerCase() === headerKey.toLowerCase(),
+    );
+    if (existing >= 0) {
+      headers[existing] = {
+        ...headers[existing],
+        key: headerKey,
+        value: payload?.headerValue ?? "",
+        enabled: true,
+      };
+    } else {
+      headers.push({
+        id: createId("hdr"),
+        key: headerKey,
+        value: payload?.headerValue ?? "",
+        enabled: true,
+      });
+    }
+    const patch = { headers };
+    ctx.updateActiveRequest?.(patch);
+    return {
+      markdown: `Set header \`${headerKey}\` on the active request.`,
+      applyToActive: patch,
+    };
   }
   if (kind === "apply_draft_tests") {
     if (!ctx.activeResponse || !ctx.activeRequest) {
@@ -842,7 +1204,7 @@ export async function confirmAgentAction(
   }
   if (kind === "mock_start") {
     try {
-      const routes = mockRoutesFromCollections(ctx.collections);
+      const routes = await mockRoutesFromCollections(ctx.collections);
       if (routes.length === 0) {
         return { markdown: "No saved examples to mock — save a response example first." };
       }

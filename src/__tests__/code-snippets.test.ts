@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { requestToSnippet } from "@/lib/code-snippets";
+import { describe, expect, it, vi } from "vitest";
+import { requestToSnippetAsync } from "@/lib/code-snippets";
 import { createRequest, defaultAuth } from "@/lib/helpers";
+
+vi.mock("@/lib/tauri-runtime", () => ({
+  canUseTauriIpc: () => false,
+}));
 
 const request = createRequest({
   method: "POST",
@@ -11,19 +15,13 @@ const request = createRequest({
 });
 
 describe("code-snippets", () => {
-  it("emits fetch, axios, httpie, python, go, okhttp, reqwest, and swift", () => {
-    expect(requestToSnippet("fetch", request)).toContain("await fetch(");
-    expect(requestToSnippet("axios", request)).toContain("axios({");
-    expect(requestToSnippet("httpie", request)).toContain("http POST");
-    expect(requestToSnippet("python", request)).toContain("import requests");
-    expect(requestToSnippet("go", request)).toContain("http.NewRequest");
-    expect(requestToSnippet("okhttp", request)).toContain("OkHttpClient");
-    expect(requestToSnippet("reqwest", request)).toContain("reqwest::Client");
-    expect(requestToSnippet("swift", request)).toContain("URLSession");
+  it("still emits Go locally without Tauri", async () => {
+    const go = await requestToSnippetAsync("go", request);
+    expect(go).toContain("http.NewRequest");
+    expect(go).toContain("Bearer secret");
   });
 
-  it("includes bearer auth in generated snippets", () => {
-    expect(requestToSnippet("fetch", request)).toContain("Bearer secret");
-    expect(requestToSnippet("python", request)).toContain("Bearer secret");
+  it("requires desktop IPC for other formats", async () => {
+    await expect(requestToSnippetAsync("fetch", request)).rejects.toThrow(/desktop/i);
   });
 });

@@ -18,6 +18,8 @@ const CAPABILITY_LABEL: Record<AgentCapability, MessageKey> = {
   import_curl: "agent.capability.import_curl",
   explain_response: "agent.capability.explain_response",
   explain_tests: "agent.capability.explain_tests",
+  draft_tests: "agent.capability.draft_tests",
+  draft_pre_request: "agent.capability.draft_pre_request",
   workspace_status: "agent.capability.workspace_status",
   workspace_history: "agent.capability.workspace_history",
   run_collection: "agent.capability.run_collection",
@@ -25,12 +27,20 @@ const CAPABILITY_LABEL: Record<AgentCapability, MessageKey> = {
   sse_parse: "agent.capability.sse_parse",
   memory: "agent.capability.memory",
   memory_rag: "agent.capability.memory_rag",
+  openapi: "agent.capability.openapi",
+  mock: "agent.capability.mock",
+  diff: "agent.capability.diff",
+  env_show: "agent.capability.env_show",
+  curl_export: "agent.capability.curl_export",
+  contract_check: "agent.capability.contract_check",
 };
 
 const CAPABILITY_HINT: Record<AgentCapability, MessageKey> = {
   import_curl: "agent.capability.import_curlHint",
   explain_response: "agent.capability.explain_responseHint",
   explain_tests: "agent.capability.explain_testsHint",
+  draft_tests: "agent.capability.draft_testsHint",
+  draft_pre_request: "agent.capability.draft_pre_requestHint",
   workspace_status: "agent.capability.workspace_statusHint",
   workspace_history: "agent.capability.workspace_historyHint",
   run_collection: "agent.capability.run_collectionHint",
@@ -38,6 +48,12 @@ const CAPABILITY_HINT: Record<AgentCapability, MessageKey> = {
   sse_parse: "agent.capability.sse_parseHint",
   memory: "agent.capability.memoryHint",
   memory_rag: "agent.capability.memory_ragHint",
+  openapi: "agent.capability.openapiHint",
+  mock: "agent.capability.mockHint",
+  diff: "agent.capability.diffHint",
+  env_show: "agent.capability.env_showHint",
+  curl_export: "agent.capability.curl_exportHint",
+  contract_check: "agent.capability.contract_checkHint",
 };
 
 type AgentCapabilitiesPanelProps = {

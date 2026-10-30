@@ -22,6 +22,7 @@ import { exportBrunoCollection } from "@/lib/bruno-export";
 import { exportInsomniaCollection } from "@/lib/insomnia-export";
 import { exportPulseCollection } from "@/lib/pulse-collection";
 import { exportOpenApiCollection } from "@/lib/openapi-export";
+import { importOpenApiCollection, isOpenApiSpec } from "@/lib/openapi-import";
 import { mergeVariableLayers } from "@/lib/env";
 import { collectFolderVariables, resolveInheritedAuth } from "@/lib/inherit";
 import type { ThemeMode } from "@/lib/theme";
@@ -155,10 +156,10 @@ export function useApp() {
         collectionGroups: context.persisted.collectionGroups,
         collections: context.persisted.collections,
       }),
-    exportCollection: (
+    exportCollection: async (
       collectionId: string,
       format: "pulse" | "postman" | "openapi" | "bruno" | "insomnia",
-    ) => {
+    ): Promise<string | null> => {
       const group = context.persisted.collectionGroups.find((item) => item.id === collectionId);
       if (!group) return null;
 
@@ -178,7 +179,14 @@ export function useApp() {
 
       return exportPulseCollection(group, items);
     },
-    importCollections: (raw: string) => send({ type: "IMPORT_COLLECTIONS", raw }),
+    importCollections: async (raw: string) => {
+      if (isOpenApiSpec(raw)) {
+        const imported = await importOpenApiCollection(raw);
+        send({ type: "IMPORT_OPENAPI", collection: imported.collection, requests: imported.requests });
+        return;
+      }
+      send({ type: "IMPORT_COLLECTIONS", raw });
+    },
     importCollectionsFolder: (files: Array<{ name: string; contents: string }>) =>
       send({ type: "IMPORT_COLLECTIONS_FOLDER", files }),
     loadGitWorkspaceState: (payload: {
@@ -190,7 +198,12 @@ export function useApp() {
     importPostmanCollection: (raw: string) => send({ type: "IMPORT_POSTMAN", raw }),
     importBrunoCollection: (raw: string) => send({ type: "IMPORT_BRUNO", raw }),
     importInsomniaCollection: (raw: string) => send({ type: "IMPORT_INSOMNIA", raw }),
-    importOpenApiCollection: (raw: string) => send({ type: "IMPORT_OPENAPI", raw }),
+    importOpenApiCollection: async (raw: string) => {
+      const imported = await importOpenApiCollection(raw);
+      send({ type: "IMPORT_OPENAPI", collection: imported.collection, requests: imported.requests });
+    },
+    applyOpenApiImport: (collection: CollectionGroup, requests: SavedRequest[]) =>
+      send({ type: "IMPORT_OPENAPI", collection, requests }),
     importEnvironments: (raw: string) => send({ type: "IMPORT_ENVIRONMENTS", raw }),
     exportEnvironments: () => exportEnvironmentsJson(context.persisted.environments),
     addCollectionGroup: (name: string) => send({ type: "ADD_COLLECTION_GROUP", name }),

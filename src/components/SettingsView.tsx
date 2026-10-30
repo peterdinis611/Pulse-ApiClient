@@ -527,10 +527,10 @@ export function SettingsView() {
         importInsomniaCollection(raw);
         toast.success("Insomnia export imported", file.name);
       } else if (kind === "openapi") {
-        importOpenApiCollection(raw);
+        await importOpenApiCollection(raw);
         toast.success("OpenAPI collection imported", file.name);
       } else {
-        importCollections(raw);
+        await importCollections(raw);
         toast.success(`${APP_NAME} collection imported`, file.name);
       }
     } catch (error) {
@@ -879,7 +879,7 @@ export function SettingsView() {
                   onClick={() => {
                     void (async () => {
                       try {
-                        const routes = mockRoutesFromCollections(collections);
+                        const routes = await mockRoutesFromCollections(collections);
                         if (routes.length === 0) {
                           toast.error("No examples yet", "Save a response example on a request first.");
                           return;

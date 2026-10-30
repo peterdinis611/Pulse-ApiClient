@@ -6,8 +6,10 @@
     "whats-new",
     "data",
     "privacy",
+    "agent",
     "python-cli",
     "mcp",
+    "crates",
     "libraries"
   ]
 }

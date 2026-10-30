@@ -23,10 +23,12 @@ export default async function Page(props: PageProps<'/docs/[[...slug]]'>) {
 
   return (
     <DocsPage toc={page.data.toc} full={page.data.full}>
-      <p className="pulse-kicker mb-2">Field manual</p>
+      <p className="docs-kicker">Manual</p>
       <DocsTitle>{page.data.title}</DocsTitle>
-      <DocsDescription className="mb-0">{page.data.description}</DocsDescription>
-      <div className="flex flex-row gap-2 items-center border-b pb-6">
+      <DocsDescription className="mb-0 max-w-[42ch] text-[length:var(--step-body)] leading-relaxed text-fd-muted-foreground">
+        {page.data.description}
+      </DocsDescription>
+      <div className="mb-8 flex flex-row items-center gap-2 border-b border-fd-border/60 pb-6">
         <MarkdownCopyButton markdownUrl={markdownUrl} />
         <ViewOptionsPopover
           markdownUrl={markdownUrl}

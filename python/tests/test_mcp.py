@@ -19,7 +19,7 @@ class McpProtocolTests(unittest.TestCase):
             }
         )
         self.assertEqual(init["result"]["serverInfo"]["name"], "pulse")
-        self.assertEqual(init["result"]["serverInfo"]["version"], "2.4.0")
+        self.assertEqual(init["result"]["serverInfo"]["version"], "2.5.0")
         self.assertIn("resources", init["result"]["capabilities"])
         self.assertIn("prompts", init["result"]["capabilities"])
         self.assertIsNone(handle_message({"jsonrpc": "2.0", "method": "notifications/initialized"}))
@@ -54,6 +54,12 @@ class McpProtocolTests(unittest.TestCase):
         self.assertIn("pulse_mock_start", names)
         self.assertIn("pulse_mock_stop", names)
         self.assertIn("pulse_agent", names)
+        self.assertIn("pulse_prepare", names)
+        self.assertIn("pulse_path_params", names)
+        self.assertIn("pulse_json_path", names)
+        self.assertIn("pulse_pretty", names)
+        self.assertIn("pulse_unified_lines", names)
+        self.assertIn("pulse_rag_prune", names)
 
     def test_mcp_paths_are_posix(self) -> None:
         self.assertEqual(

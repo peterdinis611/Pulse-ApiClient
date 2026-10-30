@@ -69,7 +69,6 @@ import { toast } from "@/lib/toast";
 import { syncPathParams } from "@/lib/path-params";
 import { resolveRequestForSend } from "@/lib/resolve-request";
 import { upsertFolderConfig } from "@/lib/inherit";
-import { importOpenApiIntoState } from "@/lib/openapi-import";
 import { importPulseCollectionsFromFolder } from "@/lib/pulse-collection";
 import { getGitWorkspaceRoot, saveGitRequest } from "@/lib/git-workspace";
 import { validateResponseAgainstSchema } from "@/lib/json-schema";
@@ -258,13 +257,18 @@ function startTabRequest(
         sizeBytes: response.sizeBytes,
       });
 
+      const testResults = await validateResponseAgainstSchema(
+        response,
+        input.request.responseSchema ?? "",
+      );
+
       self.send({
         type: "SEND_COMPLETE",
         tabId: input.tabId,
         requestId: input.requestId,
         response,
         historyEntry,
-        testResults: validateResponseAgainstSchema(response, input.request.responseSchema ?? ""),
+        testResults,
       });
 
       void appendHistoryEntry(historyEntry)
@@ -355,7 +359,11 @@ export type AppMachineEvent =
   | { type: "IMPORT_POSTMAN"; raw: string }
   | { type: "IMPORT_BRUNO"; raw: string }
   | { type: "IMPORT_INSOMNIA"; raw: string }
-  | { type: "IMPORT_OPENAPI"; raw: string }
+  | {
+      type: "IMPORT_OPENAPI";
+      collection: CollectionGroup;
+      requests: SavedRequest[];
+    }
   | { type: "IMPORT_COLLECTIONS_FOLDER"; files: Array<{ name: string; contents: string }> }
   | {
       type: "LOAD_GIT_WORKSPACE";
@@ -1043,8 +1051,12 @@ export const appMachine = setup({
         },
         IMPORT_OPENAPI: {
           actions: assign(({ context, event }) => {
-            const imported = importOpenApiIntoState(event.raw, context.persisted);
-            const persisted = { ...context.persisted, ...imported };
+            const persisted = {
+              ...context.persisted,
+              collectionGroups: [...context.persisted.collectionGroups, event.collection],
+              collections: [...event.requests, ...context.persisted.collections],
+              activeCollectionId: event.collection.id,
+            };
             saveSharedWorkspace(context, persisted);
             return { persisted };
           }),

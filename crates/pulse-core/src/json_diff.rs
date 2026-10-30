@@ -1,9 +1,10 @@
 //! JSON / line diff for MCP/CLI (no extra deps).
 //! Line-oriented unified diff + structural JSON path report.
 
+use serde::Serialize;
 use serde_json::{json, Map, Value};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct DiffRow {
     pub kind: &'static str,
     pub text: String,

@@ -72,21 +72,32 @@ function evaluateStepEffect(
   }
 
   const prepared = saved.request;
-  const schemaResults = validateResponseAgainstSchema(response, prepared.responseSchema ?? "");
 
-  if (!prepared.tests.trim()) {
-    return Effect.succeed({ saved, response, error, testResults: schemaResults });
-  }
+  return Effect.promise(async () => {
+    let schemaResults: Awaited<ReturnType<typeof validateResponseAgainstSchema>> = null;
+    try {
+      schemaResults = await validateResponseAgainstSchema(
+        response,
+        prepared.responseSchema ?? "",
+      );
+    } catch {
+      schemaResults = null;
+    }
 
-  return runHttpTestsEffect(prepared.tests, response).pipe(
-    Effect.map((testResults) => ({
-      saved,
-      response,
-      error,
-      testResults: mergeTestResults(schemaResults, testResults),
-    })),
-    Effect.catchAll((cause) =>
-      Effect.succeed({
+    if (!prepared.tests.trim()) {
+      return { saved, response, error, testResults: schemaResults };
+    }
+
+    try {
+      const testResults = await runEffect(runHttpTestsEffect(prepared.tests, response));
+      return {
+        saved,
+        response,
+        error,
+        testResults: mergeTestResults(schemaResults, testResults),
+      };
+    } catch (cause) {
+      return {
         saved,
         response,
         error,
@@ -94,9 +105,9 @@ function evaluateStepEffect(
           saved.name,
           cause instanceof Error ? cause.message : String(cause),
         ),
-      }),
-    ),
-  );
+      };
+    }
+  });
 }
 
 function tallyTests(result: CollectionRunResult, step: CollectionRunStep) {
@@ -290,7 +301,7 @@ async function runCollectionNative(
         folderPath: extras?.folderPath ?? null,
       },
     });
-    const withSchema = attachSchemaAssertions(result, requests);
+    const withSchema = await attachSchemaAssertions(result, requests);
     withSchema.steps.forEach((step, index) => onStep?.(step, index, withSchema.steps.length));
     return withSchema;
   } finally {
@@ -298,21 +309,23 @@ async function runCollectionNative(
   }
 }
 
-function attachSchemaAssertions(
+async function attachSchemaAssertions(
   result: CollectionRunResult,
   requests: SavedRequest[],
-): CollectionRunResult {
+): Promise<CollectionRunResult> {
   const byId = new Map(requests.map((item) => [item.id, item]));
-  const steps = result.steps.map((step) => {
-    const original = byId.get(step.saved.id) ?? step.saved;
-    if (!step.response) return step;
-    const schemaResults = validateResponseAgainstSchema(
-      step.response,
-      original.request.responseSchema ?? "",
-    );
-    const testResults = mergeTestResults(step.testResults, schemaResults);
-    return { ...step, testResults };
-  });
+  const steps = await Promise.all(
+    result.steps.map(async (step) => {
+      const original = byId.get(step.saved.id) ?? step.saved;
+      if (!step.response) return step;
+      const schemaResults = await validateResponseAgainstSchema(
+        step.response,
+        original.request.responseSchema ?? "",
+      );
+      const testResults = mergeTestResults(step.testResults, schemaResults);
+      return { ...step, testResults };
+    }),
+  );
   let passed = 0;
   let failed = 0;
   let totalTests = 0;
