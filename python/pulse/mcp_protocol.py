@@ -52,6 +52,7 @@ from .openapi import export_spec, load_spec
 from .postman import export_postman, import_postman, is_postman_collection
 from .rag import (
     format_rag_hits_markdown,
+    prune_rag_index,
     rebuild_rag_index,
     related_context as rag_related_context,
     search_rag,
@@ -688,6 +689,10 @@ def tool_agent(arguments: dict) -> dict:
     utterance = arguments.get("input") or arguments.get("utterance") or ""
     body = arguments.get("body")
     workspace = arguments.get("workspace")
+    document = arguments.get("document")
+    diff_left = arguments.get("diffLeft") or arguments.get("diff_left")
+    diff_right = arguments.get("diffRight") or arguments.get("diff_right")
+    http_payload = arguments.get("payload") or arguments.get("request")
     history_limit = arguments.get("historyLimit") or arguments.get("history_limit") or 15
     try:
         limit = int(history_limit)
@@ -701,10 +706,115 @@ def tool_agent(arguments: dict) -> dict:
             history_limit=limit,
             source="mcp-agent",
             record_history=True,
+            document=str(document) if document is not None else None,
+            diff_left=str(diff_left) if diff_left is not None else None,
+            diff_right=str(diff_right) if diff_right is not None else None,
+            http_payload=http_payload if isinstance(http_payload, (dict, str)) else None,
         )
     except Exception as error:  # noqa: BLE001 — surface to agent
         return _text(str(error), error=True)
     return _json(result)
+
+
+def tool_rag_prune(arguments: dict) -> dict:
+    root, error = _require_workspace()
+    if error or root is None:
+        return error or _text("PULSE_WORKSPACE is not set or is not a directory", error=True)
+    older = arguments.get("olderThanDays") or arguments.get("older_than_days") or 30
+    max_docs = arguments.get("maxDocs") or arguments.get("max_docs") or 5000
+    try:
+        count = prune_rag_index(root, int(older), int(max_docs))
+    except Exception as err:  # noqa: BLE001
+        return _text(str(err), error=True)
+    return _json({"documents": count})
+
+
+def tool_path_params(arguments: dict) -> dict:
+    url = str(arguments.get("url") or "")
+    if not url:
+        return _text("url is required", error=True)
+    params = arguments.get("params") or []
+    try:
+        import pulse_native
+
+        if hasattr(pulse_native, "apply_path_params_json"):
+            return _text(pulse_native.apply_path_params_json(url, json.dumps(params)))
+    except ImportError:
+        pass
+    # Soft fallback: leave tokens when native missing.
+    return _text(url)
+
+
+def tool_prepare(arguments: dict) -> dict:
+    request = arguments.get("request")
+    if isinstance(request, str):
+        try:
+            request = json.loads(request)
+        except json.JSONDecodeError:
+            return _text("request must be a JSON object", error=True)
+    if not isinstance(request, dict):
+        return _text("request is required", error=True)
+    env = arguments.get("env") or []
+    try:
+        import pulse_native
+
+        if hasattr(pulse_native, "prepare_request_json"):
+            return _json(
+                json.loads(pulse_native.prepare_request_json(json.dumps(request), json.dumps(env)))
+            )
+    except ImportError:
+        pass
+    return _text("prepare_request_json requires pulse_native — bun run pulse:cli:install", error=True)
+
+
+def tool_json_path(arguments: dict) -> dict:
+    value = arguments.get("value")
+    path = str(arguments.get("path") or "")
+    if value is None or not path:
+        return _text("value and path are required", error=True)
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            pass
+    try:
+        import pulse_native
+
+        if hasattr(pulse_native, "read_json_path_json"):
+            return _json(json.loads(pulse_native.read_json_path_json(json.dumps(value), path)))
+    except ImportError:
+        pass
+    return _text("read_json_path_json requires pulse_native — bun run pulse:cli:install", error=True)
+
+
+def tool_pretty(arguments: dict) -> dict:
+    raw = str(arguments.get("raw") or "")
+    if not raw:
+        return _text("raw is required", error=True)
+    try:
+        import pulse_native
+
+        if hasattr(pulse_native, "pretty_any_json"):
+            return _text(pulse_native.pretty_any_json(raw))
+    except ImportError:
+        pass
+    try:
+        return _text(json.dumps(json.loads(raw), indent=2))
+    except json.JSONDecodeError:
+        return _text(raw)
+
+
+def tool_unified_lines(arguments: dict) -> dict:
+    left = str(arguments.get("left") or "")
+    right = str(arguments.get("right") or "")
+    try:
+        import pulse_native
+
+        if hasattr(pulse_native, "unified_lines_json"):
+            return _json(json.loads(pulse_native.unified_lines_json(left, right)))
+    except ImportError:
+        pass
+    return _text("unified_lines_json requires pulse_native — bun run pulse:cli:install", error=True)
 
 
 def tool_snippet(arguments: dict) -> dict:
@@ -1353,6 +1463,12 @@ TOOLS: dict[str, Callable[[dict], dict]] = {
     "pulse_rag_search": tool_rag_search,
     "pulse_rag_reindex": tool_rag_reindex,
     "pulse_rag_related": tool_rag_related,
+    "pulse_rag_prune": tool_rag_prune,
+    "pulse_path_params": tool_path_params,
+    "pulse_prepare": tool_prepare,
+    "pulse_json_path": tool_json_path,
+    "pulse_pretty": tool_pretty,
+    "pulse_unified_lines": tool_unified_lines,
     "pulse_help": tool_help,
 }
 
@@ -1887,8 +2003,80 @@ TOOL_DEFS = [
                     "description": "Natural utterance, pasted curl/SSE, memory command, or RAG (search history <q>, reindex rag)",
                 },
                 "body": {"type": "string", "description": "GraphQL introspection/response JSON for summarize"},
+                "document": {"type": "string", "description": "OpenAPI JSON for import/list intents"},
+                "diffLeft": {"type": "string", "description": "Left body for response_diff"},
+                "diffRight": {"type": "string", "description": "Right body for response_diff"},
+                "payload": {"description": "HttpRequestPayload object or JSON string for export curl"},
                 "workspace": {"type": "string", "description": "Override PULSE_WORKSPACE"},
                 "historyLimit": {"type": "integer", "default": 15},
+            },
+        },
+    },
+    {
+        "name": "pulse_path_params",
+        "description": "Apply :id / {id} path params to a URL (pulse-core apply_path_params).",
+        "inputSchema": {
+            "type": "object",
+            "required": ["url"],
+            "properties": {
+                "url": {"type": "string"},
+                "params": {"type": "array", "items": {"type": "object"}},
+            },
+        },
+    },
+    {
+        "name": "pulse_prepare",
+        "description": "Interpolate ApiRequest with env vars → prepared request + HttpRequestPayload.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["request"],
+            "properties": {
+                "request": {"description": "ApiRequestDto JSON object"},
+                "env": {"type": "array", "items": {"type": "object"}},
+            },
+        },
+    },
+    {
+        "name": "pulse_json_path",
+        "description": "Read a dotted/bracket JSON path from a value (pulse-core).",
+        "inputSchema": {
+            "type": "object",
+            "required": ["value", "path"],
+            "properties": {
+                "value": {},
+                "path": {"type": "string"},
+            },
+        },
+    },
+    {
+        "name": "pulse_pretty",
+        "description": "Pretty-print JSON when possible (pretty_any).",
+        "inputSchema": {
+            "type": "object",
+            "required": ["raw"],
+            "properties": {"raw": {"type": "string"}},
+        },
+    },
+    {
+        "name": "pulse_unified_lines",
+        "description": "Unified line diff rows for two text bodies.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["left", "right"],
+            "properties": {
+                "left": {"type": "string"},
+                "right": {"type": "string"},
+            },
+        },
+    },
+    {
+        "name": "pulse_rag_prune",
+        "description": "Prune old 4xx docs from the workspace RAG index.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "olderThanDays": {"type": "integer", "default": 30},
+                "maxDocs": {"type": "integer", "default": 5000},
             },
         },
     },

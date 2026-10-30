@@ -526,8 +526,8 @@ Shared engine under crates/ — pulse-core modules, pulse-native (PyO3), pulse-m
 - `pulse-core` · `mock_server` — local mock on locked `:4010` (+ delay) from saved examples
 - `pulse-core` · `git_cmd` — status / add / commit / diff-stat porcelain wrappers
 - `pulse-core` · `agent` / `agent_memory` / `agent_rag` — offline intent router + execute, facts YAML, TF-IDF RAG index over history+facts
-- `pulse-native` — JSON-string PyO3 surface: interpolate, run_tests, run_pre_request, run_collection_json, send_once_json, workspace load/init/migrate/contract, SSE, GraphQL + graphql-ws, mock start/stop, curl parse/format, OpenAPI convert/list/export, snippet, schema/diff, `route_agent_json` / `run_agent_json`, memory + RAG helpers
-- `pulse-mcp` — Rust stdio MCP twin on pulse-core (workspace CRUD/send/search, contract, interpolate, tests, collection, openapi_list, mock, curl/sse/graphql, agent, git, memory/RAG); default Cursor entry remains Python `pulse`
+- `pulse-native` — JSON-string PyO3 surface: interpolate, prepare_request, apply_path_params, run_tests, run_pre_request, run_collection_json, send_once_json, workspace load/save/init/migrate/contract/pending/history/delete_request, git status/add/commit/diff-stat, SSE parse/filter/summarize/collect, GraphQL + graphql-ws + example queries, mock start/stop, curl parse/format, OpenAPI convert/list/export, snippet, schema/diff/pretty/unified_lines/json_path, `route_agent_json` / `run_agent_json` (document + diff bodies + http_payload), memory + RAG search/related/prune/reindex
+- `pulse-mcp` — Rust stdio MCP twin on pulse-core: workspace CRUD/send/search, contract, interpolate, tests, collection, openapi_list/convert/export, mock, curl/format_curl/snippet, sse/graphql, prepare/path_params/json_path/pretty/unified_lines, agent (+ document/diff/payload), git, memory/RAG (+ prune); default Cursor entry remains Python `pulse`
 - `pulse-contract` — `cargo run -p pulse-core --bin pulse-contract -- <workspace>` (or CLI `contract`)
 
 **How to**

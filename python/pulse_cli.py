@@ -336,6 +336,18 @@ def cmd_agent(args: argparse.Namespace) -> int:
     body = args.body
     if args.body_file:
         body = Path(args.body_file).read_text(encoding="utf-8")
+    document = getattr(args, "document", None)
+    if getattr(args, "document_file", None):
+        document = Path(args.document_file).read_text(encoding="utf-8")
+    diff_left = getattr(args, "diff_left", None)
+    if getattr(args, "diff_left_file", None):
+        diff_left = Path(args.diff_left_file).read_text(encoding="utf-8")
+    diff_right = getattr(args, "diff_right", None)
+    if getattr(args, "diff_right_file", None):
+        diff_right = Path(args.diff_right_file).read_text(encoding="utf-8")
+    http_payload = getattr(args, "payload", None)
+    if getattr(args, "payload_file", None):
+        http_payload = Path(args.payload_file).read_text(encoding="utf-8")
     try:
         result = run_agent(
             args.utterance or "",
@@ -344,6 +356,10 @@ def cmd_agent(args: argparse.Namespace) -> int:
             history_limit=args.limit,
             source="cli-agent",
             record_history=not args.no_history,
+            document=document,
+            diff_left=diff_left,
+            diff_right=diff_right,
+            http_payload=http_payload,
         )
     except Exception as error:  # noqa: BLE001 — CLI surface
         print(str(error), file=sys.stderr)
@@ -1264,6 +1280,14 @@ def main(argv: list[str] | None = None) -> int:
     agent.add_argument("--workspace", help="Override PULSE_WORKSPACE")
     agent.add_argument("--body", help="GraphQL introspection/response JSON for summarize")
     agent.add_argument("--body-file", help="Read GraphQL body from a file")
+    agent.add_argument("--document", help="OpenAPI JSON (or other document) for import/list intents")
+    agent.add_argument("--document-file", help="Read --document from a file")
+    agent.add_argument("--diff-left", help="Left body for `diff response`")
+    agent.add_argument("--diff-left-file", help="Read left diff body from a file")
+    agent.add_argument("--diff-right", help="Right body for `diff response`")
+    agent.add_argument("--diff-right-file", help="Read right diff body from a file")
+    agent.add_argument("--payload", help="HttpRequestPayload JSON for `export curl`")
+    agent.add_argument("--payload-file", help="Read --payload from a file")
     agent.add_argument("--limit", type=int, default=15, help="History entries to show (default 15)")
     agent.add_argument("--json", action="store_true", help="Print full AgentResult JSON")
     agent.add_argument("--show-data", action="store_true", help="Also print structured data after markdown")

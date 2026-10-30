@@ -27,6 +27,20 @@ pub const GIT_MEMORY_RAG_TOOLS: &[&str] = &[
     "pulse_rag_search",
     "pulse_rag_reindex",
     "pulse_rag_related",
+    "pulse_rag_prune",
+];
+
+/// Prepare / snippet / path / OpenAPI convert surfaces (parity with pulse-native + Python MCP).
+pub const PREPARE_AND_SNIPPET_TOOLS: &[&str] = &[
+    "pulse_format_curl",
+    "pulse_snippet",
+    "pulse_openapi_convert",
+    "pulse_openapi_export",
+    "pulse_path_params",
+    "pulse_prepare",
+    "pulse_json_path",
+    "pulse_pretty",
+    "pulse_unified_lines",
 ];
 
 #[cfg(test)]
@@ -52,6 +66,14 @@ mod tests {
         assert!(GIT_MEMORY_RAG_TOOLS.contains(&"pulse_git_status"));
         assert!(GIT_MEMORY_RAG_TOOLS.contains(&"pulse_memory_upsert"));
         assert!(GIT_MEMORY_RAG_TOOLS.contains(&"pulse_rag_search"));
+        assert!(GIT_MEMORY_RAG_TOOLS.contains(&"pulse_rag_prune"));
+    }
+
+    #[test]
+    fn catalog_lists_prepare_snippet() {
+        assert!(PREPARE_AND_SNIPPET_TOOLS.contains(&"pulse_snippet"));
+        assert!(PREPARE_AND_SNIPPET_TOOLS.contains(&"pulse_prepare"));
+        assert!(PREPARE_AND_SNIPPET_TOOLS.contains(&"pulse_openapi_convert"));
     }
 
     #[test]
@@ -60,6 +82,7 @@ mod tests {
         for name in STREAM_AND_CONTRACT_TOOLS
             .iter()
             .chain(GIT_MEMORY_RAG_TOOLS.iter())
+            .chain(PREPARE_AND_SNIPPET_TOOLS.iter())
         {
             assert!(seen.insert(*name), "duplicate tool {name}");
         }
