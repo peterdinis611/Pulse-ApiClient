@@ -718,13 +718,15 @@ export function featureDocsFumadocsFiles(): GeneratedDocFile[] {
   files.push({
     path: "index.mdx",
     contents: `---
-title: ${yamlString("Field guide")}
+title: ${yamlString("Guide")}
 description: ${yamlString("Local-first desktop API client — the same pages as Docs in the app rail.")}
 ---
 
-Pulse lives on your machine. This manual is generated from \`src/lib/feature-docs.ts\` — the same source as **Docs** in the app and \`docs/FEATURES.md\`.
+Pulse stays on your machine. This guide is the same source as **Docs** in the app rail and \`docs/FEATURES.md\` — pick a desk, or start with a concrete task below.
 
-![Pulse request workspace](/screenshots/request.png)
+## Start here
+
+${startHere}
 
 ## Chapters
 
@@ -732,9 +734,7 @@ Pulse lives on your machine. This manual is generated from \`src/lib/feature-doc
 ${cards}
 </Cards>
 
-## Start here
-
-${startHere}
+![Pulse request workspace](/screenshots/request.png)
 `,
   });
 
